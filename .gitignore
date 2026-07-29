@@ -1,0 +1,54 @@
+# Binaries
+/api
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+predictmarket
+predictmarket-*
+
+# Test binary
+*.test
+
+# Output
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Twill generated
+twill_gen.go
+**/twill_gen.go
+
+# Environment
+.env
+.env.local
+*.env
+
+# Logs
+*.log
+
+# Build artifacts
+dist/
+build/
+tmp/
+
+# Docker
+docker-compose.override.yml
+
+# Kubernetes secrets
+secrets/
+*.secret.yaml

@@ -1,0 +1,94 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Go, integration, and E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOFLAGS: -mod=vendor
+      DATABASE_URL: postgres://predictmarket:password@localhost:5432/predictmarket?sslmode=disable
+      REDIS_URL: redis://localhost:6379/0
+      NATS_URL: nats://localhost:4222
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: predictmarket
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: predictmarket
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U predictmarket -d predictmarket"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Start NATS JetStream
+        run: |
+          docker run --detach --rm --name predictmarket-ci-nats \
+            --publish 4222:4222 --publish 8222:8222 \
+            nats:2.11-alpine -js -sd /data -m 8222
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://localhost:8222/healthz; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs predictmarket-ci-nats
+          exit 1
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+
+      - name: Apply versioned database schema
+        run: make db-migrate
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l $(find cmd internal pkg tests -name '*.go' -type f))"
+
+      - name: Build and vet
+        run: |
+          go build -buildvcs=false ./...
+          go vet ./...
+
+      - name: Run race tests
+        run: go test -race -count=1 ./...
+
+      - name: Run integration tests
+        run: make test-integration-ci
+
+      - name: Run HTTP end-to-end test
+        run: make test-e2e-ci
+
+      - name: Show NATS logs on failure
+        if: failure()
+        run: docker logs predictmarket-ci-nats

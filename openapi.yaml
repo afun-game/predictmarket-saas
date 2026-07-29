@@ -1,0 +1,410 @@
+openapi: 3.0.3
+info:
+  title: PredictMarket SaaS API
+  version: 0.1.0
+  description: Merchant prediction-market API backed by PostgreSQL, Redis, and NATS JetStream.
+servers:
+  - url: http://localhost:8080
+tags:
+  - {name: Merchants}
+  - {name: Events}
+  - {name: Markets}
+  - {name: Orders}
+  - {name: Wallets}
+  - {name: Currency}
+  - {name: Sports}
+  - {name: Analytics}
+paths:
+  /debug/twill/healthz:
+    get:
+      summary: Liveness health check
+      security: []
+      responses: {"200": {description: Live}}
+  /healthz:
+    get:
+      summary: Liveness health check
+      security: []
+      responses: {"200": {description: Live}}
+  /readyz:
+    get:
+      summary: Dependency readiness check
+      security: []
+      responses: {"200": {description: Ready}, "503": {description: Dependency unavailable}}
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      security: []
+      responses: {"200": {description: Prometheus text exposition}}
+  /api/v1/merchants/register:
+    post:
+      tags: [Merchants]
+      summary: Register merchant
+      security: []
+      requestBody: {$ref: "#/components/requestBodies/MerchantRegistration"}
+      responses:
+        "201": {$ref: "#/components/responses/Created"}
+        "400": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /api/v1/merchants:
+    get:
+      tags: [Merchants]
+      summary: List merchants
+      security: [{adminBearer: []}]
+      parameters: [{$ref: "#/components/parameters/Page"}, {$ref: "#/components/parameters/Limit"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}}
+  /api/v1/merchants/{merchantID}/config:
+    parameters: [{$ref: "#/components/parameters/MerchantID"}]
+    get:
+      tags: [Merchants]
+      summary: Get merchant configuration
+      responses: {"200": {$ref: "#/components/responses/OK"}, "403": {$ref: "#/components/responses/Error"}}
+    patch:
+      tags: [Merchants]
+      summary: Update merchant configuration
+      requestBody: {$ref: "#/components/requestBodies/MerchantUpdate"}
+      responses: {"200": {$ref: "#/components/responses/OK"}, "400": {$ref: "#/components/responses/Error"}}
+  /api/v1/events:
+    get:
+      tags: [Events]
+      summary: List events
+      parameters:
+        - {name: category, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/EventStatus"}}
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+    post:
+      tags: [Events]
+      summary: Create custom event
+      security: [{adminBearer: []}]
+      requestBody: {$ref: "#/components/requestBodies/EventCreate"}
+      responses: {"201": {$ref: "#/components/responses/Created"}, "400": {$ref: "#/components/responses/Error"}}
+  /api/v1/events/{eventID}:
+    get:
+      tags: [Events]
+      summary: Get event
+      parameters: [{$ref: "#/components/parameters/EventID"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/v1/events/{eventID}/status:
+    patch:
+      tags: [Events]
+      summary: Change event status
+      security: [{adminBearer: []}]
+      parameters: [{$ref: "#/components/parameters/EventID"}]
+      requestBody: {$ref: "#/components/requestBodies/StatusUpdate"}
+      responses: {"204": {$ref: "#/components/responses/NoContent"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/v1/events/{eventID}/resolve:
+    post:
+      tags: [Events]
+      summary: Resolve closed event
+      security: [{adminBearer: []}]
+      parameters: [{$ref: "#/components/parameters/EventID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [outcome], properties: {outcome: {type: string}}}}}
+      responses: {"204": {$ref: "#/components/responses/NoContent"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/v1/markets:
+    get:
+      tags: [Markets]
+      summary: List owned markets
+      parameters:
+        - {name: event_id, in: query, schema: {type: string, format: uuid}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/MarketStatus"}}
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+    post:
+      tags: [Markets]
+      summary: Create market
+      security: [{adminBearer: []}]
+      requestBody: {$ref: "#/components/requestBodies/MarketCreate"}
+      responses: {"201": {$ref: "#/components/responses/Created"}, "422": {$ref: "#/components/responses/Error"}}
+  /api/v1/markets/{marketID}:
+    get:
+      tags: [Markets]
+      summary: Get owned market
+      parameters: [{$ref: "#/components/parameters/MarketID"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/v1/markets/{marketID}/orderbook:
+    get:
+      tags: [Markets]
+      summary: Get order book
+      parameters: [{$ref: "#/components/parameters/MarketID"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+  /api/v1/markets/{marketID}/status:
+    patch:
+      tags: [Markets]
+      summary: Change market status
+      security: [{adminBearer: []}]
+      parameters: [{$ref: "#/components/parameters/MarketID"}]
+      requestBody: {$ref: "#/components/requestBodies/StatusUpdate"}
+      responses: {"204": {$ref: "#/components/responses/NoContent"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/v1/markets/{marketID}/liquidity:
+    post:
+      tags: [Markets]
+      summary: Add liquidity
+      security: [{adminBearer: []}]
+      parameters: [{$ref: "#/components/parameters/MarketID"}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [amount], properties: {amount: {type: number, minimum: 0, exclusiveMinimum: true}}}}}
+      responses: {"204": {$ref: "#/components/responses/NoContent"}}
+  /api/v1/orders:
+    get:
+      tags: [Orders]
+      summary: List merchant orders
+      parameters:
+        - {name: user_id, in: query, schema: {type: string}}
+        - {name: market_id, in: query, schema: {type: string, format: uuid}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/OrderStatus"}}
+        - {name: cursor, in: query, description: Keyset cursor; include an empty value for the first cursor page., schema: {type: string}}
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+    post:
+      tags: [Orders]
+      summary: Place and match order
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
+      requestBody: {$ref: "#/components/requestBodies/OrderCreate"}
+      responses: {"201": {$ref: "#/components/responses/Created"}, "409": {$ref: "#/components/responses/Error"}, "422": {$ref: "#/components/responses/Error"}, "428": {$ref: "#/components/responses/Error"}}
+  /api/v1/orders/{orderID}:
+    parameters: [{$ref: "#/components/parameters/OrderID"}]
+    get:
+      tags: [Orders]
+      summary: Get owned order
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}}
+    delete:
+      tags: [Orders]
+      summary: Cancel order
+      responses: {"200": {$ref: "#/components/responses/OK"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/v1/wallets/{userID}:
+    get:
+      tags: [Wallets]
+      summary: Get wallet balance
+      parameters:
+        - {$ref: "#/components/parameters/UserID"}
+        - {name: currency, in: query, schema: {$ref: "#/components/schemas/Currency"}}
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/v1/wallets/{userID}/credit:
+    post:
+      tags: [Wallets]
+      summary: Credit virtual wallet
+      parameters: [{$ref: "#/components/parameters/UserID"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+      requestBody: {$ref: "#/components/requestBodies/WalletCredit"}
+      responses: {"200": {$ref: "#/components/responses/OK"}, "428": {$ref: "#/components/responses/Error"}}
+  /api/v1/wallets/{userID}/transactions:
+    get:
+      tags: [Wallets]
+      summary: List transactions
+      parameters:
+        - {$ref: "#/components/parameters/UserID"}
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+  /api/v1/currencies:
+    get:
+      tags: [Currency]
+      summary: List supported currencies
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+  /api/v1/currencies/rate:
+    get:
+      tags: [Currency]
+      summary: Get exchange rate
+      parameters:
+        - {name: from, in: query, required: true, schema: {$ref: "#/components/schemas/Currency"}}
+        - {name: to, in: query, required: true, schema: {$ref: "#/components/schemas/Currency"}}
+      responses: {"200": {$ref: "#/components/responses/OK"}, "503": {$ref: "#/components/responses/Error"}}
+  /api/v1/currencies/convert:
+    post:
+      tags: [Currency]
+      summary: Convert virtual amount
+      requestBody: {$ref: "#/components/requestBodies/CurrencyConversion"}
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+  /api/v1/currencies/time:
+    post:
+      tags: [Currency]
+      summary: Convert timestamp timezone
+      requestBody: {$ref: "#/components/requestBodies/TimeConversion"}
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+  /api/v1/currencies/refresh:
+    post:
+      tags: [Currency]
+      summary: Refresh exchange rates
+      security: [{adminBearer: []}]
+      responses: {"204": {$ref: "#/components/responses/NoContent"}, "503": {$ref: "#/components/responses/Error"}}
+  /api/v1/sports/events:
+    get:
+      tags: [Sports]
+      summary: List sports events
+      parameters:
+        - {name: league, in: query, schema: {type: string}}
+        - {name: team, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/EventStatus"}}
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+  /api/v1/sports/events/{eventID}:
+    get:
+      tags: [Sports]
+      summary: Get sports event
+      parameters: [{$ref: "#/components/parameters/EventID"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/v1/sports/sync:
+    post:
+      tags: [Sports]
+      summary: Trigger sports synchronization
+      security: [{adminBearer: []}]
+      responses: {"204": {$ref: "#/components/responses/NoContent"}}
+  /api/v1/analytics/merchant:
+    get:
+      tags: [Analytics]
+      summary: Get merchant analytics
+      parameters: [{$ref: "#/components/parameters/TimeRange"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+  /api/v1/analytics/markets/{marketID}:
+    get:
+      tags: [Analytics]
+      summary: Get owned market analytics
+      parameters: [{$ref: "#/components/parameters/MarketID"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/v1/analytics/users/{userID}:
+    get:
+      tags: [Analytics]
+      summary: Get user analytics
+      parameters: [{$ref: "#/components/parameters/UserID"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/v1/analytics/platform:
+    get:
+      tags: [Analytics]
+      summary: Get platform analytics
+      security: [{adminBearer: []}]
+      parameters: [{$ref: "#/components/parameters/TimeRange"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}}
+components:
+  securitySchemes:
+    merchantBearer: {type: http, scheme: bearer, bearerFormat: API key}
+    adminBearer: {type: http, scheme: bearer, bearerFormat: Admin API key}
+  parameters:
+    Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+    MerchantID: {name: merchantID, in: path, required: true, schema: {type: string, format: uuid}}
+    EventID: {name: eventID, in: path, required: true, schema: {type: string, format: uuid}}
+    MarketID: {name: marketID, in: path, required: true, schema: {type: string, format: uuid}}
+    OrderID: {name: orderID, in: path, required: true, schema: {type: string, format: uuid}}
+    UserID: {name: userID, in: path, required: true, schema: {type: string, maxLength: 255}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, description: Unique key used to make POST retries safe, schema: {type: string, minLength: 1, maxLength: 255}}
+    TimeRange: {name: time_range, in: query, schema: {type: string, enum: [24h, 7d, 30d, 90d, all], default: 7d}}
+  responses:
+    OK: {description: Success, content: {application/json: {schema: {$ref: "#/components/schemas/DataEnvelope"}}}}
+    Created: {description: Created, content: {application/json: {schema: {$ref: "#/components/schemas/DataEnvelope"}}}}
+    NoContent: {description: Operation completed}
+    Error: {description: Error, content: {application/json: {schema: {$ref: "#/components/schemas/ErrorEnvelope"}}}}
+  requestBodies:
+    MerchantRegistration:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/MerchantRegistration"}}}
+    MerchantUpdate:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/MerchantUpdate"}}}
+    EventCreate:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/EventCreate"}}}
+    MarketCreate:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/MarketCreate"}}}
+    OrderCreate:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/OrderCreate"}}}
+    WalletCredit:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/WalletCredit"}}}
+    CurrencyConversion:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/CurrencyConversion"}}}
+    TimeConversion:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/TimeConversion"}}}
+    StatusUpdate:
+      required: true
+      content: {application/json: {schema: {type: object, required: [status], properties: {status: {type: string}}}}}
+  schemas:
+    DataEnvelope: {type: object, required: [data], properties: {data: {}, meta: {type: object, additionalProperties: true}}}
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: {type: object, required: [code, message], properties: {code: {type: string}, message: {type: string}}}
+    Currency: {type: string, enum: [USD, EUR, CNY, JPY, GBP]}
+    EventStatus: {type: string, enum: [pending, active, closed, resolved]}
+    MarketStatus: {type: string, enum: [active, suspended, closed, settled]}
+    OrderStatus: {type: string, enum: [pending, partial, filled, cancelled]}
+    MerchantRegistration:
+      type: object
+      required: [name, email, currency, timezone]
+      additionalProperties: false
+      properties:
+        name: {type: string, maxLength: 255}
+        email: {type: string, format: email, maxLength: 320}
+        currency: {$ref: "#/components/schemas/Currency"}
+        timezone: {type: string, example: Asia/Shanghai}
+    MerchantUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string}
+        currency: {$ref: "#/components/schemas/Currency"}
+        timezone: {type: string}
+    EventCreate:
+      type: object
+      required: [source_type, source_id, title, category, end_time, resolution_time]
+      additionalProperties: false
+      properties:
+        source_type: {type: string, enum: [custom]}
+        source_id: {type: string}
+        title: {type: string}
+        description: {type: string}
+        category: {type: string}
+        end_time: {type: string, format: date-time}
+        resolution_time: {type: string, format: date-time}
+    MarketCreate:
+      type: object
+      required: [merchant_id, event_id, type, question, options, liquidity_pool]
+      additionalProperties: false
+      properties:
+        merchant_id: {type: string, format: uuid}
+        event_id: {type: string, format: uuid}
+        type: {type: string, enum: [binary]}
+        question: {type: string}
+        options: {type: array, minItems: 2, maxItems: 2, items: {type: string}}
+        liquidity_pool: {type: number, minimum: 0}
+    OrderCreate:
+      type: object
+      required: [user_id, market_id, type, option, amount, currency, price]
+      additionalProperties: false
+      properties:
+        user_id: {type: string, maxLength: 255}
+        market_id: {type: string, format: uuid}
+        type: {type: string, enum: [buy, sell]}
+        option: {type: string}
+        amount: {type: number, minimum: 0, exclusiveMinimum: true, multipleOf: 0.000001}
+        currency: {$ref: "#/components/schemas/Currency"}
+        price: {type: number, minimum: 0, maximum: 1, exclusiveMinimum: true, exclusiveMaximum: true}
+        time_in_force: {type: string, enum: [gtc, ioc], default: gtc}
+    WalletCredit:
+      type: object
+      required: [currency, amount]
+      additionalProperties: false
+      properties:
+        currency: {$ref: "#/components/schemas/Currency"}
+        amount: {type: number, minimum: 0, exclusiveMinimum: true}
+        type: {type: string, enum: [credit, admin_credit]}
+    CurrencyConversion:
+      type: object
+      required: [amount, from, to]
+      properties: {amount: {type: number, minimum: 0}, from: {$ref: "#/components/schemas/Currency"}, to: {$ref: "#/components/schemas/Currency"}}
+    TimeConversion:
+      type: object
+      required: [timestamp, timezone]
+      properties: {timestamp: {type: string, format: date-time}, timezone: {type: string, example: Asia/Shanghai}}
+security:
+  - merchantBearer: []

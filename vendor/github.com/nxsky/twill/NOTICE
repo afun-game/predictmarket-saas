@@ -1,0 +1,12 @@
+Twill
+
+This product includes software derived from the upstream Twill codebase at
+github.com/Twill/twill, originally copyright Google LLC and licensed under the
+Apache License, Version 2.0.
+
+This fork is maintained as github.com/nxsky/twill. Modifications include the
+Twill module and CLI identity, roadmap and architecture documentation,
+AI-native MCP and skill tooling, dependency updates, and project maintenance
+infrastructure.
+
+The full license text is available in LICENSE.

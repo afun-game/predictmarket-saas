@@ -1,0 +1,53 @@
+# Twill Application Configuration
+
+[application]
+name = "predictmarket-saas"
+version = "0.1.0"
+description = "SaaS Prediction Market Platform based on Polymarket"
+
+[build]
+binary_name = "predictmarket"
+
+[deployment]
+default_replicas = 2
+max_replicas = 10
+health_check_path = "/readyz"
+
+[single]
+listeners.public = { address = "0.0.0.0:8080" }
+
+["twill.resources.primary-db"]
+kind = "database"
+type = "pgx"
+
+["twill.resources.event-cache"]
+kind = "cache"
+type = "redis"
+
+["twill.resources.currency-cache"]
+kind = "cache"
+type = "redis"
+
+["twill.resources.sports-cache"]
+kind = "cache"
+type = "redis"
+
+["twill.resources.analytics-cache"]
+kind = "cache"
+type = "redis"
+
+["twill.resources.event-stream"]
+kind = "pubsub"
+type = "nats"
+
+["twill.resources.polymarket-sync"]
+kind = "cron"
+
+["twill.resources.sports-sync"]
+kind = "cron"
+
+["twill.resources.wallet-lock-reconciliation"]
+kind = "cron"
+
+["twill.resources.settlement-alerts"]
+kind = "cron"

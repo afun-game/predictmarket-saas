@@ -1,0 +1,20 @@
+.git
+.env
+.env.*
+!.env.example
+
+# Local build and test outputs
+api
+bin
+coverage.out
+coverage.html
+**/*_test.go
+
+# Deployment and developer-only files
+docs
+k8s
+tests
+MVP_PLAN.md
+PROJECT_STATUS.md
+DELIVERY_REPORT.md
+CHANGELOG.md

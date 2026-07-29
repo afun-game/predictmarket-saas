@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Tool}} App Context</title>
+  <link href="/assets/main.css" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧶</text></svg>">
+</head>
+
+<body>
+  <header class="navbar">
+    <a href="/">{{.Tool}} dashboard</a>
+  </header>
+
+  <div class="container">
+    <details open class="card">
+      <summary class="card-title">App Context</summary>
+      <div class="card-body">
+        <table class="kv-table">
+          <tr>
+            <th scope="row">State</th>
+            <td>{{.Data.State}}</td>
+          </tr>
+          <tr>
+            <th scope="row">Directory</th>
+            <td>{{.Data.Inputs.Dir}}</td>
+          </tr>
+          <tr>
+            <th scope="row">Packages</th>
+            <td>{{range .Data.Inputs.Patterns}}{{.}} {{end}}</td>
+          </tr>
+          <tr>
+            <th scope="row">JSON</th>
+            <td><a href="/app/data">/app/data</a></td>
+          </tr>
+          <tr>
+            <th scope="row">Safety</th>
+            <td>
+              Read-only; file writes={{.Data.PerformedWrites}};
+              environment writes={{.Data.PerformedEnvWrite}}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Safety Notes</th>
+            <td>
+              <ul>
+                {{range .Data.SafetyNotes}}
+                <li>{{.}}</li>
+                {{end}}
+              </ul>
+            </td>
+          </tr>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Metric Signal</th>
+              <th scope="col">Type</th>
+              <th scope="col">Component</th>
+              <th scope="col">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Observability.Metrics.Signals}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.Type}}</td>
+              <td>{{.Component}}</td>
+              <td>{{.Description}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Trace Component</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Observability.Traces.Components}}
+            <tr>
+              <td>{{.}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Log Component</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Observability.Logs.Components}}
+            <tr>
+              <td>{{.}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Boundary</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Observability.Limitations}}
+            <tr>
+              <td>{{.}}</td>
+            </tr>
+            {{end}}
+            {{range .Data.Observability.Traces.Limitations}}
+            <tr>
+              <td>{{.}}</td>
+            </tr>
+            {{end}}
+            {{range .Data.Observability.Logs.Limitations}}
+            <tr>
+              <td>{{.}}</td>
+            </tr>
+            {{end}}
+            {{range .Data.Observability.Metrics.Limitations}}
+            <tr>
+              <td>{{.}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    {{if eq .Data.State "empty"}}
+    <details open class="card">
+      <summary class="card-title">Empty State</summary>
+      <div class="card-body">
+        <ul>
+          {{range .Data.Limitations}}
+          <li>{{.}}</li>
+          {{end}}
+        </ul>
+      </div>
+    </details>
+    {{else}}
+    <details open class="card">
+      <summary class="card-title">Services</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Package</th>
+              <th scope="col">Directory</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Services}}
+            <tr>
+              <td>{{.Path}}</td>
+              <td>{{.Dir}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details open class="card">
+      <summary class="card-title">Component Graph</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Component</th>
+              <th scope="col">Package</th>
+              <th scope="col">Listeners</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Components}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.Package}}</td>
+              <td>{{range .Listeners}}{{.}} {{end}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Caller</th>
+              <th scope="col">Callee</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Edges}}
+            <tr>
+              <td>{{.Caller}}</td>
+              <td>{{.Callee}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details open class="card">
+      <summary class="card-title">API List</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Component</th>
+              <th scope="col">Kind</th>
+              <th scope="col">Protocol</th>
+              <th scope="col">Listener</th>
+              <th scope="col">Service</th>
+              <th scope="col">Method</th>
+              <th scope="col">Path</th>
+              <th scope="col">Request Type</th>
+              <th scope="col">Response Type</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.APIs}}
+            <tr>
+              <td>{{.Component}}</td>
+              <td>{{.Kind}}</td>
+              <td>{{.Protocol}}</td>
+              <td>{{.Listener}}</td>
+              <td>{{.Service}}</td>
+              <td>{{.Method}}</td>
+              <td>{{.Path}}</td>
+              <td>{{.RequestType}}</td>
+              <td>{{.ResponseType}}</td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary class="card-title">Protobuf</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Package</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Protobuf.Packages}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Service</th>
+              <th scope="col">Package</th>
+              <th scope="col">RPCs</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Protobuf.Services}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.Package}}</td>
+              <td>
+                {{range .RPCs}}
+                {{.Name}}({{if .RequestStreaming}}stream {{end}}{{.RequestType}} -> {{if .ResponseStreaming}}stream {{end}}{{.ResponseType}})
+                {{end}}
+              </td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Message</th>
+              <th scope="col">Package</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Protobuf.Messages}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.Package}}</td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Runtime Hint</th>
+              <th scope="col">Status</th>
+              <th scope="col">Evidence</th>
+              <th scope="col">Next Step</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Protobuf.RuntimeHints}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.Status}}</td>
+              <td>{{range .Evidence}}{{.}} {{end}}</td>
+              <td>{{.NextStep}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary class="card-title">Client SDK</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Language</th>
+              <th scope="col">Path</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.ClientSDK.Targets}}
+            <tr>
+              <td>{{.Language}}</td>
+              <td>{{.Path}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Operation</th>
+              <th scope="col">Method Name</th>
+              <th scope="col">Component</th>
+              <th scope="col">Listener</th>
+              <th scope="col">Method</th>
+              <th scope="col">Path</th>
+              <th scope="col">Request Type</th>
+              <th scope="col">Response Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.ClientSDK.Operations}}
+            <tr>
+              <td>{{.OperationID}}</td>
+              <td>{{.MethodName}}</td>
+              <td>{{.Component}}</td>
+              <td>{{.Listener}}</td>
+              <td>{{.Method}}</td>
+              <td>{{.Path}}</td>
+              <td>{{.RequestType}}</td>
+              <td>{{.ResponseType}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">RPC Operation</th>
+              <th scope="col">Method Name</th>
+              <th scope="col">Component</th>
+              <th scope="col">Listener</th>
+              <th scope="col">Service</th>
+              <th scope="col">Method</th>
+              <th scope="col">Path</th>
+              <th scope="col">Request Type</th>
+              <th scope="col">Response Type</th>
+              <th scope="col">Request Stream</th>
+              <th scope="col">Response Stream</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.ClientSDK.RPCOperations}}
+            <tr>
+              <td>{{.OperationID}}</td>
+              <td>{{.MethodName}}</td>
+              <td>{{.Component}}</td>
+              <td>{{.Listener}}</td>
+              <td>{{.Service}}</td>
+              <td>{{.Method}}</td>
+              <td>{{.Path}}</td>
+              <td>{{.RequestType}}</td>
+              <td>{{.ResponseType}}</td>
+              <td>{{.RequestStreaming}}</td>
+              <td>{{.ResponseStreaming}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary class="card-title">Contract Tests</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Case</th>
+              <th scope="col">Operation</th>
+              <th scope="col">Component</th>
+              <th scope="col">Listener</th>
+              <th scope="col">Method</th>
+              <th scope="col">Path</th>
+              <th scope="col">Request Type</th>
+              <th scope="col">Response Type</th>
+              <th scope="col">Auth</th>
+              <th scope="col">Unsafe</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.ContractTests.Cases}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.OperationID}}</td>
+              <td>{{.Component}}</td>
+              <td>{{.Listener}}</td>
+              <td>{{.Method}}</td>
+              <td>{{.Path}}</td>
+              <td>{{.RequestType}}</td>
+              <td>{{.ResponseType}}</td>
+              <td>{{.AuthDeclared}}</td>
+              <td>{{.UnsafeMethod}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">RPC Case</th>
+              <th scope="col">Operation</th>
+              <th scope="col">Component</th>
+              <th scope="col">Listener</th>
+              <th scope="col">Service</th>
+              <th scope="col">Method</th>
+              <th scope="col">Path</th>
+              <th scope="col">Request Type</th>
+              <th scope="col">Response Type</th>
+              <th scope="col">Request Stream</th>
+              <th scope="col">Response Stream</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.ContractTests.RPCCases}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.OperationID}}</td>
+              <td>{{.Component}}</td>
+              <td>{{.Listener}}</td>
+              <td>{{.Service}}</td>
+              <td>{{.Method}}</td>
+              <td>{{.Path}}</td>
+              <td>{{.RequestType}}</td>
+              <td>{{.ResponseType}}</td>
+              <td>{{.RequestStreaming}}</td>
+              <td>{{.ResponseStreaming}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary class="card-title">Config</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Component</th>
+              <th scope="col">Config Type</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Config.Schemas}}
+            <tr>
+              <td>{{.Component}}</td>
+              <td>{{.ConfigType}}</td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Component</th>
+              <th scope="col">Config Type</th>
+              <th scope="col">Kind</th>
+              <th scope="col">Provider</th>
+              <th scope="col">Lifecycle</th>
+              <th scope="col">Required</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Config.Bindings}}
+            <tr>
+              <td>{{.Component}}</td>
+              <td>{{.ConfigType}}</td>
+              <td>{{.Kind}}</td>
+              <td>{{.Provider}}</td>
+              <td>{{.Lifecycle}}</td>
+              <td>{{.Required}}</td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary class="card-title">Middleware</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Component</th>
+              <th scope="col">Name</th>
+              <th scope="col">Category</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Middleware.Middleware}}
+            <tr>
+              <td>{{.Component}}</td>
+              <td>{{.Name}}</td>
+              <td>{{.Category}}</td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary class="card-title">Resources</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Kind</th>
+              <th scope="col">Name</th>
+              <th scope="col">Component</th>
+              <th scope="col">Type</th>
+              <th scope="col">Lifecycle</th>
+              <th scope="col">Binding</th>
+              <th scope="col">Provider</th>
+              <th scope="col">Required</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Resources}}
+            <tr>
+              <td>{{.Kind}}</td>
+              <td>{{.Name}}</td>
+              <td>{{.Component}}</td>
+              <td>{{.Type}}</td>
+              <td>{{.Lifecycle}}</td>
+              <td>{{.Binding}}</td>
+              <td>{{.Provider}}</td>
+              <td>{{.Required}}</td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">AWS Kind</th>
+              <th scope="col">Name</th>
+              <th scope="col">Region</th>
+              <th scope="col">Layer</th>
+              <th scope="col">Manifest Type</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Deployment.AWS}}
+            <tr>
+              <td>{{.Kind}}</td>
+              <td>{{.Name}}</td>
+              <td>{{.Region}}</td>
+              <td>{{.Layer}}</td>
+              <td>{{.ManifestType}}</td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary class="card-title">Local Compose</summary>
+      <div class="card-body">
+        <table class="kv-table">
+          <tr>
+            <th scope="row">Project</th>
+            <td>{{.Data.LocalCompose.Project}}</td>
+          </tr>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Service</th>
+              <th scope="col">Image</th>
+              <th scope="col">Resource</th>
+              <th scope="col">Kind</th>
+              <th scope="col">Component</th>
+              <th scope="col">Twill Resources</th>
+              <th scope="col">Ports</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.LocalCompose.Services}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.Image}}</td>
+              <td>{{.ResourceName}}</td>
+              <td>{{.ResourceKind}}</td>
+              <td>{{.Component}}</td>
+              <td>{{range .Resources}}{{.Name}} ({{.Kind}}) {{end}}</td>
+              <td>{{range .Ports}}{{.}} {{end}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Skipped</th>
+              <th scope="col">Kind</th>
+              <th scope="col">Component</th>
+              <th scope="col">Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.LocalCompose.Skipped}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.Kind}}</td>
+              <td>{{.Component}}</td>
+              <td>{{.Reason}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary class="card-title">Observability</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Kind</th>
+              <th scope="col">Name</th>
+              <th scope="col">Component</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.ObservabilityDefaults}}
+            <tr>
+              <td>{{.Kind}}</td>
+              <td>{{.Name}}</td>
+              <td>{{.Component}}</td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary class="card-title">Deployment</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Deployment Status Component</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Deployment.StatusComponents}}
+            <tr>
+              <td>{{.}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Deployment Status</th>
+              <th scope="col">Component</th>
+              <th scope="col">Environment</th>
+              <th scope="col">State</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Deployment.Statuses}}
+            <tr>
+              <td>{{.Name}}</td>
+              <td>{{.Component}}</td>
+              <td>{{.Environment}}</td>
+              <td>{{.State}}</td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Deployment Boundary</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Deployment.Limitations}}
+            <tr>
+              <td>{{.}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="kv-table">
+          <tr>
+            <th scope="row">Rollout</th>
+            <td>{{.Data.Deployment.Rollout.Name}}</td>
+          </tr>
+          <tr>
+            <th scope="row">Namespace</th>
+            <td>{{.Data.Deployment.Rollout.Namespace}}</td>
+          </tr>
+          <tr>
+            <th scope="row">Strategy</th>
+            <td>{{.Data.Deployment.Rollout.Strategy}}</td>
+          </tr>
+          <tr>
+            <th scope="row">Replicas</th>
+            <td>{{.Data.Deployment.Rollout.Replicas}}</td>
+          </tr>
+          <tr>
+            <th scope="row">Max Replicas</th>
+            <td>{{.Data.Deployment.Rollout.MaxReplicas}}</td>
+          </tr>
+          <tr>
+            <th scope="row">Health Path</th>
+            <td>{{.Data.Deployment.Rollout.HealthPath}}</td>
+          </tr>
+          <tr>
+            <th scope="row">CPU Request</th>
+            <td>{{.Data.Deployment.Rollout.ResourceRequirements.CPURequest}}</td>
+          </tr>
+          <tr>
+            <th scope="row">Memory Request</th>
+            <td>{{.Data.Deployment.Rollout.ResourceRequirements.MemoryRequest}}</td>
+          </tr>
+          <tr>
+            <th scope="row">CPU Limit</th>
+            <td>{{.Data.Deployment.Rollout.ResourceRequirements.CPULimit}}</td>
+          </tr>
+          <tr>
+            <th scope="row">Memory Limit</th>
+            <td>{{.Data.Deployment.Rollout.ResourceRequirements.MemoryLimit}}</td>
+          </tr>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Rollout Verify Command</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Deployment.Rollout.VerifyCommands}}
+            <tr>
+              <td><code>{{.}}</code></td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Kind</th>
+              <th scope="col">Name</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Deployment.Kubernetes}}
+            <tr>
+              <td>{{.Kind}}</td>
+              <td>{{.Name}}</td>
+              <td>{{.Source}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary class="card-title">Tests</summary>
+      <div class="card-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Component</th>
+              <th scope="col">Package</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Data.Tests}}
+            <tr>
+              <td>{{.Component}}</td>
+              <td>{{.Package}}</td>
+              <td>{{.Status}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary class="card-title">Limitations</summary>
+      <div class="card-body">
+        <ul>
+          {{range .Data.Limitations}}
+          <li>{{.}}</li>
+          {{end}}
+        </ul>
+      </div>
+    </details>
+    {{end}}
+  </div>
+</body>
+</html>
