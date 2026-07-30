@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: predictmarket-dev
+resources:
+  - configmap.yaml
+  - redis.yaml
+  - nats.yaml
+  - api.yaml
+  - migration-job.yaml

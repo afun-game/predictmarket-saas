@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: predictmarket-api
+  labels:
+    app.kubernetes.io/name: predictmarket-api
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: predictmarket-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: predictmarket-api
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: IMAGE_URI
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: predictmarket-config
+            - secretRef:
+                name: predictmarket-secrets
+          env:
+            - name: SERVICETWILL_CONFIG
+              value: /etc/predictmarket/twill.toml
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: twill-config
+              mountPath: /etc/predictmarket
+              readOnly: true
+            - name: runtime-data
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: twill-config
+          configMap:
+            name: predictmarket-config
+            items:
+              - key: twill.toml
+                path: twill.toml
+        - name: runtime-data
+          emptyDir:
+            sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: predictmarket-api
+spec:
+  selector:
+    app.kubernetes.io/name: predictmarket-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  type: ClusterIP

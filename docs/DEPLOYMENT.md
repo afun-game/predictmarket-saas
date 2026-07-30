@@ -9,6 +9,25 @@ Prometheus, and Grafana are not required by this MVP deployment.
 Use PostgreSQL 15+, Redis 7+, and a persistent NATS JetStream cluster. Require
 TLS and authentication for all three services in production.
 
+## Development environment in AWS Hong Kong
+
+Pushing to the `dev` branch runs the test job first. On success, the same
+workflow builds an immutable image in the Hong Kong (`ap-east-1`) ECR registry
+and deploys it to the `predictmarket-dev` namespace of the existing `mpg` EKS
+cluster.
+
+The test environment intentionally uses one API replica, a single ephemeral
+Redis pod, and a single ephemeral NATS JetStream pod. Its PostgreSQL instance
+is `predictmarket-dev-postgres` (`db.t4g.micro`) in the cluster VPC. Database
+and application credentials are read at deployment time from AWS Secrets
+Manager via a GitHub OIDC role restricted to the `dev` branch; neither long-
+lived AWS credentials nor populated Kubernetes Secret manifests are committed.
+
+Redis and NATS data are disposable in this environment. The workflow runs the
+versioned migration Job before it waits for the API rollout. AWS resources and
+the namespace are bootstrap infrastructure; the workflow deliberately has no
+permission to create or delete them.
+
 ## Build and publish
 
 Replace the example image in `k8s/deployment.yaml`, then build and push:

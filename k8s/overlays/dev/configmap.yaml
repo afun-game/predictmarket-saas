@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: predictmarket-config
+data:
+  APP_ENV: development
+  LOG_FORMAT: json
+  LOG_LEVEL: info
+  OTEL_SERVICE_NAME: predictmarket-saas-dev
+  POLYMARKET_API_URL: https://gamma-api.polymarket.com
+  POLYMARKET_SYNC_INTERVAL: "@every 30m"
+  SPORTS_SYNC_INTERVAL: "@every 30m"
+  SPORTS_LEAGUES: nba,nfl,mlb,nhl,wnba,epl
+  EXCHANGE_RATE_API_URL: https://api.exchangerate-api.com/v4/latest/USD
+  twill.toml: |
+    [application]
+    name = "predictmarket-saas-dev"
+    version = "0.1.0"
+    description = "PredictMarket development environment"
+
+    [deployment]
+    default_replicas = 1
+    max_replicas = 1
+    health_check_path = "/readyz"
+
+    [single]
+    listeners.public = { address = "0.0.0.0:8080" }
+
+    ["twill.resources.primary-db"]
+    kind = "database"
+    type = "pgx"
+
+    ["twill.resources.event-cache"]
+    kind = "cache"
+    type = "redis"
+
+    ["twill.resources.currency-cache"]
+    kind = "cache"
+    type = "redis"
+
+    ["twill.resources.sports-cache"]
+    kind = "cache"
+    type = "redis"
+
+    ["twill.resources.analytics-cache"]
+    kind = "cache"
+    type = "redis"
+
+    ["twill.resources.event-stream"]
+    kind = "pubsub"
+    type = "nats"
+
+    ["twill.resources.polymarket-sync"]
+    kind = "cron"
+
+    ["twill.resources.sports-sync"]
+    kind = "cron"
+
+    ["twill.resources.wallet-lock-reconciliation"]
+    kind = "cron"
+
+    ["twill.resources.settlement-alerts"]
+    kind = "cron"

@@ -92,3 +92,112 @@ jobs:
       - name: Show NATS logs on failure
         if: failure()
         run: docker logs predictmarket-ci-nats
+
+  deploy-dev:
+    name: Deploy development environment
+    needs: test
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: predictmarket-dev-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-east-1
+      EKS_CLUSTER: mpg
+      K8S_NAMESPACE: predictmarket-dev
+      ECR_REPOSITORY: predictmarket-saas-dev
+      DB_HOST: predictmarket-dev-postgres.c5a0y6ayuhqy.ap-east-1.rds.amazonaws.com
+      DB_NAME: predictmarket
+      RDS_SECRET_ID: arn:aws:secretsmanager:ap-east-1:042831095537:secret:rds!db-e57f672e-1daa-4f8f-a221-72b4f75ef3e2-QelHqX
+      APPLICATION_SECRET_ID: predictmarket/dev/application
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::042831095537:role/predictmarket-dev-github-actions
+          role-session-name: predictmarket-dev-deploy
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push application image
+        id: image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          set -euo pipefail
+          TASK_IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:sha-$GITHUB_SHA"
+          docker build --pull --tag "$TASK_IMAGE_URI" .
+          docker push "$TASK_IMAGE_URI"
+          echo "uri=$TASK_IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.35.0
+
+      - name: Configure cluster access
+        run: aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER"
+
+      - name: Synchronize development secret from AWS Secrets Manager
+        run: |
+          set -euo pipefail
+          kubectl get namespace "$K8S_NAMESPACE" >/dev/null
+
+          TASK_DATABASE_URL="$(aws secretsmanager get-secret-value \
+            --region "$AWS_REGION" \
+            --secret-id "$RDS_SECRET_ID" \
+            --query SecretString \
+            --output text | python3 -c 'import json, sys; from urllib.parse import quote; credentials = json.load(sys.stdin); print("postgres://{}:{}@{}:5432/{}?sslmode=require".format(quote(credentials["username"], safe=""), quote(credentials["password"], safe=""), sys.argv[1], quote(sys.argv[2], safe="")))' "$DB_HOST" "$DB_NAME")"
+          TASK_ADMIN_API_KEY="$(aws secretsmanager get-secret-value \
+            --region "$AWS_REGION" \
+            --secret-id "$APPLICATION_SECRET_ID" \
+            --query SecretString \
+            --output text | jq -er '.admin_api_key')"
+
+          kubectl -n "$K8S_NAMESPACE" create secret generic predictmarket-secrets \
+            --from-literal=DATABASE_URL="$TASK_DATABASE_URL" \
+            --from-literal=REDIS_URL='redis://predictmarket-redis:6379/0' \
+            --from-literal=NATS_URL='nats://predictmarket-nats:4222' \
+            --from-literal=ADMIN_API_KEY="$TASK_ADMIN_API_KEY" \
+            --dry-run=client --output=yaml | kubectl apply -f -
+
+      - name: Deploy Redis and NATS dependencies
+        run: |
+          set -euo pipefail
+          kubectl -n "$K8S_NAMESPACE" apply -f k8s/overlays/dev/configmap.yaml
+          kubectl -n "$K8S_NAMESPACE" apply -f k8s/overlays/dev/redis.yaml
+          kubectl -n "$K8S_NAMESPACE" apply -f k8s/overlays/dev/nats.yaml
+          kubectl -n "$K8S_NAMESPACE" rollout status deployment/predictmarket-redis --timeout=180s
+          kubectl -n "$K8S_NAMESPACE" rollout status deployment/predictmarket-nats --timeout=180s
+
+      - name: Run migrations and deploy API
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: |
+          set -euo pipefail
+          kubectl -n "$K8S_NAMESPACE" delete job predictmarket-migrate --ignore-not-found
+          kubectl kustomize k8s/overlays/dev \
+            | sed "s|IMAGE_URI|$IMAGE_URI|g" \
+            | kubectl -n "$K8S_NAMESPACE" apply -f -
+          kubectl -n "$K8S_NAMESPACE" wait --for=condition=complete \
+            job/predictmarket-migrate --timeout=300s
+          kubectl -n "$K8S_NAMESPACE" rollout status deployment/predictmarket-api --timeout=300s
+          kubectl -n "$K8S_NAMESPACE" get deployment,pods
+
+      - name: Show workload logs on failure
+        if: failure()
+        run: |
+          kubectl -n "$K8S_NAMESPACE" get pods,events --sort-by=.lastTimestamp || true
+          kubectl -n "$K8S_NAMESPACE" logs job/predictmarket-migrate --all-containers=true || true
+          kubectl -n "$K8S_NAMESPACE" logs deployment/predictmarket-api --tail=100 || true
