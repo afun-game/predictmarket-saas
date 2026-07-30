@@ -29,10 +29,6 @@ go.work.sum
 .DS_Store
 Thumbs.db
 
-# Twill generated
-twill_gen.go
-**/twill_gen.go
-
 # Environment
 .env
 .env.local
