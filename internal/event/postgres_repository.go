@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/afun-game/predictmarket-saas/internal/messaging"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const eventColumns = `

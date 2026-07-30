@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nxsky/twill/runtime/middleware"
 	"github.com/afun-game/predictmarket-saas/internal/analytics"
 	"github.com/afun-game/predictmarket-saas/internal/auth"
 	"github.com/afun-game/predictmarket-saas/internal/currency"
@@ -20,6 +19,7 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/sports"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
+	"github.com/nxsky/twill/runtime/middleware"
 )
 
 const MaxRequestBodyBytes = 1 << 20

@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/afun-game/predictmarket-saas/internal/event"
+	"github.com/afun-game/predictmarket-saas/pkg/polymarket"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/redis/go-redis/v9"
-	"github.com/afun-game/predictmarket-saas/internal/event"
-	"github.com/afun-game/predictmarket-saas/pkg/polymarket"
 )
 
 func TestSportsPostgresRedisIntegration(t *testing.T) {

@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nxsky/twill"
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/pkg/fixed"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
+	"github.com/nxsky/twill"
 )
 
 const (

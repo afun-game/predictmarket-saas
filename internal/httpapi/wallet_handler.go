@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/nxsky/twill/runtime/middleware"
 	"github.com/afun-game/predictmarket-saas/internal/auth"
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
+	"github.com/nxsky/twill/runtime/middleware"
 )
 
 const (

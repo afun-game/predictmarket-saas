@@ -8,11 +8,11 @@ import (
 	"sort"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/pkg/fixed"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const orderColumns = `

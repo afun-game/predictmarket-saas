@@ -10,10 +10,10 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/nxsky/twill"
-	"github.com/nxsky/twill/runtime/resource"
 	"github.com/afun-game/predictmarket-saas/internal/messaging"
 	"github.com/afun-game/predictmarket-saas/internal/settlement"
+	"github.com/nxsky/twill"
+	"github.com/nxsky/twill/runtime/resource"
 )
 
 const (

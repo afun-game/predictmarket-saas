@@ -12,8 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nxsky/twill"
-	"github.com/nxsky/twill/runtime/middleware"
 	"github.com/afun-game/predictmarket-saas/internal/analytics"
 	"github.com/afun-game/predictmarket-saas/internal/currency"
 	"github.com/afun-game/predictmarket-saas/internal/event"
@@ -31,6 +29,8 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/settlementworker"
 	"github.com/afun-game/predictmarket-saas/internal/sports"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
+	"github.com/nxsky/twill"
+	"github.com/nxsky/twill/runtime/middleware"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // Register PostgreSQL for Twill database resources.

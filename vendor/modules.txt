@@ -124,7 +124,7 @@ github.com/nats-io/nuid
 # github.com/ncruces/go-strftime v1.0.0
 ## explicit; go 1.17
 github.com/ncruces/go-strftime
-# github.com/nxsky/twill v0.24.7 => /mnt/c/works/solgame/twill
+# github.com/nxsky/twill v0.24.7
 ## explicit; go 1.26.4
 github.com/nxsky/twill
 github.com/nxsky/twill/internal/cond
@@ -541,4 +541,3 @@ modernc.org/memory
 modernc.org/sqlite
 modernc.org/sqlite/lib
 modernc.org/sqlite/vtab
-# github.com/nxsky/twill => /mnt/c/works/solgame/twill

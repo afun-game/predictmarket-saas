@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nxsky/twill"
 	"github.com/afun-game/predictmarket-saas/internal/event"
 	"github.com/afun-game/predictmarket-saas/pkg/polymarket"
+	"github.com/nxsky/twill"
 )
 
 const (

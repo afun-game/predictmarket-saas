@@ -47,7 +47,7 @@ cd predictmarket-saas
 go mod download
 
 # Generate Twill code
-go run /mnt/c/works/solgame/twill/cmd/twill generate .
+go run github.com/nxsky/twill/cmd/twill generate .
 
 # Run versioned database migrations
 make db-migrate
@@ -121,7 +121,7 @@ See [API Documentation](docs/API.md) for full API reference.
 ### Generate Twill Code
 
 ```bash
-go run /mnt/c/works/solgame/twill/cmd/twill generate .
+go run github.com/nxsky/twill/cmd/twill generate .
 ```
 
 ### Run Tests
@@ -142,16 +142,16 @@ and [docs/RUNBOOK.md](docs/RUNBOOK.md).
 ### Local Dashboard
 
 ```bash
-go run /mnt/c/works/solgame/twill/cmd/twill single dashboard
+go run github.com/nxsky/twill/cmd/twill single dashboard
 # Open http://localhost:9000/app
 ```
 
 ### View Application Context
 
 ```bash
-go run /mnt/c/works/solgame/twill/cmd/twill app context .
-go run /mnt/c/works/solgame/twill/cmd/twill app endpoints .
-go run /mnt/c/works/solgame/twill/cmd/twill app resources .
+go run github.com/nxsky/twill/cmd/twill app context .
+go run github.com/nxsky/twill/cmd/twill app endpoints .
+go run github.com/nxsky/twill/cmd/twill app resources .
 ```
 
 ## Deployment
@@ -159,7 +159,7 @@ go run /mnt/c/works/solgame/twill/cmd/twill app resources .
 ### Docker Compose (Local)
 
 ```bash
-go run /mnt/c/works/solgame/twill/cmd/twill deploy compose . --write-dir .
+go run github.com/nxsky/twill/cmd/twill deploy compose . --write-dir .
 docker-compose -f docker-compose.twill.yaml up
 ```
 
@@ -170,7 +170,7 @@ docker-compose -f docker-compose.twill.yaml up
 docker build -t predictmarket:v1.0 .
 
 # Deploy to Kubernetes
-go run /mnt/c/works/solgame/twill/cmd/twill deploy k8s \
+go run github.com/nxsky/twill/cmd/twill deploy k8s \
   --image predictmarket:v1.0 \
   --write-dir ./k8s
   
@@ -180,7 +180,7 @@ kubectl apply -f k8s/reviewed-manifests.yaml
 ### AWS EKS
 
 ```bash
-go run /mnt/c/works/solgame/twill/cmd/twill deploy aws \
+go run github.com/nxsky/twill/cmd/twill deploy aws \
   --region us-east-1 \
   --account 123456789012 \
   --repository predictmarket/api \

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nxsky/twill"
 	"github.com/afun-game/predictmarket-saas/internal/messaging"
+	"github.com/nxsky/twill"
 )
 
 const (

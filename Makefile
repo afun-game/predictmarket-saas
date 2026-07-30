@@ -20,7 +20,7 @@ generate: ## Generate Twill code
 	@echo "Generating Twill code..."
 	@TWILL_GENERATOR="$$(mktemp)"; \
 	trap 'rm -f "$$TWILL_GENERATOR"' EXIT; \
-	go -C /mnt/c/works/solgame/twill build -o "$$TWILL_GENERATOR" ./cmd/twill; \
+	go build -o "$$TWILL_GENERATOR" github.com/nxsky/twill/cmd/twill; \
 	"$$TWILL_GENERATOR" generate ./...
 
 .PHONY: build
@@ -175,23 +175,23 @@ clean: ## Clean build artifacts
 
 .PHONY: twill-context
 twill-context: ## Show Twill application context
-	go run /mnt/c/works/solgame/twill/cmd/twill app context .
+	go run github.com/nxsky/twill/cmd/twill app context .
 
 .PHONY: twill-endpoints
 twill-endpoints: ## Show Twill endpoints
-	go run /mnt/c/works/solgame/twill/cmd/twill app endpoints .
+	go run github.com/nxsky/twill/cmd/twill app endpoints .
 
 .PHONY: twill-resources
 twill-resources: ## Show Twill resources
-	go run /mnt/c/works/solgame/twill/cmd/twill app resources .
+	go run github.com/nxsky/twill/cmd/twill app resources .
 
 .PHONY: twill-dashboard
 twill-dashboard: ## Start Twill dashboard
-	go run /mnt/c/works/solgame/twill/cmd/twill single dashboard
+	go run github.com/nxsky/twill/cmd/twill single dashboard
 
 .PHONY: k8s-deploy-plan
 k8s-deploy-plan: ## Generate Kubernetes deployment plan
-	go run /mnt/c/works/solgame/twill/cmd/twill deploy k8s \
+	go run github.com/nxsky/twill/cmd/twill deploy k8s \
 		--image predictmarket:v1.0 \
 		--write-dir ./k8s
 

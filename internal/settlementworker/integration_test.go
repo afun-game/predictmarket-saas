@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/nxsky/twill/runtime/resource"
 	"github.com/afun-game/predictmarket-saas/internal/infra"
 	"github.com/afun-game/predictmarket-saas/internal/messaging"
 	"github.com/afun-game/predictmarket-saas/internal/settlement"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/nxsky/twill/runtime/resource"
 )
 
 const defaultIntegrationDatabaseURL = "postgres://predictmarket:password@localhost:5432/predictmarket?sslmode=disable"
