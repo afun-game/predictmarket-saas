@@ -9,8 +9,8 @@ V3 托管链路（典型场景：对接 AWS dev 部署）做真实浏览器测�
 # 默认对接本地 API
 make merchant-portal
 
-# 对接 dev 部署（替换为 dev 公网地址）
-PORTAL_API=https://<dev-host> make merchant-portal
+# 对接 dev 部署
+PORTAL_API=https://market.afx-game.dev make merchant-portal
 ```
 
 打开 `http://localhost:8091`，按页面步骤：

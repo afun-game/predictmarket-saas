@@ -128,3 +128,8 @@ Redis 7, and NATS (Docker Desktop):
   `TestVoidMarketRefundsAndWebhooks`, and the 1,000-order seamless load test
   (shadow-wallet drift zero, merchant balance exact) all pass.
 - Embedded hosted UI smoke-tested at `GET /launch` (index/app.js/styles.css).
+- Dev-environment real flow (`https://market.afx-game.dev`, V3 enabled): via
+  `cmd/merchant-portal` and curl — register merchant → create demo event +
+  market (admin) → `POST /api/v2/sessions` launch_url → exchange → `/api/user/me`
+  → events/markets → fund wallet (v1 credit 100.00) → hosted order placed
+  (locked 5.00, available 95.00) → my orders → orderbook. All passed.
