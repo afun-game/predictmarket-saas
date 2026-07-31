@@ -45,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix: rollback callbacks for unknown debits no longer reference the
   never-persisted order, so the outbox insert no longer fails the
   `callback_outbox.order_id` foreign key and the rollback is always delivered.
+- Extend the one-time launch token window from 60s to 15 minutes so users can
+  open the hosted page comfortably; the token remains single-use, tenant-bound,
+  and consumed on exchange.
 
 ### Added
 - Initial project setup with Twill framework

@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	launchTokenTTL            = time.Minute
+	launchTokenTTL            = 15 * time.Minute
 	browserSessionTTL         = 2 * time.Hour
 	browserSessionMaxLifetime = 12 * time.Hour
 	nonceTTL                  = 5 * time.Minute

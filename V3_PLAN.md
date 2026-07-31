@@ -103,14 +103,14 @@ Idempotency-Key: <uuid>
 {
   "session_id": "ps_9f2…",
   "launch_url": "https://play.<platform>/launch?token=lt_one_time_…",
-  "expires_at": "2026-07-30T15:00:00Z"     // launch token 有效期 60s
+  "expires_at": "2026-07-30T15:00:00Z"     // launch token 有效期 15 分钟
 }
 ```
 
 平台侧动作：
 1. **影子用户 upsert**：`platform_users(merchant_id, external_user_id)` 唯一约束，
    首次出现即建档（当前 `user_id` 自由字符串正式收编为外键）。
-2. 签发一次性 launch token（Redis，TTL 60s，**单次使用**，绑定 merchant+user+currency）。
+2. 签发一次性 launch token（Redis，TTL 15 分钟，**单次使用**，绑定 merchant+user+currency）。
 3. 返回托管页 URL。
 
 ### 3.2 浏览器兑换会话
@@ -337,7 +337,7 @@ v0.2 遗留：`api_secret` 无盐 SHA-256 且是死代码。本期正式启用�
 
 ### 7.3 其他
 
-- launch token：一次性、60s、绑定 merchant+user，兑换即焚。
+- launch token：一次性、15 分钟、绑定 merchant+user，兑换即焚。
 - 商户级 IP 白名单（v2 REST 可选强制）；回调目标仅允许 HTTPS + 公网域名（禁内网 IP，防 SSRF）。
 - `/api/user/*` 与商户 API 物理隔离限流：用户会话 per-session 限流，商户 per-key 限流分层（下单类/查询类分池）。
 - 审计：v2 全部变更类请求落审计表（复用 `event_resolution_audits` 范式）。
