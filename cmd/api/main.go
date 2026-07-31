@@ -160,9 +160,13 @@ func run(
 		defer closeV3()
 		optionalServices = append(optionalServices, v3Config)
 		// Serve the embedded hosted UI at /launch so a single deployment can
-		// host both the API and the sandbox trading page.
+		// host both the API and the sandbox trading page. The page references
+		// ./styles.css and ./app.js, which resolve to the root path when opened
+		// from /launch (no trailing slash), so those are registered as well.
 		mux.Handle("GET /launch", hostedui.Handler())
 		mux.Handle("GET /launch/", hostedui.Handler())
+		mux.Handle("GET /app.js", hostedui.Handler())
+		mux.Handle("GET /styles.css", hostedui.Handler())
 		slog.Info("V3 hosted API is enabled")
 	}
 	api := httpapi.NewHandler(

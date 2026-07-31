@@ -17,6 +17,10 @@ func TestHandlerServesLaunchPage(t *testing.T) {
 		{path: "/launch/", want: "<!doctype html>"},
 		{path: "/launch/app.js", want: "predictmarket"},
 		{path: "/launch/styles.css", want: ":root"},
+		// The page is opened from /launch (no trailing slash), so relative
+		// assets resolve to the root path; the API registers these too.
+		{path: "/app.js", want: "predictmarket"},
+		{path: "/styles.css", want: ":root"},
 	}
 	for _, tc := range cases {
 		request := httptest.NewRequest(http.MethodGet, tc.path, nil)
