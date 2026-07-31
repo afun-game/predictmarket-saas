@@ -35,6 +35,14 @@ The prototype covers four user-facing pages:
   after the API returns it and balance refresh succeeds.
 - **Accessible baseline:** semantic buttons, labels, focus indicators, reduced
   motion support, contrast-safe text, and no color-only status encoding.
+- **Language selection:** a topbar panel switches the UI between 中文 and
+  English (zh-CN / en-US). The merchant session locale
+  (`/api/user/me` `locale`) sets the default; a user's own choice is persisted
+  per device and wins. Server-provided titles, questions, and rules are data
+  and are not translated client-side; dates and status labels are localized.
+- **Text containment:** list cards clamp titles to two lines and truncate
+  meta rows, so long event and market titles never overflow their cards or
+  the layout.
 
 ## Launch and API handoff
 
