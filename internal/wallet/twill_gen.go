@@ -6,12 +6,14 @@ package wallet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 	"github.com/nxsky/twill"
 	"github.com/nxsky/twill/runtime/codegen"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"reflect"
+	"time"
 )
 
 func init() {
@@ -20,10 +22,10 @@ func init() {
 		Iface: reflect.TypeOf((*Service)(nil)).Elem(),
 		Impl:  reflect.TypeOf(implementation{}),
 		LocalStubFn: func(impl any, caller string, tracer trace.Tracer) any {
-			return service_local_stub{impl: impl.(Service), tracer: tracer, createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Create", Remote: false, Generated: true}), creditMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Credit", Remote: false, Generated: true}), creditWithIdempotencyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "CreditWithIdempotency", Remote: false, Generated: true}), debitMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Debit", Remote: false, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Get", Remote: false, Generated: true}), getBalanceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "GetBalance", Remote: false, Generated: true}), listTransactionsMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "ListTransactions", Remote: false, Generated: true}), lockMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Lock", Remote: false, Generated: true}), unlockMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Unlock", Remote: false, Generated: true})}
+			return service_local_stub{impl: impl.(Service), tracer: tracer, createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Create", Remote: false, Generated: true}), creditMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Credit", Remote: false, Generated: true}), creditWithIdempotencyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "CreditWithIdempotency", Remote: false, Generated: true}), debitMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Debit", Remote: false, Generated: true}), depositMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Deposit", Remote: false, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Get", Remote: false, Generated: true}), getBalanceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "GetBalance", Remote: false, Generated: true}), getTransferMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "GetTransfer", Remote: false, Generated: true}), listTransactionsMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "ListTransactions", Remote: false, Generated: true}), lockMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Lock", Remote: false, Generated: true}), unlockMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Unlock", Remote: false, Generated: true}), withdrawMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Withdraw", Remote: false, Generated: true})}
 		},
 		ClientStubFn: func(stub codegen.Stub, caller string) any {
-			return service_client_stub{stub: stub, createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Create", Remote: true, Generated: true}), creditMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Credit", Remote: true, Generated: true}), creditWithIdempotencyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "CreditWithIdempotency", Remote: true, Generated: true}), debitMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Debit", Remote: true, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Get", Remote: true, Generated: true}), getBalanceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "GetBalance", Remote: true, Generated: true}), listTransactionsMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "ListTransactions", Remote: true, Generated: true}), lockMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Lock", Remote: true, Generated: true}), unlockMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Unlock", Remote: true, Generated: true})}
+			return service_client_stub{stub: stub, createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Create", Remote: true, Generated: true}), creditMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Credit", Remote: true, Generated: true}), creditWithIdempotencyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "CreditWithIdempotency", Remote: true, Generated: true}), debitMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Debit", Remote: true, Generated: true}), depositMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Deposit", Remote: true, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Get", Remote: true, Generated: true}), getBalanceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "GetBalance", Remote: true, Generated: true}), getTransferMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "GetTransfer", Remote: true, Generated: true}), listTransactionsMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "ListTransactions", Remote: true, Generated: true}), lockMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Lock", Remote: true, Generated: true}), unlockMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Unlock", Remote: true, Generated: true}), withdrawMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/wallet/Service", Method: "Withdraw", Remote: true, Generated: true})}
 		},
 		ServerStubFn: func(impl any, addLoad func(uint64, float64)) codegen.Server {
 			return service_server_stub{impl: impl.(Service), addLoad: addLoad}
@@ -50,11 +52,14 @@ type service_local_stub struct {
 	creditMetrics                *codegen.MethodMetrics
 	creditWithIdempotencyMetrics *codegen.MethodMetrics
 	debitMetrics                 *codegen.MethodMetrics
+	depositMetrics               *codegen.MethodMetrics
 	getMetrics                   *codegen.MethodMetrics
 	getBalanceMetrics            *codegen.MethodMetrics
+	getTransferMetrics           *codegen.MethodMetrics
 	listTransactionsMetrics      *codegen.MethodMetrics
 	lockMetrics                  *codegen.MethodMetrics
 	unlockMetrics                *codegen.MethodMetrics
+	withdrawMetrics              *codegen.MethodMetrics
 }
 
 // Check that service_local_stub implements the Service interface.
@@ -140,6 +145,26 @@ func (s service_local_stub) Debit(ctx context.Context, a0 string, a1 string, a2 
 	return s.impl.Debit(ctx, a0, a1, a2, a3, a4)
 }
 
+func (s service_local_stub) Deposit(ctx context.Context, a0 *TransferRequest) (r0 *Transfer, err error) {
+	// Update metrics.
+	begin := s.depositMetrics.Begin()
+	defer func() { s.depositMetrics.End(begin, err != nil, 0, 0) }()
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.tracer.Start(ctx, "wallet.Service.Deposit", trace.WithSpanKind(trace.SpanKindInternal))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
+			span.End()
+		}()
+	}
+
+	return s.impl.Deposit(ctx, a0)
+}
+
 func (s service_local_stub) Get(ctx context.Context, a0 string, a1 string, a2 string) (r0 *types.Wallet, err error) {
 	// Update metrics.
 	begin := s.getMetrics.Begin()
@@ -178,6 +203,26 @@ func (s service_local_stub) GetBalance(ctx context.Context, a0 string, a1 string
 	}
 
 	return s.impl.GetBalance(ctx, a0, a1, a2)
+}
+
+func (s service_local_stub) GetTransfer(ctx context.Context, a0 string, a1 string) (r0 *Transfer, err error) {
+	// Update metrics.
+	begin := s.getTransferMetrics.Begin()
+	defer func() { s.getTransferMetrics.End(begin, err != nil, 0, 0) }()
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.tracer.Start(ctx, "wallet.Service.GetTransfer", trace.WithSpanKind(trace.SpanKindInternal))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
+			span.End()
+		}()
+	}
+
+	return s.impl.GetTransfer(ctx, a0, a1)
 }
 
 func (s service_local_stub) ListTransactions(ctx context.Context, a0 string, a1 string, a2 int, a3 int) (r0 []*types.Transaction, r1 int, err error) {
@@ -240,6 +285,26 @@ func (s service_local_stub) Unlock(ctx context.Context, a0 string, a1 string, a2
 	return s.impl.Unlock(ctx, a0, a1, a2, a3)
 }
 
+func (s service_local_stub) Withdraw(ctx context.Context, a0 *TransferRequest) (r0 *Transfer, err error) {
+	// Update metrics.
+	begin := s.withdrawMetrics.Begin()
+	defer func() { s.withdrawMetrics.End(begin, err != nil, 0, 0) }()
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.tracer.Start(ctx, "wallet.Service.Withdraw", trace.WithSpanKind(trace.SpanKindInternal))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
+			span.End()
+		}()
+	}
+
+	return s.impl.Withdraw(ctx, a0)
+}
+
 // Client stub implementations.
 
 type service_client_stub struct {
@@ -248,11 +313,14 @@ type service_client_stub struct {
 	creditMetrics                *codegen.MethodMetrics
 	creditWithIdempotencyMetrics *codegen.MethodMetrics
 	debitMetrics                 *codegen.MethodMetrics
+	depositMetrics               *codegen.MethodMetrics
 	getMetrics                   *codegen.MethodMetrics
 	getBalanceMetrics            *codegen.MethodMetrics
+	getTransferMetrics           *codegen.MethodMetrics
 	listTransactionsMetrics      *codegen.MethodMetrics
 	lockMetrics                  *codegen.MethodMetrics
 	unlockMetrics                *codegen.MethodMetrics
+	withdrawMetrics              *codegen.MethodMetrics
 }
 
 // Check that service_client_stub implements the Service interface.
@@ -509,6 +577,62 @@ func (s service_client_stub) Debit(ctx context.Context, a0 string, a1 string, a2
 	return
 }
 
+func (s service_client_stub) Deposit(ctx context.Context, a0 *TransferRequest) (r0 *Transfer, err error) {
+	// Update metrics.
+	var requestBytes, replyBytes int
+	begin := s.depositMetrics.Begin()
+	defer func() { s.depositMetrics.End(begin, err != nil, requestBytes, replyBytes) }()
+
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.stub.Tracer().Start(ctx, "wallet.Service.Deposit", trace.WithSpanKind(trace.SpanKindClient))
+	}
+
+	defer func() {
+		// Catch and return any panics detected during encoding/decoding/rpc.
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+			if err != nil {
+				err = errors.Join(twill.RemoteCallError, err)
+			}
+		}
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+
+	}()
+
+	// Preallocate a buffer of the right size.
+	size := 0
+	size += servicetwill_size_ptr_TransferRequest_c5244e8b(a0)
+	enc := codegen.NewEncoder()
+	enc.Reset(size)
+
+	// Encode arguments.
+	servicetwill_enc_ptr_TransferRequest_c5244e8b(enc, a0)
+	var shardKey uint64
+
+	// Call the remote method.
+	requestBytes = len(enc.Data())
+	var results []byte
+	results, err = s.stub.Run(ctx, 4, enc.Data(), shardKey)
+	replyBytes = len(results)
+	if err != nil {
+		err = errors.Join(twill.RemoteCallError, err)
+		return
+	}
+
+	// Decode the results.
+	dec := codegen.NewDecoder(results)
+	r0 = servicetwill_dec_ptr_Transfer_4b586b2c(dec)
+	err = dec.Error()
+	return
+}
+
 func (s service_client_stub) Get(ctx context.Context, a0 string, a1 string, a2 string) (r0 *types.Wallet, err error) {
 	// Update metrics.
 	var requestBytes, replyBytes int
@@ -555,7 +679,7 @@ func (s service_client_stub) Get(ctx context.Context, a0 string, a1 string, a2 s
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 4, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 5, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -615,7 +739,7 @@ func (s service_client_stub) GetBalance(ctx context.Context, a0 string, a1 strin
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 5, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 6, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -626,6 +750,64 @@ func (s service_client_stub) GetBalance(ctx context.Context, a0 string, a1 strin
 	dec := codegen.NewDecoder(results)
 	r0 = dec.Float64()
 	r1 = dec.Float64()
+	err = dec.Error()
+	return
+}
+
+func (s service_client_stub) GetTransfer(ctx context.Context, a0 string, a1 string) (r0 *Transfer, err error) {
+	// Update metrics.
+	var requestBytes, replyBytes int
+	begin := s.getTransferMetrics.Begin()
+	defer func() { s.getTransferMetrics.End(begin, err != nil, requestBytes, replyBytes) }()
+
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.stub.Tracer().Start(ctx, "wallet.Service.GetTransfer", trace.WithSpanKind(trace.SpanKindClient))
+	}
+
+	defer func() {
+		// Catch and return any panics detected during encoding/decoding/rpc.
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+			if err != nil {
+				err = errors.Join(twill.RemoteCallError, err)
+			}
+		}
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+
+	}()
+
+	// Preallocate a buffer of the right size.
+	size := 0
+	size += (4 + len(a0))
+	size += (4 + len(a1))
+	enc := codegen.NewEncoder()
+	enc.Reset(size)
+
+	// Encode arguments.
+	enc.String(a0)
+	enc.String(a1)
+	var shardKey uint64
+
+	// Call the remote method.
+	requestBytes = len(enc.Data())
+	var results []byte
+	results, err = s.stub.Run(ctx, 7, enc.Data(), shardKey)
+	replyBytes = len(results)
+	if err != nil {
+		err = errors.Join(twill.RemoteCallError, err)
+		return
+	}
+
+	// Decode the results.
+	dec := codegen.NewDecoder(results)
+	r0 = servicetwill_dec_ptr_Transfer_4b586b2c(dec)
 	err = dec.Error()
 	return
 }
@@ -678,7 +860,7 @@ func (s service_client_stub) ListTransactions(ctx context.Context, a0 string, a1
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 6, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 8, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -741,7 +923,7 @@ func (s service_client_stub) Lock(ctx context.Context, a0 string, a1 string, a2 
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 7, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 9, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -802,7 +984,7 @@ func (s service_client_stub) Unlock(ctx context.Context, a0 string, a1 string, a
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 8, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 10, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -815,12 +997,68 @@ func (s service_client_stub) Unlock(ctx context.Context, a0 string, a1 string, a
 	return
 }
 
+func (s service_client_stub) Withdraw(ctx context.Context, a0 *TransferRequest) (r0 *Transfer, err error) {
+	// Update metrics.
+	var requestBytes, replyBytes int
+	begin := s.withdrawMetrics.Begin()
+	defer func() { s.withdrawMetrics.End(begin, err != nil, requestBytes, replyBytes) }()
+
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.stub.Tracer().Start(ctx, "wallet.Service.Withdraw", trace.WithSpanKind(trace.SpanKindClient))
+	}
+
+	defer func() {
+		// Catch and return any panics detected during encoding/decoding/rpc.
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+			if err != nil {
+				err = errors.Join(twill.RemoteCallError, err)
+			}
+		}
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+
+	}()
+
+	// Preallocate a buffer of the right size.
+	size := 0
+	size += servicetwill_size_ptr_TransferRequest_c5244e8b(a0)
+	enc := codegen.NewEncoder()
+	enc.Reset(size)
+
+	// Encode arguments.
+	servicetwill_enc_ptr_TransferRequest_c5244e8b(enc, a0)
+	var shardKey uint64
+
+	// Call the remote method.
+	requestBytes = len(enc.Data())
+	var results []byte
+	results, err = s.stub.Run(ctx, 11, enc.Data(), shardKey)
+	replyBytes = len(results)
+	if err != nil {
+		err = errors.Join(twill.RemoteCallError, err)
+		return
+	}
+
+	// Decode the results.
+	dec := codegen.NewDecoder(results)
+	r0 = servicetwill_dec_ptr_Transfer_4b586b2c(dec)
+	err = dec.Error()
+	return
+}
+
 // Note that "twill generate" will always generate the error message below.
 // Everything is okay. The error message is only relevant if you see it when
 // you run "go build" or "go run".
 var _ codegen.LatestVersion = codegen.Version[[0][24]struct{}](`
 
-ERROR: You generated this file with 'twill generate' (devel) (codegen
+ERROR: You generated this file with 'twill generate' v0.24.7 (codegen
 version v0.24.0). The generated code is incompatible with the version of the
 github.com/nxsky/twill module that you're using. The twill module
 version can be found in your go.mod file or by running the following command.
@@ -859,16 +1097,22 @@ func (s service_server_stub) GetStubFn(method string) func(ctx context.Context, 
 		return s.creditWithIdempotency
 	case "Debit":
 		return s.debit
+	case "Deposit":
+		return s.deposit
 	case "Get":
 		return s.get
 	case "GetBalance":
 		return s.getBalance
+	case "GetTransfer":
+		return s.getTransfer
 	case "ListTransactions":
 		return s.listTransactions
 	case "Lock":
 		return s.lock
 	case "Unlock":
 		return s.unlock
+	case "Withdraw":
+		return s.withdraw
 	default:
 		return nil
 	}
@@ -1001,6 +1245,31 @@ func (s service_server_stub) debit(ctx context.Context, args []byte) (res []byte
 	return enc.Data(), nil
 }
 
+func (s service_server_stub) deposit(ctx context.Context, args []byte) (res []byte, err error) {
+	// Catch and return any panics detected during encoding/decoding/rpc.
+	defer func() {
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+		}
+	}()
+
+	// Decode arguments.
+	dec := codegen.NewDecoder(args)
+	var a0 *TransferRequest
+	a0 = servicetwill_dec_ptr_TransferRequest_c5244e8b(dec)
+
+	// TODO(rgrandl): The deferred function above will recover from panics in the
+	// user code: fix this.
+	// Call the local method.
+	r0, appErr := s.impl.Deposit(ctx, a0)
+
+	// Encode the results.
+	enc := codegen.NewEncoder()
+	servicetwill_enc_ptr_Transfer_4b586b2c(enc, r0)
+	enc.Error(appErr)
+	return enc.Data(), nil
+}
+
 func (s service_server_stub) get(ctx context.Context, args []byte) (res []byte, err error) {
 	// Catch and return any panics detected during encoding/decoding/rpc.
 	defer func() {
@@ -1056,6 +1325,33 @@ func (s service_server_stub) getBalance(ctx context.Context, args []byte) (res [
 	enc := codegen.NewEncoder()
 	enc.Float64(r0)
 	enc.Float64(r1)
+	enc.Error(appErr)
+	return enc.Data(), nil
+}
+
+func (s service_server_stub) getTransfer(ctx context.Context, args []byte) (res []byte, err error) {
+	// Catch and return any panics detected during encoding/decoding/rpc.
+	defer func() {
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+		}
+	}()
+
+	// Decode arguments.
+	dec := codegen.NewDecoder(args)
+	var a0 string
+	a0 = dec.String()
+	var a1 string
+	a1 = dec.String()
+
+	// TODO(rgrandl): The deferred function above will recover from panics in the
+	// user code: fix this.
+	// Call the local method.
+	r0, appErr := s.impl.GetTransfer(ctx, a0, a1)
+
+	// Encode the results.
+	enc := codegen.NewEncoder()
+	servicetwill_enc_ptr_Transfer_4b586b2c(enc, r0)
 	enc.Error(appErr)
 	return enc.Data(), nil
 }
@@ -1152,6 +1448,31 @@ func (s service_server_stub) unlock(ctx context.Context, args []byte) (res []byt
 	return enc.Data(), nil
 }
 
+func (s service_server_stub) withdraw(ctx context.Context, args []byte) (res []byte, err error) {
+	// Catch and return any panics detected during encoding/decoding/rpc.
+	defer func() {
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+		}
+	}()
+
+	// Decode arguments.
+	dec := codegen.NewDecoder(args)
+	var a0 *TransferRequest
+	a0 = servicetwill_dec_ptr_TransferRequest_c5244e8b(dec)
+
+	// TODO(rgrandl): The deferred function above will recover from panics in the
+	// user code: fix this.
+	// Call the local method.
+	r0, appErr := s.impl.Withdraw(ctx, a0)
+
+	// Encode the results.
+	enc := codegen.NewEncoder()
+	servicetwill_enc_ptr_Transfer_4b586b2c(enc, r0)
+	enc.Error(appErr)
+	return enc.Data(), nil
+}
+
 // Reflect stub implementations.
 
 type service_reflect_stub struct {
@@ -1181,6 +1502,11 @@ func (s service_reflect_stub) Debit(ctx context.Context, a0 string, a1 string, a
 	return
 }
 
+func (s service_reflect_stub) Deposit(ctx context.Context, a0 *TransferRequest) (r0 *Transfer, err error) {
+	err = s.caller("Deposit", ctx, []any{a0}, []any{&r0})
+	return
+}
+
 func (s service_reflect_stub) Get(ctx context.Context, a0 string, a1 string, a2 string) (r0 *types.Wallet, err error) {
 	err = s.caller("Get", ctx, []any{a0, a1, a2}, []any{&r0})
 	return
@@ -1188,6 +1514,11 @@ func (s service_reflect_stub) Get(ctx context.Context, a0 string, a1 string, a2 
 
 func (s service_reflect_stub) GetBalance(ctx context.Context, a0 string, a1 string, a2 string) (r0 float64, r1 float64, err error) {
 	err = s.caller("GetBalance", ctx, []any{a0, a1, a2}, []any{&r0, &r1})
+	return
+}
+
+func (s service_reflect_stub) GetTransfer(ctx context.Context, a0 string, a1 string) (r0 *Transfer, err error) {
+	err = s.caller("GetTransfer", ctx, []any{a0, a1}, []any{&r0})
 	return
 }
 
@@ -1206,6 +1537,101 @@ func (s service_reflect_stub) Unlock(ctx context.Context, a0 string, a1 string, 
 	return
 }
 
+func (s service_reflect_stub) Withdraw(ctx context.Context, a0 *TransferRequest) (r0 *Transfer, err error) {
+	err = s.caller("Withdraw", ctx, []any{a0}, []any{&r0})
+	return
+}
+
+// AutoMarshal implementations.
+
+var _ codegen.AutoMarshal = (*Transfer)(nil)
+
+type __is_Transfer[T ~struct {
+	twill.AutoMarshal
+	ID                    string    "json:\"id\""
+	MerchantID            string    "json:\"merchant_id\""
+	MerchantTransactionID string    "json:\"merchant_txn_id\""
+	UserID                string    "json:\"user_id\""
+	Currency              string    "json:\"currency\""
+	Amount                float64   "json:\"amount\""
+	Direction             string    "json:\"direction\""
+	Status                string    "json:\"status\""
+	TransactionID         string    "json:\"transaction_id\""
+	CreatedAt             time.Time "json:\"created_at\""
+	UpdatedAt             time.Time "json:\"updated_at\""
+}] struct{}
+
+var _ __is_Transfer[Transfer]
+
+func (x *Transfer) WeaverMarshal(enc *codegen.Encoder) {
+	if x == nil {
+		panic(fmt.Errorf("Transfer.WeaverMarshal: nil receiver"))
+	}
+	enc.String(x.ID)
+	enc.String(x.MerchantID)
+	enc.String(x.MerchantTransactionID)
+	enc.String(x.UserID)
+	enc.String(x.Currency)
+	enc.Float64(x.Amount)
+	enc.String(x.Direction)
+	enc.String(x.Status)
+	enc.String(x.TransactionID)
+	enc.EncodeBinaryMarshaler(&x.CreatedAt)
+	enc.EncodeBinaryMarshaler(&x.UpdatedAt)
+}
+
+func (x *Transfer) WeaverUnmarshal(dec *codegen.Decoder) {
+	if x == nil {
+		panic(fmt.Errorf("Transfer.WeaverUnmarshal: nil receiver"))
+	}
+	x.ID = dec.String()
+	x.MerchantID = dec.String()
+	x.MerchantTransactionID = dec.String()
+	x.UserID = dec.String()
+	x.Currency = dec.String()
+	x.Amount = dec.Float64()
+	x.Direction = dec.String()
+	x.Status = dec.String()
+	x.TransactionID = dec.String()
+	dec.DecodeBinaryUnmarshaler(&x.CreatedAt)
+	dec.DecodeBinaryUnmarshaler(&x.UpdatedAt)
+}
+
+var _ codegen.AutoMarshal = (*TransferRequest)(nil)
+
+type __is_TransferRequest[T ~struct {
+	twill.AutoMarshal
+	MerchantID            string "json:\"merchant_id\""
+	MerchantTransactionID string "json:\"merchant_txn_id\""
+	UserID                string "json:\"user_id\""
+	Currency              string "json:\"currency\""
+	Amount                string "json:\"amount\""
+}] struct{}
+
+var _ __is_TransferRequest[TransferRequest]
+
+func (x *TransferRequest) WeaverMarshal(enc *codegen.Encoder) {
+	if x == nil {
+		panic(fmt.Errorf("TransferRequest.WeaverMarshal: nil receiver"))
+	}
+	enc.String(x.MerchantID)
+	enc.String(x.MerchantTransactionID)
+	enc.String(x.UserID)
+	enc.String(x.Currency)
+	enc.String(x.Amount)
+}
+
+func (x *TransferRequest) WeaverUnmarshal(dec *codegen.Decoder) {
+	if x == nil {
+		panic(fmt.Errorf("TransferRequest.WeaverUnmarshal: nil receiver"))
+	}
+	x.MerchantID = dec.String()
+	x.MerchantTransactionID = dec.String()
+	x.UserID = dec.String()
+	x.Currency = dec.String()
+	x.Amount = dec.String()
+}
+
 // Encoding/decoding implementations.
 
 func servicetwill_enc_ptr_Wallet_d53e830d(enc *codegen.Encoder, arg *types.Wallet) {
@@ -1222,6 +1648,42 @@ func servicetwill_dec_ptr_Wallet_d53e830d(dec *codegen.Decoder) *types.Wallet {
 		return nil
 	}
 	var res types.Wallet
+	(&res).WeaverUnmarshal(dec)
+	return &res
+}
+
+func servicetwill_enc_ptr_TransferRequest_c5244e8b(enc *codegen.Encoder, arg *TransferRequest) {
+	if arg == nil {
+		enc.Bool(false)
+	} else {
+		enc.Bool(true)
+		(*arg).WeaverMarshal(enc)
+	}
+}
+
+func servicetwill_dec_ptr_TransferRequest_c5244e8b(dec *codegen.Decoder) *TransferRequest {
+	if !dec.Bool() {
+		return nil
+	}
+	var res TransferRequest
+	(&res).WeaverUnmarshal(dec)
+	return &res
+}
+
+func servicetwill_enc_ptr_Transfer_4b586b2c(enc *codegen.Encoder, arg *Transfer) {
+	if arg == nil {
+		enc.Bool(false)
+	} else {
+		enc.Bool(true)
+		(*arg).WeaverMarshal(enc)
+	}
+}
+
+func servicetwill_dec_ptr_Transfer_4b586b2c(dec *codegen.Decoder) *Transfer {
+	if !dec.Bool() {
+		return nil
+	}
+	var res Transfer
 	(&res).WeaverUnmarshal(dec)
 	return &res
 }
@@ -1265,4 +1727,29 @@ func servicetwill_dec_slice_ptr_Transaction_a3e08383(dec *codegen.Decoder) []*ty
 		res[i] = servicetwill_dec_ptr_Transaction_f020bb45(dec)
 	}
 	return res
+}
+
+// Size implementations.
+
+// servicetwill_size_ptr_TransferRequest_c5244e8b returns the size (in bytes) of the serialization
+// of the provided type.
+func servicetwill_size_ptr_TransferRequest_c5244e8b(x *TransferRequest) int {
+	if x == nil {
+		return 1
+	} else {
+		return 1 + servicetwill_size_TransferRequest_151c4076(&*x)
+	}
+}
+
+// servicetwill_size_TransferRequest_151c4076 returns the size (in bytes) of the serialization
+// of the provided type.
+func servicetwill_size_TransferRequest_151c4076(x *TransferRequest) int {
+	size := 0
+	size += 0
+	size += (4 + len(x.MerchantID))
+	size += (4 + len(x.MerchantTransactionID))
+	size += (4 + len(x.UserID))
+	size += (4 + len(x.Currency))
+	size += (4 + len(x.Amount))
+	return size
 }

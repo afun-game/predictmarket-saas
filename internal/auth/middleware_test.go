@@ -5,12 +5,16 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 )
 
 type validatorStub struct{}
+
+type signedValidatorStub struct{}
 
 func (validatorStub) ValidateAPIKey(
 	_ context.Context,
@@ -19,6 +23,16 @@ func (validatorStub) ValidateAPIKey(
 	if apiKey != "pk_live_valid" {
 		return nil, errors.New("invalid key")
 	}
+	return &types.Merchant{ID: "merchant-1"}, nil
+}
+
+func (signedValidatorStub) ValidateSignedRequest(
+	_ context.Context,
+	_ string,
+	_ string,
+	_ string,
+	_ []byte,
+) (*types.Merchant, error) {
 	return &types.Merchant{ID: "merchant-1"}, nil
 }
 
@@ -87,5 +101,43 @@ func TestRequireAdmin(t *testing.T) {
 				t.Errorf("status = %d, want %d", recorder.Code, test.wantStatus)
 			}
 		})
+	}
+}
+
+func TestRequireSignedMerchantRejectsMissingReplayGuard(t *testing.T) {
+	t.Parallel()
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	request := httptest.NewRequest(http.MethodPost, "/", nil)
+	request.Header.Set("Authorization", "Bearer pk_live_valid")
+	request.Header.Set(signatureTimestampHeader, strconv.FormatInt(time.Now().Unix(), 10))
+	request.Header.Set(signatureHeader, "not-checked")
+	request.Header.Set(idempotencyKeyHeader, "request-1")
+	recorder := httptest.NewRecorder()
+
+	RequireSignedMerchant(signedValidatorStub{}, nil, next).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestRequireSignedMerchantWithoutReplayAllowsDatabaseIdempotentRetry(t *testing.T) {
+	t.Parallel()
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	request := httptest.NewRequest(http.MethodPost, "/", nil)
+	request.Header.Set("Authorization", "Bearer pk_live_valid")
+	request.Header.Set(signatureTimestampHeader, strconv.FormatInt(time.Now().Unix(), 10))
+	request.Header.Set(signatureHeader, "not-checked")
+	request.Header.Set(idempotencyKeyHeader, "transfer-retry")
+
+	recorder := httptest.NewRecorder()
+	RequireSignedMerchantWithoutReplay(signedValidatorStub{}, next).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusNoContent)
 	}
 }

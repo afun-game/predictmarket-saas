@@ -456,3 +456,91 @@ func integrationUUID(t *testing.T) string {
 	buffer[8] = (buffer[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", buffer[:4], buffer[4:6], buffer[6:8], buffer[8:10], buffer[10:])
 }
+
+func TestSettlementPostgresVoidRefundsFullCollateral(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "1" {
+		t.Skip("set INTEGRATION_TEST=1 to run PostgreSQL integration tests")
+	}
+	fixture := newSettlementFixture(t)
+	ctx := context.Background()
+
+	// Enable webhook delivery so the void path exercises the outbox.
+	if _, err := fixture.database.ExecContext(ctx, `
+UPDATE merchants
+SET callback_url = 'https://merchant.example/callback',
+    webhook_url = 'https://merchant.example/webhook',
+    webhook_events = ARRAY['order.voided', 'market.voided']
+WHERE id = $1`, fixture.merchantID); err != nil {
+		t.Fatalf("configure fixture webhooks: %v", err)
+	}
+
+	if err := fixture.service.VoidMarket(ctx, fixture.marketIDs[0]); err != nil {
+		t.Fatalf("VoidMarket() error = %v", err)
+	}
+	if err := fixture.service.VoidMarket(ctx, fixture.marketIDs[0]); !errors.Is(err, ErrMarketAlreadySettled) {
+		t.Fatalf("second VoidMarket() error = %v, want ErrMarketAlreadySettled", err)
+	}
+
+	var marketStatus string
+	if err := fixture.database.QueryRowContext(
+		ctx, "SELECT status FROM markets WHERE id = $1", fixture.marketIDs[0],
+	).Scan(&marketStatus); err != nil {
+		t.Fatalf("query voided market status: %v", err)
+	}
+	if marketStatus != "voided" {
+		t.Fatalf("voided market status = %q, want voided", marketStatus)
+	}
+
+	var settlementType string
+	var winningOption sql.NullString
+	if err := fixture.database.QueryRowContext(ctx, `
+SELECT settlement_type, winning_option
+FROM market_settlements
+WHERE market_id = $1`, fixture.marketIDs[0]).Scan(&settlementType, &winningOption); err != nil {
+		t.Fatalf("query market settlement: %v", err)
+	}
+	if settlementType != "void" || winningOption.Valid {
+		t.Fatalf("market settlement = (%s, %v), want (void, NULL)", settlementType, winningOption)
+	}
+
+	expected := map[string][2]string{
+		"buy-winner":  {"100.00", "0.00"},
+		"sell-loser":  {"100.00", "0.00"},
+		"sell-winner": {"100.00", "0.00"},
+		"buy-loser":   {"100.00", "0.00"},
+		"pending":     {"100.00", "0.00"},
+	}
+	for userID, want := range expected {
+		var balance string
+		var locked string
+		if err := fixture.database.QueryRowContext(ctx, `
+SELECT balance::text, locked_balance::text
+FROM wallets
+WHERE id = $1`, fixture.walletIDs[userID]).Scan(&balance, &locked); err != nil {
+			t.Fatalf("query voided wallet %s: %v", userID, err)
+		}
+		if balance != want[0] || locked != want[1] {
+			t.Errorf("voided wallet %s = (balance %s, locked %s), want (%s, %s)", userID, balance, locked, want[0], want[1])
+		}
+	}
+
+	var voidedOrders int
+	if err := fixture.database.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM orders WHERE market_id = $1 AND status = 'voided'`, fixture.marketIDs[0]).Scan(&voidedOrders); err != nil {
+		t.Fatalf("query voided orders: %v", err)
+	}
+	if voidedOrders != 5 {
+		t.Fatalf("voided orders = %d, want 5", voidedOrders)
+	}
+
+	var voidWebhooks int
+	if err := fixture.database.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM webhook_outbox
+WHERE merchant_id = $1
+  AND event_type IN ('order.voided', 'market.voided')`, fixture.merchantID).Scan(&voidWebhooks); err != nil {
+		t.Fatalf("query void webhooks: %v", err)
+	}
+	if voidWebhooks != 6 { // 5 order.voided + 1 market.voided
+		t.Fatalf("void webhooks = %d, want 6", voidWebhooks)
+	}
+}

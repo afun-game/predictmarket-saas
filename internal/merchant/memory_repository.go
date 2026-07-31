@@ -155,5 +155,15 @@ func cloneMerchant(merchant *types.Merchant) *types.Merchant {
 		return nil
 	}
 	clone := *merchant
+	if merchant.APISecretSecondaryExpiresAt != nil {
+		expiresAt := *merchant.APISecretSecondaryExpiresAt
+		clone.APISecretSecondaryExpiresAt = &expiresAt
+	}
+	if merchant.WebhookEvents != nil {
+		clone.WebhookEvents = append([]string{}, merchant.WebhookEvents...)
+	}
+	if merchant.AllowedIPs != nil {
+		clone.AllowedIPs = append([]string{}, merchant.AllowedIPs...)
+	}
 	return &clone
 }

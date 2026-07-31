@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"reflect"
+	"time"
 )
 
 func init() {
@@ -22,10 +23,10 @@ func init() {
 		Iface: reflect.TypeOf((*Service)(nil)).Elem(),
 		Impl:  reflect.TypeOf(implementation{}),
 		LocalStubFn: func(impl any, caller string, tracer trace.Tracer) any {
-			return service_local_stub{impl: impl.(Service), tracer: tracer, cancelMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Cancel", Remote: false, Generated: true}), createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Create", Remote: false, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Get", Remote: false, Generated: true}), getOrderBookMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "GetOrderBook", Remote: false, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "List", Remote: false, Generated: true}), listByMarketMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListByMarket", Remote: false, Generated: true}), listByUserMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListByUser", Remote: false, Generated: true}), listCursorMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListCursor", Remote: false, Generated: true})}
+			return service_local_stub{impl: impl.(Service), tracer: tracer, cancelMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Cancel", Remote: false, Generated: true}), createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Create", Remote: false, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Get", Remote: false, Generated: true}), getOrderBookMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "GetOrderBook", Remote: false, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "List", Remote: false, Generated: true}), listByMarketMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListByMarket", Remote: false, Generated: true}), listByUserMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListByUser", Remote: false, Generated: true}), listCursorMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListCursor", Remote: false, Generated: true}), listTradesMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListTrades", Remote: false, Generated: true})}
 		},
 		ClientStubFn: func(stub codegen.Stub, caller string) any {
-			return service_client_stub{stub: stub, cancelMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Cancel", Remote: true, Generated: true}), createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Create", Remote: true, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Get", Remote: true, Generated: true}), getOrderBookMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "GetOrderBook", Remote: true, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "List", Remote: true, Generated: true}), listByMarketMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListByMarket", Remote: true, Generated: true}), listByUserMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListByUser", Remote: true, Generated: true}), listCursorMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListCursor", Remote: true, Generated: true})}
+			return service_client_stub{stub: stub, cancelMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Cancel", Remote: true, Generated: true}), createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Create", Remote: true, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "Get", Remote: true, Generated: true}), getOrderBookMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "GetOrderBook", Remote: true, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "List", Remote: true, Generated: true}), listByMarketMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListByMarket", Remote: true, Generated: true}), listByUserMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListByUser", Remote: true, Generated: true}), listCursorMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListCursor", Remote: true, Generated: true}), listTradesMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/order/Service", Method: "ListTrades", Remote: true, Generated: true})}
 		},
 		ServerStubFn: func(impl any, addLoad func(uint64, float64)) codegen.Server {
 			return service_server_stub{impl: impl.(Service), addLoad: addLoad}
@@ -56,6 +57,7 @@ type service_local_stub struct {
 	listByMarketMetrics *codegen.MethodMetrics
 	listByUserMetrics   *codegen.MethodMetrics
 	listCursorMetrics   *codegen.MethodMetrics
+	listTradesMetrics   *codegen.MethodMetrics
 }
 
 // Check that service_local_stub implements the Service interface.
@@ -221,6 +223,26 @@ func (s service_local_stub) ListCursor(ctx context.Context, a0 *ListFilters) (r0
 	return s.impl.ListCursor(ctx, a0)
 }
 
+func (s service_local_stub) ListTrades(ctx context.Context, a0 *TradeListFilters) (r0 *TradeCursorPage, err error) {
+	// Update metrics.
+	begin := s.listTradesMetrics.Begin()
+	defer func() { s.listTradesMetrics.End(begin, err != nil, 0, 0) }()
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.tracer.Start(ctx, "order.Service.ListTrades", trace.WithSpanKind(trace.SpanKindInternal))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
+			span.End()
+		}()
+	}
+
+	return s.impl.ListTrades(ctx, a0)
+}
+
 // Client stub implementations.
 
 type service_client_stub struct {
@@ -233,6 +255,7 @@ type service_client_stub struct {
 	listByMarketMetrics *codegen.MethodMetrics
 	listByUserMetrics   *codegen.MethodMetrics
 	listCursorMetrics   *codegen.MethodMetrics
+	listTradesMetrics   *codegen.MethodMetrics
 }
 
 // Check that service_client_stub implements the Service interface.
@@ -490,13 +513,8 @@ func (s service_client_stub) List(ctx context.Context, a0 *ListFilters) (r0 []*t
 
 	}()
 
-	// Preallocate a buffer of the right size.
-	size := 0
-	size += servicetwill_size_ptr_ListFilters_aa4fcb30(a0)
-	enc := codegen.NewEncoder()
-	enc.Reset(size)
-
 	// Encode arguments.
+	enc := codegen.NewEncoder()
 	servicetwill_enc_ptr_ListFilters_aa4fcb30(enc, a0)
 	var shardKey uint64
 
@@ -671,13 +689,8 @@ func (s service_client_stub) ListCursor(ctx context.Context, a0 *ListFilters) (r
 
 	}()
 
-	// Preallocate a buffer of the right size.
-	size := 0
-	size += servicetwill_size_ptr_ListFilters_aa4fcb30(a0)
-	enc := codegen.NewEncoder()
-	enc.Reset(size)
-
 	// Encode arguments.
+	enc := codegen.NewEncoder()
 	servicetwill_enc_ptr_ListFilters_aa4fcb30(enc, a0)
 	var shardKey uint64
 
@@ -698,12 +711,63 @@ func (s service_client_stub) ListCursor(ctx context.Context, a0 *ListFilters) (r
 	return
 }
 
+func (s service_client_stub) ListTrades(ctx context.Context, a0 *TradeListFilters) (r0 *TradeCursorPage, err error) {
+	// Update metrics.
+	var requestBytes, replyBytes int
+	begin := s.listTradesMetrics.Begin()
+	defer func() { s.listTradesMetrics.End(begin, err != nil, requestBytes, replyBytes) }()
+
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.stub.Tracer().Start(ctx, "order.Service.ListTrades", trace.WithSpanKind(trace.SpanKindClient))
+	}
+
+	defer func() {
+		// Catch and return any panics detected during encoding/decoding/rpc.
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+			if err != nil {
+				err = errors.Join(twill.RemoteCallError, err)
+			}
+		}
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+
+	}()
+
+	// Encode arguments.
+	enc := codegen.NewEncoder()
+	servicetwill_enc_ptr_TradeListFilters_6cac1725(enc, a0)
+	var shardKey uint64
+
+	// Call the remote method.
+	requestBytes = len(enc.Data())
+	var results []byte
+	results, err = s.stub.Run(ctx, 8, enc.Data(), shardKey)
+	replyBytes = len(results)
+	if err != nil {
+		err = errors.Join(twill.RemoteCallError, err)
+		return
+	}
+
+	// Decode the results.
+	dec := codegen.NewDecoder(results)
+	r0 = servicetwill_dec_ptr_TradeCursorPage_c9f524cd(dec)
+	err = dec.Error()
+	return
+}
+
 // Note that "twill generate" will always generate the error message below.
 // Everything is okay. The error message is only relevant if you see it when
 // you run "go build" or "go run".
 var _ codegen.LatestVersion = codegen.Version[[0][24]struct{}](`
 
-ERROR: You generated this file with 'twill generate' (devel) (codegen
+ERROR: You generated this file with 'twill generate' v0.24.7 (codegen
 version v0.24.0). The generated code is incompatible with the version of the
 github.com/nxsky/twill module that you're using. The twill module
 version can be found in your go.mod file or by running the following command.
@@ -750,6 +814,8 @@ func (s service_server_stub) GetStubFn(method string) func(ctx context.Context, 
 		return s.listByUser
 	case "ListCursor":
 		return s.listCursor
+	case "ListTrades":
+		return s.listTrades
 	default:
 		return nil
 	}
@@ -967,6 +1033,31 @@ func (s service_server_stub) listCursor(ctx context.Context, args []byte) (res [
 	return enc.Data(), nil
 }
 
+func (s service_server_stub) listTrades(ctx context.Context, args []byte) (res []byte, err error) {
+	// Catch and return any panics detected during encoding/decoding/rpc.
+	defer func() {
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+		}
+	}()
+
+	// Decode arguments.
+	dec := codegen.NewDecoder(args)
+	var a0 *TradeListFilters
+	a0 = servicetwill_dec_ptr_TradeListFilters_6cac1725(dec)
+
+	// TODO(rgrandl): The deferred function above will recover from panics in the
+	// user code: fix this.
+	// Call the local method.
+	r0, appErr := s.impl.ListTrades(ctx, a0)
+
+	// Encode the results.
+	enc := codegen.NewEncoder()
+	servicetwill_enc_ptr_TradeCursorPage_c9f524cd(enc, r0)
+	enc.Error(appErr)
+	return enc.Data(), nil
+}
+
 // Reflect stub implementations.
 
 type service_reflect_stub struct {
@@ -1016,6 +1107,11 @@ func (s service_reflect_stub) ListCursor(ctx context.Context, a0 *ListFilters) (
 	return
 }
 
+func (s service_reflect_stub) ListTrades(ctx context.Context, a0 *TradeListFilters) (r0 *TradeCursorPage, err error) {
+	err = s.caller("ListTrades", ctx, []any{a0}, []any{&r0})
+	return
+}
+
 // AutoMarshal implementations.
 
 var _ codegen.AutoMarshal = (*CreateRequest)(nil)
@@ -1032,6 +1128,8 @@ type __is_CreateRequest[T ~struct {
 	Price          float64 "json:\"price\""
 	TimeInForce    string  "json:\"time_in_force,omitempty\""
 	IdempotencyKey string  "json:\"-\""
+	WalletKind     string  "json:\"-\""
+	Channel        string  "json:\"-\""
 }] struct{}
 
 var _ __is_CreateRequest[CreateRequest]
@@ -1050,6 +1148,8 @@ func (x *CreateRequest) WeaverMarshal(enc *codegen.Encoder) {
 	enc.Float64(x.Price)
 	enc.String(x.TimeInForce)
 	enc.String(x.IdempotencyKey)
+	enc.String(x.WalletKind)
+	enc.String(x.Channel)
 }
 
 func (x *CreateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
@@ -1066,6 +1166,8 @@ func (x *CreateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.Price = dec.Float64()
 	x.TimeInForce = dec.String()
 	x.IdempotencyKey = dec.String()
+	x.WalletKind = dec.String()
+	x.Channel = dec.String()
 }
 
 var _ codegen.AutoMarshal = (*CursorPage)(nil)
@@ -1139,13 +1241,16 @@ var _ codegen.AutoMarshal = (*ListFilters)(nil)
 
 type __is_ListFilters[T ~struct {
 	twill.AutoMarshal
-	MerchantID string "json:\"merchant_id,omitempty\""
-	UserID     string "json:\"user_id,omitempty\""
-	MarketID   string "json:\"market_id,omitempty\""
-	Status     string "json:\"status,omitempty\""
-	Cursor     string "json:\"cursor,omitempty\""
-	Page       int    "json:\"page,omitempty\""
-	Limit      int    "json:\"limit,omitempty\""
+	MerchantID string     "json:\"merchant_id,omitempty\""
+	UserID     string     "json:\"user_id,omitempty\""
+	MarketID   string     "json:\"market_id,omitempty\""
+	Status     string     "json:\"status,omitempty\""
+	Cursor     string     "json:\"cursor,omitempty\""
+	From       *time.Time "json:\"from,omitempty\""
+	To         *time.Time "json:\"to,omitempty\""
+	Page       int        "json:\"page,omitempty\""
+	Limit      int        "json:\"limit,omitempty\""
+	Keyset     bool       "json:\"-\""
 }] struct{}
 
 var _ __is_ListFilters[ListFilters]
@@ -1159,8 +1264,11 @@ func (x *ListFilters) WeaverMarshal(enc *codegen.Encoder) {
 	enc.String(x.MarketID)
 	enc.String(x.Status)
 	enc.String(x.Cursor)
+	servicetwill_enc_ptr_Time_7d81a94d(enc, x.From)
+	servicetwill_enc_ptr_Time_7d81a94d(enc, x.To)
 	enc.Int(x.Page)
 	enc.Int(x.Limit)
+	enc.Bool(x.Keyset)
 }
 
 func (x *ListFilters) WeaverUnmarshal(dec *codegen.Decoder) {
@@ -1172,7 +1280,133 @@ func (x *ListFilters) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.MarketID = dec.String()
 	x.Status = dec.String()
 	x.Cursor = dec.String()
+	x.From = servicetwill_dec_ptr_Time_7d81a94d(dec)
+	x.To = servicetwill_dec_ptr_Time_7d81a94d(dec)
 	x.Page = dec.Int()
+	x.Limit = dec.Int()
+	x.Keyset = dec.Bool()
+}
+
+func servicetwill_enc_ptr_Time_7d81a94d(enc *codegen.Encoder, arg *time.Time) {
+	if arg == nil {
+		enc.Bool(false)
+	} else {
+		enc.Bool(true)
+		enc.EncodeBinaryMarshaler(arg)
+	}
+}
+
+func servicetwill_dec_ptr_Time_7d81a94d(dec *codegen.Decoder) *time.Time {
+	if !dec.Bool() {
+		return nil
+	}
+	var res time.Time
+	dec.DecodeBinaryUnmarshaler(&res)
+	return &res
+}
+
+var _ codegen.AutoMarshal = (*TradeCursorPage)(nil)
+
+type __is_TradeCursorPage[T ~struct {
+	twill.AutoMarshal
+	Trades     []*types.Trade "json:\"trades\""
+	NextCursor string         "json:\"next_cursor,omitempty\""
+}] struct{}
+
+var _ __is_TradeCursorPage[TradeCursorPage]
+
+func (x *TradeCursorPage) WeaverMarshal(enc *codegen.Encoder) {
+	if x == nil {
+		panic(fmt.Errorf("TradeCursorPage.WeaverMarshal: nil receiver"))
+	}
+	servicetwill_enc_slice_ptr_Trade_747345aa(enc, x.Trades)
+	enc.String(x.NextCursor)
+}
+
+func (x *TradeCursorPage) WeaverUnmarshal(dec *codegen.Decoder) {
+	if x == nil {
+		panic(fmt.Errorf("TradeCursorPage.WeaverUnmarshal: nil receiver"))
+	}
+	x.Trades = servicetwill_dec_slice_ptr_Trade_747345aa(dec)
+	x.NextCursor = dec.String()
+}
+
+func servicetwill_enc_ptr_Trade_79563b92(enc *codegen.Encoder, arg *types.Trade) {
+	if arg == nil {
+		enc.Bool(false)
+	} else {
+		enc.Bool(true)
+		(*arg).WeaverMarshal(enc)
+	}
+}
+
+func servicetwill_dec_ptr_Trade_79563b92(dec *codegen.Decoder) *types.Trade {
+	if !dec.Bool() {
+		return nil
+	}
+	var res types.Trade
+	(&res).WeaverUnmarshal(dec)
+	return &res
+}
+
+func servicetwill_enc_slice_ptr_Trade_747345aa(enc *codegen.Encoder, arg []*types.Trade) {
+	if arg == nil {
+		enc.Len(-1)
+		return
+	}
+	enc.Len(len(arg))
+	for i := 0; i < len(arg); i++ {
+		servicetwill_enc_ptr_Trade_79563b92(enc, arg[i])
+	}
+}
+
+func servicetwill_dec_slice_ptr_Trade_747345aa(dec *codegen.Decoder) []*types.Trade {
+	n := dec.Len()
+	if n == -1 {
+		return nil
+	}
+	res := make([]*types.Trade, n)
+	for i := 0; i < n; i++ {
+		res[i] = servicetwill_dec_ptr_Trade_79563b92(dec)
+	}
+	return res
+}
+
+var _ codegen.AutoMarshal = (*TradeListFilters)(nil)
+
+type __is_TradeListFilters[T ~struct {
+	twill.AutoMarshal
+	MerchantID string     "json:\"merchant_id,omitempty\""
+	OrderID    string     "json:\"order_id,omitempty\""
+	Cursor     string     "json:\"cursor,omitempty\""
+	From       *time.Time "json:\"from,omitempty\""
+	To         *time.Time "json:\"to,omitempty\""
+	Limit      int        "json:\"limit,omitempty\""
+}] struct{}
+
+var _ __is_TradeListFilters[TradeListFilters]
+
+func (x *TradeListFilters) WeaverMarshal(enc *codegen.Encoder) {
+	if x == nil {
+		panic(fmt.Errorf("TradeListFilters.WeaverMarshal: nil receiver"))
+	}
+	enc.String(x.MerchantID)
+	enc.String(x.OrderID)
+	enc.String(x.Cursor)
+	servicetwill_enc_ptr_Time_7d81a94d(enc, x.From)
+	servicetwill_enc_ptr_Time_7d81a94d(enc, x.To)
+	enc.Int(x.Limit)
+}
+
+func (x *TradeListFilters) WeaverUnmarshal(dec *codegen.Decoder) {
+	if x == nil {
+		panic(fmt.Errorf("TradeListFilters.WeaverUnmarshal: nil receiver"))
+	}
+	x.MerchantID = dec.String()
+	x.OrderID = dec.String()
+	x.Cursor = dec.String()
+	x.From = servicetwill_dec_ptr_Time_7d81a94d(dec)
+	x.To = servicetwill_dec_ptr_Time_7d81a94d(dec)
 	x.Limit = dec.Int()
 }
 
@@ -1250,6 +1484,42 @@ func servicetwill_dec_ptr_CursorPage_1a7d2ced(dec *codegen.Decoder) *CursorPage 
 	return &res
 }
 
+func servicetwill_enc_ptr_TradeListFilters_6cac1725(enc *codegen.Encoder, arg *TradeListFilters) {
+	if arg == nil {
+		enc.Bool(false)
+	} else {
+		enc.Bool(true)
+		(*arg).WeaverMarshal(enc)
+	}
+}
+
+func servicetwill_dec_ptr_TradeListFilters_6cac1725(dec *codegen.Decoder) *TradeListFilters {
+	if !dec.Bool() {
+		return nil
+	}
+	var res TradeListFilters
+	(&res).WeaverUnmarshal(dec)
+	return &res
+}
+
+func servicetwill_enc_ptr_TradeCursorPage_c9f524cd(enc *codegen.Encoder, arg *TradeCursorPage) {
+	if arg == nil {
+		enc.Bool(false)
+	} else {
+		enc.Bool(true)
+		(*arg).WeaverMarshal(enc)
+	}
+}
+
+func servicetwill_dec_ptr_TradeCursorPage_c9f524cd(dec *codegen.Decoder) *TradeCursorPage {
+	if !dec.Bool() {
+		return nil
+	}
+	var res TradeCursorPage
+	(&res).WeaverUnmarshal(dec)
+	return &res
+}
+
 // Size implementations.
 
 // servicetwill_size_ptr_CreateRequest_a61386f0 returns the size (in bytes) of the serialization
@@ -1259,16 +1529,6 @@ func servicetwill_size_ptr_CreateRequest_a61386f0(x *CreateRequest) int {
 		return 1
 	} else {
 		return 1 + servicetwill_size_CreateRequest_321011ed(&*x)
-	}
-}
-
-// servicetwill_size_ptr_ListFilters_aa4fcb30 returns the size (in bytes) of the serialization
-// of the provided type.
-func servicetwill_size_ptr_ListFilters_aa4fcb30(x *ListFilters) int {
-	if x == nil {
-		return 1
-	} else {
-		return 1 + servicetwill_size_ListFilters_c6871b88(&*x)
 	}
 }
 
@@ -1287,20 +1547,7 @@ func servicetwill_size_CreateRequest_321011ed(x *CreateRequest) int {
 	size += 8
 	size += (4 + len(x.TimeInForce))
 	size += (4 + len(x.IdempotencyKey))
-	return size
-}
-
-// servicetwill_size_ListFilters_c6871b88 returns the size (in bytes) of the serialization
-// of the provided type.
-func servicetwill_size_ListFilters_c6871b88(x *ListFilters) int {
-	size := 0
-	size += 0
-	size += (4 + len(x.MerchantID))
-	size += (4 + len(x.UserID))
-	size += (4 + len(x.MarketID))
-	size += (4 + len(x.Status))
-	size += (4 + len(x.Cursor))
-	size += 8
-	size += 8
+	size += (4 + len(x.WalletKind))
+	size += (4 + len(x.Channel))
 	return size
 }

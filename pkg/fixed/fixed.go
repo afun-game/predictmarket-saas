@@ -43,6 +43,38 @@ func CentsFromFloat(value float64) (int64, error) {
 	return scaledFromFloat(value, CentsScale, maxCents, "amount")
 }
 
+// CentsFromString accepts a positive currency string with at most two decimal
+// places. It avoids a float conversion at HTTP boundaries.
+func CentsFromString(value string) (int64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.HasPrefix(value, "-") || strings.HasPrefix(value, "+") {
+		return 0, fmt.Errorf("amount: %w", ErrOutOfRange)
+	}
+	whole, fraction, hasFraction := strings.Cut(value, ".")
+	if whole == "" || !allDigits(whole) || (hasFraction && (!allDigits(fraction) || len(fraction) > 2)) {
+		return 0, fmt.Errorf("amount: %w", ErrOutOfRange)
+	}
+	if !hasFraction {
+		fraction = ""
+	}
+	for len(fraction) < 2 {
+		fraction += "0"
+	}
+	wholeAmount, err := strconv.ParseInt(whole, 10, 64)
+	if err != nil || wholeAmount > maxCents/CentsScale {
+		return 0, fmt.Errorf("amount: %w", ErrOutOfRange)
+	}
+	fractionAmount, err := strconv.ParseInt(fraction, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("amount: %w", ErrOutOfRange)
+	}
+	amount := wholeAmount*CentsScale + fractionAmount
+	if amount <= 0 || amount > maxCents {
+		return 0, fmt.Errorf("amount: %w", ErrOutOfRange)
+	}
+	return amount, nil
+}
+
 // SharesToFloat converts stored share units to an API-facing number.
 func SharesToFloat(value int64) float64 {
 	return float64(value) / float64(ShareScale)
@@ -148,4 +180,13 @@ func formatScaled(value, scale int64, decimals int) string {
 
 func decimalPlaces(scale int64) int {
 	return len(strconv.FormatInt(scale, 10)) - 1
+}
+
+func allDigits(value string) bool {
+	for _, character := range value {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return true
 }

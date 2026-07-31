@@ -61,7 +61,7 @@ var _ twill.Main = (*main_client_stub)(nil)
 // you run "go build" or "go run".
 var _ codegen.LatestVersion = codegen.Version[[0][24]struct{}](`
 
-ERROR: You generated this file with 'twill generate' (devel) (codegen
+ERROR: You generated this file with 'twill generate' v0.24.7 (codegen
 version v0.24.0). The generated code is incompatible with the version of the
 github.com/nxsky/twill module that you're using. The twill module
 version can be found in your go.mod file or by running the following command.

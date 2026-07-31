@@ -1,5 +1,7 @@
 # Binaries
 /api
+merchant-sim
+sandbox-accelerator
 *.exe
 *.exe~
 *.dll

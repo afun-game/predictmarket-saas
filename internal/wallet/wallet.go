@@ -22,6 +22,7 @@ const (
 	maxPage              = 1000
 	maxUserIDLen         = 255
 	maxIdempotencyKeyLen = 255
+	userWalletKind       = "user"
 )
 
 var (
@@ -30,6 +31,8 @@ var (
 	ErrInvalidMerchant     = errors.New("merchant is not active")
 	ErrInsufficientBalance = errors.New("insufficient available balance")
 	ErrInsufficientLocked  = errors.New("insufficient locked balance")
+	ErrTransferNotFound    = errors.New("wallet transfer not found")
+	ErrTransferConflict    = errors.New("merchant transfer ID was reused with different details")
 )
 
 // Service manages virtual credit wallets (Play Money).
@@ -47,10 +50,42 @@ type Service interface {
 		txType string,
 		idempotencyKey string,
 	) error
+	Deposit(ctx context.Context, request *TransferRequest) (*Transfer, error)
+	Withdraw(ctx context.Context, request *TransferRequest) (*Transfer, error)
+	GetTransfer(ctx context.Context, merchantID, merchantTransactionID string) (*Transfer, error)
 	Debit(ctx context.Context, merchantID, userID, currency string, amount float64, txType string) error
 	Lock(ctx context.Context, merchantID, userID, currency string, amount float64) error
 	Unlock(ctx context.Context, merchantID, userID, currency string, amount float64) error
 	ListTransactions(ctx context.Context, merchantID, userID string, page, limit int) ([]*types.Transaction, int, error)
+}
+
+// TransferRequest identifies a money movement in the merchant's ledger.
+// Amount is a decimal string to preserve exact cents at the API boundary.
+type TransferRequest struct {
+	twill.AutoMarshal
+
+	MerchantID            string `json:"merchant_id"`
+	MerchantTransactionID string `json:"merchant_txn_id"`
+	UserID                string `json:"user_id"`
+	Currency              string `json:"currency"`
+	Amount                string `json:"amount"`
+}
+
+// Transfer records a terminal platform-side deposit or withdrawal.
+type Transfer struct {
+	twill.AutoMarshal
+
+	ID                    string    `json:"id"`
+	MerchantID            string    `json:"merchant_id"`
+	MerchantTransactionID string    `json:"merchant_txn_id"`
+	UserID                string    `json:"user_id"`
+	Currency              string    `json:"currency"`
+	Amount                float64   `json:"amount"`
+	Direction             string    `json:"direction"`
+	Status                string    `json:"status"`
+	TransactionID         string    `json:"transaction_id"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }
 
 // ValidationError identifies an invalid wallet request field.
@@ -124,6 +159,7 @@ func (s *implementation) Create(
 		MerchantID:    key.MerchantID,
 		UserID:        key.UserID,
 		Currency:      key.Currency,
+		Kind:          key.Kind,
 		Balance:       0,
 		LockedBalance: 0,
 		UpdatedAt:     s.now().UTC(),
@@ -214,6 +250,7 @@ func (s *implementation) CreditWithIdempotency(
 		MerchantID: key.MerchantID,
 		UserID:     key.UserID,
 		Currency:   key.Currency,
+		Kind:       key.Kind,
 		UpdatedAt:  now,
 	}
 	transaction := newTransaction(
@@ -231,6 +268,86 @@ func (s *implementation) CreditWithIdempotency(
 		return fmt.Errorf("credit wallet: %w", err)
 	}
 	return nil
+}
+
+// Deposit credits a platform wallet exactly once for a merchant transaction ID.
+func (s *implementation) Deposit(ctx context.Context, request *TransferRequest) (*Transfer, error) {
+	return s.transfer(ctx, request, "deposit")
+}
+
+// Withdraw debits a platform wallet exactly once for a merchant transaction ID.
+func (s *implementation) Withdraw(ctx context.Context, request *TransferRequest) (*Transfer, error) {
+	return s.transfer(ctx, request, "withdrawal")
+}
+
+func (s *implementation) GetTransfer(
+	ctx context.Context,
+	merchantID string,
+	merchantTransactionID string,
+) (*Transfer, error) {
+	merchantID, err := validateMerchantID(merchantID)
+	if err != nil {
+		return nil, err
+	}
+	merchantTransactionID = strings.TrimSpace(merchantTransactionID)
+	if merchantTransactionID == "" || len(merchantTransactionID) > maxIdempotencyKeyLen {
+		return nil, &ValidationError{Field: "merchant_txn_id", Message: "is required and must be at most 255 characters"}
+	}
+	value, err := s.repository.GetTransfer(ctx, merchantID, merchantTransactionID)
+	if err != nil {
+		return nil, fmt.Errorf("get wallet transfer: %w", err)
+	}
+	return value, nil
+}
+
+func (s *implementation) transfer(
+	ctx context.Context,
+	request *TransferRequest,
+	direction string,
+) (*Transfer, error) {
+	input, key, amount, err := validateTransferRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repository.ValidateMerchant(ctx, key.MerchantID); err != nil {
+		return nil, fmt.Errorf("validate transfer merchant: %w", err)
+	}
+	walletID, transactionID, err := s.generateOperationIDs()
+	if err != nil {
+		return nil, err
+	}
+	transferID, err := generateUUID(s.random)
+	if err != nil {
+		return nil, fmt.Errorf("generate wallet transfer ID: %w", err)
+	}
+	now := s.now().UTC()
+	value := &Transfer{
+		ID:                    transferID,
+		MerchantID:            key.MerchantID,
+		MerchantTransactionID: input.MerchantTransactionID,
+		UserID:                key.UserID,
+		Currency:              key.Currency,
+		Amount:                fixed.CentsToFloat(amount),
+		Direction:             direction,
+		Status:                "completed",
+		TransactionID:         transactionID,
+		CreatedAt:             now,
+		UpdatedAt:             now,
+	}
+	transaction := newTransaction(transactionID, key.Currency, "transfer_"+direction, value.Amount, "", now)
+	walletValue := &types.Wallet{
+		ID:         walletID,
+		MerchantID: key.MerchantID,
+		UserID:     key.UserID,
+		Currency:   key.Currency,
+		Kind:       key.Kind,
+		UpdatedAt:  now,
+	}
+	stored, err := s.repository.Transfer(ctx, value, walletValue, transaction, amount)
+	if err != nil {
+		return nil, fmt.Errorf("apply wallet transfer: %w", err)
+	}
+	return stored, nil
 }
 
 func (s *implementation) Debit(
@@ -374,6 +491,30 @@ func validateIdempotencyKey(value string) (string, error) {
 	return value, nil
 }
 
+func validateTransferRequest(request *TransferRequest) (TransferRequest, walletKey, int64, error) {
+	if request == nil {
+		return TransferRequest{}, walletKey{}, 0, &ValidationError{Field: "request", Message: "is required"}
+	}
+	value := *request
+	key, err := validateWalletKey(value.MerchantID, value.UserID, value.Currency)
+	if err != nil {
+		return TransferRequest{}, walletKey{}, 0, err
+	}
+	value.MerchantTransactionID = strings.TrimSpace(value.MerchantTransactionID)
+	if value.MerchantTransactionID == "" || len(value.MerchantTransactionID) > maxIdempotencyKeyLen {
+		return TransferRequest{}, walletKey{}, 0, &ValidationError{Field: "merchant_txn_id", Message: "is required and must be at most 255 characters"}
+	}
+	amount, err := fixed.CentsFromString(value.Amount)
+	if err != nil {
+		return TransferRequest{}, walletKey{}, 0, &ValidationError{Field: "amount", Message: "must be greater than 0 with at most 2 decimal places"}
+	}
+	value.MerchantID = key.MerchantID
+	value.UserID = key.UserID
+	value.Currency = key.Currency
+	value.Amount = fixed.FormatCents(amount)
+	return value, key, amount, nil
+}
+
 func validateWalletKey(merchantID, userID, currency string) (walletKey, error) {
 	merchantID, userID, err := validateOwner(merchantID, userID)
 	if err != nil {
@@ -383,15 +524,15 @@ func validateWalletKey(merchantID, userID, currency string) (walletKey, error) {
 	if !validCurrency(currency) {
 		return walletKey{}, &ValidationError{Field: "currency", Message: "is not supported"}
 	}
-	return walletKey{MerchantID: merchantID, UserID: userID, Currency: currency}, nil
+	return walletKey{MerchantID: merchantID, UserID: userID, Currency: currency, Kind: userWalletKind}, nil
 }
 
 func validateOwner(merchantID, userID string) (string, string, error) {
-	merchantID = strings.TrimSpace(merchantID)
-	userID = strings.TrimSpace(userID)
-	if !isUUID(merchantID) {
-		return "", "", &ValidationError{Field: "merchant_id", Message: "must be a UUID"}
+	merchantID, err := validateMerchantID(merchantID)
+	if err != nil {
+		return "", "", err
 	}
+	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return "", "", &ValidationError{Field: "user_id", Message: "is required"}
 	}
@@ -399,6 +540,14 @@ func validateOwner(merchantID, userID string) (string, string, error) {
 		return "", "", &ValidationError{Field: "user_id", Message: "must be at most 255 characters"}
 	}
 	return merchantID, userID, nil
+}
+
+func validateMerchantID(merchantID string) (string, error) {
+	merchantID = strings.TrimSpace(merchantID)
+	if !isUUID(merchantID) {
+		return "", &ValidationError{Field: "merchant_id", Message: "must be a UUID"}
+	}
+	return merchantID, nil
 }
 
 func validateAmount(amount float64) error {

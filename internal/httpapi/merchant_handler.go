@@ -6,16 +6,20 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/afun-game/predictmarket-saas/internal/analytics"
 	"github.com/afun-game/predictmarket-saas/internal/auth"
+	"github.com/afun-game/predictmarket-saas/internal/callback"
 	"github.com/afun-game/predictmarket-saas/internal/currency"
 	"github.com/afun-game/predictmarket-saas/internal/event"
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/order"
+	"github.com/afun-game/predictmarket-saas/internal/settlement"
 	"github.com/afun-game/predictmarket-saas/internal/sports"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
@@ -29,6 +33,17 @@ const (
 	registrationRateLimit = 10
 	rateLimitWindow       = time.Minute
 )
+
+// configuredGlobalRateLimit allows operators to raise the process-wide API
+// ceiling (e.g. for load acceptance runs) via GLOBAL_RATE_LIMIT.
+func configuredGlobalRateLimit() int {
+	if raw := strings.TrimSpace(os.Getenv("GLOBAL_RATE_LIMIT")); raw != "" {
+		if value, err := strconv.Atoi(raw); err == nil && value > 0 {
+			return value
+		}
+	}
+	return globalRateLimit
+}
 
 type merchantHandler struct {
 	service merchant.Service
@@ -72,6 +87,14 @@ func NewHandler(
 		"GET /api/v1/merchants",
 		auth.RequireAdmin(adminAPIKey, http.HandlerFunc(handler.list)),
 	)
+	mux.Handle(
+		"POST /api/v1/merchants/{merchantID}/v3-secret/reissue",
+		auth.RequireAdmin(adminAPIKey, http.HandlerFunc(handler.reissueV3Secret)),
+	)
+	mux.Handle(
+		"PUT /api/v1/merchants/{merchantID}/integration",
+		auth.RequireAdmin(adminAPIKey, http.HandlerFunc(handler.configureIntegration)),
+	)
 	registerEventRoutes(mux, merchantService, eventService, adminAPIKey)
 	registerMarketRoutes(mux, merchantService, marketService, orderService, adminAPIKey)
 	registerWalletRoutes(mux, merchantService, walletService)
@@ -79,6 +102,89 @@ func NewHandler(
 	registerCurrencyRoutes(mux, merchantService, currencyService, adminAPIKey)
 	for _, optionalService := range optionalServices {
 		switch service := optionalService.(type) {
+		case V3Config:
+			registerV3Routes(
+				mux,
+				service,
+				eventService,
+				marketService,
+				orderService,
+				walletService,
+			)
+			if service.Callbacks != nil {
+				mux.Handle(
+					"POST /api/v1/admin/callback-dead-letters/{channel}/{outboxID}/replay",
+					auth.RequireAdmin(adminAPIKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if err := service.Callbacks.ReplayDeadLetter(
+							r.Context(),
+							r.PathValue("channel"),
+							r.PathValue("outboxID"),
+						); err != nil {
+							if errors.Is(err, callback.ErrNotFound) {
+								writeError(w, http.StatusNotFound, "not_found", "dead letter was not found")
+								return
+							}
+							writeError(w, http.StatusInternalServerError, "internal_error", "could not replay dead letter")
+							return
+						}
+						w.WriteHeader(http.StatusNoContent)
+					})),
+				)
+				mux.Handle(
+					"POST /api/v1/merchants/{merchantID}/integration/verify-callback",
+					auth.RequireAdmin(adminAPIKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if err := service.Callbacks.VerifyCallback(r.Context(), r.PathValue("merchantID")); err != nil {
+							if errors.Is(err, callback.ErrNotFound) {
+								writeError(w, http.StatusNotFound, "not_found", "merchant was not found")
+								return
+							}
+							writeError(w, http.StatusBadGateway, "verification_failed", err.Error())
+							return
+						}
+						writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+							"merchant_id": r.PathValue("merchantID"),
+							"status":      "verified",
+						}})
+					})),
+				)
+				mux.Handle(
+					"POST /api/v1/merchants/{merchantID}/integration/reset-degraded",
+					auth.RequireAdmin(adminAPIKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if err := service.Callbacks.ResetDegraded(r.Context(), r.PathValue("merchantID")); err != nil {
+							writeError(w, http.StatusInternalServerError, "internal_error", "could not reset degraded state")
+							return
+						}
+						writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+							"merchant_id": r.PathValue("merchantID"),
+							"status":      "healthy",
+						}})
+					})),
+				)
+			}
+		case settlement.Service:
+			mux.Handle(
+				"POST /api/v1/admin/markets/{marketID}/void",
+				auth.RequireAdmin(adminAPIKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if err := service.VoidMarket(r.Context(), r.PathValue("marketID")); err != nil {
+						switch {
+						case errors.Is(err, settlement.ErrMarketNotFound):
+							writeError(w, http.StatusNotFound, "not_found", "market was not found")
+							return
+						case errors.Is(err, settlement.ErrMarketAlreadySettled):
+							writeError(w, http.StatusConflict, "already_settled", "market has already been settled or voided")
+							return
+						default:
+							writeError(w, http.StatusInternalServerError, "internal_error", "could not void market")
+							return
+						}
+					}
+					writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+						"market_id": r.PathValue("marketID"),
+						"status":    "voided",
+					}})
+				})),
+			)
+
 		case sports.Service:
 			registerSportsRoutes(mux, merchantService, service, adminAPIKey)
 		case analytics.Service:
@@ -91,7 +197,7 @@ func NewHandler(
 			)
 		}
 	}
-	return middleware.RateLimit(globalRateLimit, rateLimitWindow)(mux)
+	return middleware.RateLimit(configuredGlobalRateLimit(), rateLimitWindow)(mux)
 }
 
 func (h *merchantHandler) register(w http.ResponseWriter, r *http.Request) {
@@ -174,6 +280,44 @@ func (h *merchantHandler) list(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": configs})
 }
 
+func (h *merchantHandler) reissueV3Secret(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ReissueV3Secret(r.Context(), r.PathValue("merchantID"))
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"data": map[string]string{
+			"merchant_id": result.ID,
+			"api_secret":  result.APISecret,
+		},
+	})
+}
+
+func (h *merchantHandler) configureIntegration(w http.ResponseWriter, r *http.Request) {
+	request := merchant.IntegrationRequest{}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	result, err := h.service.ConfigureIntegration(r.Context(), r.PathValue("merchantID"), &request)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	response := map[string]any{
+		"merchant_id":    result.ID,
+		"wallet_mode":    result.WalletMode,
+		"callback_url":   result.CallbackURL,
+		"webhook_url":    result.WebhookURL,
+		"webhook_events": result.WebhookEvents,
+	}
+	if result.CallbackSecret != "" {
+		response["callback_secret"] = result.CallbackSecret
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": response})
+}
+
 func authorizedForMerchant(r *http.Request, merchantID string) bool {
 	authenticated, ok := auth.MerchantFromContext(r.Context())
 	return ok && authenticated.ID == merchantID
@@ -224,6 +368,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "not_found", "merchant was not found")
 	case errors.Is(err, merchant.ErrUnauthorized):
 		writeError(w, http.StatusUnauthorized, "unauthorized", "a valid API key is required")
+	case errors.Is(err, merchant.ErrV3Unavailable):
+		writeError(w, http.StatusServiceUnavailable, "v3_not_configured", "V3 merchant secret encryption is not configured")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 	}

@@ -19,10 +19,10 @@ func init() {
 		Iface: reflect.TypeOf((*Service)(nil)).Elem(),
 		Impl:  reflect.TypeOf(implementation{}),
 		LocalStubFn: func(impl any, caller string, tracer trace.Tracer) any {
-			return service_local_stub{impl: impl.(Service), tracer: tracer, settleEventMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/settlement/Service", Method: "SettleEvent", Remote: false, Generated: true})}
+			return service_local_stub{impl: impl.(Service), tracer: tracer, settleEventMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/settlement/Service", Method: "SettleEvent", Remote: false, Generated: true}), voidMarketMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/settlement/Service", Method: "VoidMarket", Remote: false, Generated: true})}
 		},
 		ClientStubFn: func(stub codegen.Stub, caller string) any {
-			return service_client_stub{stub: stub, settleEventMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/settlement/Service", Method: "SettleEvent", Remote: true, Generated: true})}
+			return service_client_stub{stub: stub, settleEventMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/settlement/Service", Method: "SettleEvent", Remote: true, Generated: true}), voidMarketMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/settlement/Service", Method: "VoidMarket", Remote: true, Generated: true})}
 		},
 		ServerStubFn: func(impl any, addLoad func(uint64, float64)) codegen.Server {
 			return service_server_stub{impl: impl.(Service), addLoad: addLoad}
@@ -46,6 +46,7 @@ type service_local_stub struct {
 	impl               Service
 	tracer             trace.Tracer
 	settleEventMetrics *codegen.MethodMetrics
+	voidMarketMetrics  *codegen.MethodMetrics
 }
 
 // Check that service_local_stub implements the Service interface.
@@ -71,11 +72,32 @@ func (s service_local_stub) SettleEvent(ctx context.Context, a0 string) (err err
 	return s.impl.SettleEvent(ctx, a0)
 }
 
+func (s service_local_stub) VoidMarket(ctx context.Context, a0 string) (err error) {
+	// Update metrics.
+	begin := s.voidMarketMetrics.Begin()
+	defer func() { s.voidMarketMetrics.End(begin, err != nil, 0, 0) }()
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.tracer.Start(ctx, "settlement.Service.VoidMarket", trace.WithSpanKind(trace.SpanKindInternal))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
+			span.End()
+		}()
+	}
+
+	return s.impl.VoidMarket(ctx, a0)
+}
+
 // Client stub implementations.
 
 type service_client_stub struct {
 	stub               codegen.Stub
 	settleEventMetrics *codegen.MethodMetrics
+	voidMarketMetrics  *codegen.MethodMetrics
 }
 
 // Check that service_client_stub implements the Service interface.
@@ -136,12 +158,67 @@ func (s service_client_stub) SettleEvent(ctx context.Context, a0 string) (err er
 	return
 }
 
+func (s service_client_stub) VoidMarket(ctx context.Context, a0 string) (err error) {
+	// Update metrics.
+	var requestBytes, replyBytes int
+	begin := s.voidMarketMetrics.Begin()
+	defer func() { s.voidMarketMetrics.End(begin, err != nil, requestBytes, replyBytes) }()
+
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.stub.Tracer().Start(ctx, "settlement.Service.VoidMarket", trace.WithSpanKind(trace.SpanKindClient))
+	}
+
+	defer func() {
+		// Catch and return any panics detected during encoding/decoding/rpc.
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+			if err != nil {
+				err = errors.Join(twill.RemoteCallError, err)
+			}
+		}
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+
+	}()
+
+	// Preallocate a buffer of the right size.
+	size := 0
+	size += (4 + len(a0))
+	enc := codegen.NewEncoder()
+	enc.Reset(size)
+
+	// Encode arguments.
+	enc.String(a0)
+	var shardKey uint64
+
+	// Call the remote method.
+	requestBytes = len(enc.Data())
+	var results []byte
+	results, err = s.stub.Run(ctx, 0, enc.Data(), shardKey)
+	replyBytes = len(results)
+	if err != nil {
+		err = errors.Join(twill.RemoteCallError, err)
+		return
+	}
+
+	// Decode the results.
+	dec := codegen.NewDecoder(results)
+	err = dec.Error()
+	return
+}
+
 // Note that "twill generate" will always generate the error message below.
 // Everything is okay. The error message is only relevant if you see it when
 // you run "go build" or "go run".
 var _ codegen.LatestVersion = codegen.Version[[0][24]struct{}](`
 
-ERROR: You generated this file with 'twill generate' (devel) (codegen
+ERROR: You generated this file with 'twill generate' v0.24.7 (codegen
 version v0.24.0). The generated code is incompatible with the version of the
 github.com/nxsky/twill module that you're using. The twill module
 version can be found in your go.mod file or by running the following command.
@@ -174,6 +251,8 @@ func (s service_server_stub) GetStubFn(method string) func(ctx context.Context, 
 	switch method {
 	case "SettleEvent":
 		return s.settleEvent
+	case "VoidMarket":
+		return s.voidMarket
 	default:
 		return nil
 	}
@@ -203,6 +282,30 @@ func (s service_server_stub) settleEvent(ctx context.Context, args []byte) (res 
 	return enc.Data(), nil
 }
 
+func (s service_server_stub) voidMarket(ctx context.Context, args []byte) (res []byte, err error) {
+	// Catch and return any panics detected during encoding/decoding/rpc.
+	defer func() {
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+		}
+	}()
+
+	// Decode arguments.
+	dec := codegen.NewDecoder(args)
+	var a0 string
+	a0 = dec.String()
+
+	// TODO(rgrandl): The deferred function above will recover from panics in the
+	// user code: fix this.
+	// Call the local method.
+	appErr := s.impl.VoidMarket(ctx, a0)
+
+	// Encode the results.
+	enc := codegen.NewEncoder()
+	enc.Error(appErr)
+	return enc.Data(), nil
+}
+
 // Reflect stub implementations.
 
 type service_reflect_stub struct {
@@ -214,5 +317,10 @@ var _ Service = (*service_reflect_stub)(nil)
 
 func (s service_reflect_stub) SettleEvent(ctx context.Context, a0 string) (err error) {
 	err = s.caller("SettleEvent", ctx, []any{a0}, []any{})
+	return
+}
+
+func (s service_reflect_stub) VoidMarket(ctx context.Context, a0 string) (err error) {
+	err = s.caller("VoidMarket", ctx, []any{a0}, []any{})
 	return
 }

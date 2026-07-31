@@ -20,7 +20,7 @@ generate: ## Generate Twill code
 	@echo "Generating Twill code..."
 	@TWILL_GENERATOR="$$(mktemp)"; \
 	trap 'rm -f "$$TWILL_GENERATOR"' EXIT; \
-	go build -o "$$TWILL_GENERATOR" github.com/nxsky/twill/cmd/twill; \
+	go build -mod=mod -o "$$TWILL_GENERATOR" github.com/nxsky/twill/cmd/twill; \
 	"$$TWILL_GENERATOR" generate ./...
 
 .PHONY: build
@@ -32,6 +32,10 @@ build: ## Build the application
 run: ## Run the application locally
 	@echo "Running application..."
 	SERVICETWILL_CONFIG=$(PROJECT_ROOT)twill.toml go run -buildvcs=false ./cmd/api
+
+.PHONY: merchant-sim
+merchant-sim: ## Run the V3 merchant callback/webhook simulator
+	go run ./cmd/merchant-sim
 
 .PHONY: test
 test: ## Run tests
@@ -60,13 +64,16 @@ test-integration-ci: ## Run integration tests against already-running dependenci
 		go test -race -count=1 -run '^TestWalletPostgresIntegration$$' ./internal/wallet
 	INTEGRATION_TEST=1 \
 		DATABASE_URL="$${DATABASE_URL:-postgres://predictmarket:password@localhost:5432/predictmarket?sslmode=disable}" \
+		go test -race -count=1 -run '^TestPostgresQueryServiceIntegration$$' ./internal/v2query
+	INTEGRATION_TEST=1 \
+		DATABASE_URL="$${DATABASE_URL:-postgres://predictmarket:password@localhost:5432/predictmarket?sslmode=disable}" \
 		go test -race -count=1 -run '^TestPostgresReconciliation' ./internal/reconciliation
 	INTEGRATION_TEST=1 \
 		DATABASE_URL="$${DATABASE_URL:-postgres://predictmarket:password@localhost:5432/predictmarket?sslmode=disable}" \
 		go test -race -count=1 -run '^TestOrderPostgresIntegration$$' ./internal/order
 	INTEGRATION_TEST=1 \
 		DATABASE_URL="$${DATABASE_URL:-postgres://predictmarket:password@localhost:5432/predictmarket?sslmode=disable}" \
-		go test -race -count=1 -run '^TestSettlementPostgresIntegration' ./internal/settlement
+		go test -race -count=1 -run '^TestSettlementPostgres' ./internal/settlement
 	INTEGRATION_TEST=1 \
 		DATABASE_URL="$${DATABASE_URL:-postgres://predictmarket:password@localhost:5432/predictmarket?sslmode=disable}" \
 		NATS_URL="$${NATS_URL:-nats://localhost:4222}" \
@@ -92,6 +99,14 @@ test-e2e-ci: build ## Run the full HTTP E2E flow against already-running depende
 	@set -eu; \
 		E2E_LOG="$$(mktemp)"; \
 		SERVICETWILL_CONFIG="$(PROJECT_ROOT)twill.toml" ADMIN_API_KEY=e2e-admin-secret \
+			MERCHANT_SECRET_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY \
+			SESSION_JWT_SECRET=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY \
+			HOSTED_UI_URL=https://play.e2e.test/launch \
+			GLOBAL_RATE_LIMIT=100000 \
+			V3_ALLOW_PRIVATE_CALLBACK_URLS=1 \
+			V3_ORDER_RATE_LIMIT=100000 \
+			V3_QUERY_RATE_LIMIT=100000 \
+			V3_USER_RATE_LIMIT=100000 \
 			DATABASE_URL="$${DATABASE_URL:-postgres://predictmarket:password@localhost:5432/predictmarket?sslmode=disable}" \
 			REDIS_URL="$${REDIS_URL:-redis://localhost:6379/0}" \
 			NATS_URL="$${NATS_URL:-nats://localhost:4222}" \
@@ -106,6 +121,8 @@ test-e2e-ci: build ## Run the full HTTP E2E flow against already-running depende
 		done; \
 		if [ "$$READY" -ne 1 ]; then cat "$$E2E_LOG"; exit 1; fi; \
 		E2E_TEST=1 E2E_BASE_URL=http://localhost:8080 ADMIN_API_KEY=e2e-admin-secret \
+			GLOBAL_RATE_LIMIT=100000 \
+			V3_ALLOW_PRIVATE_CALLBACK_URLS=1 \
 			DATABASE_URL="$${DATABASE_URL:-postgres://predictmarket:password@localhost:5432/predictmarket?sslmode=disable}" \
 			go test -race -count=1 ./tests/e2e
 
@@ -133,6 +150,15 @@ fmt: ## Format code
 .PHONY: db-up
 db-up: ## Start database containers
 	docker compose up -d postgres redis nats
+
+.PHONY: sandbox-db-up
+sandbox-db-up: ## Start the isolated V3 sandbox PostgreSQL database
+	docker compose --profile sandbox up -d postgres-sandbox
+
+.PHONY: sandbox-db-migrate
+sandbox-db-migrate: ## Apply migrations to the isolated V3 sandbox database
+	DATABASE_URL="$${SANDBOX_DATABASE_URL:-postgres://predictmarket:password@localhost:55432/predictmarket_sandbox?sslmode=disable}" \
+		go run -mod=vendor ./cmd/migrate up
 
 .PHONY: db-migrate
 db-migrate: ## Run database migrations

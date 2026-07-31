@@ -16,6 +16,24 @@ services:
       timeout: 5s
       retries: 10
 
+  postgres-sandbox:
+    image: postgres:15-alpine
+    container_name: predictmarket-postgres-sandbox
+    profiles: ["sandbox"]
+    environment:
+      POSTGRES_USER: predictmarket
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: predictmarket_sandbox
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres_sandbox_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U predictmarket -d predictmarket_sandbox"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     container_name: predictmarket-redis
@@ -47,5 +65,6 @@ services:
 
 volumes:
   postgres_data:
+  postgres_sandbox_data:
   redis_data:
   nats_data:

@@ -2,6 +2,38 @@ package fixed
 
 import "testing"
 
+func TestCentsFromString(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int64
+		valid bool
+	}{
+		{input: "12", want: 1200, valid: true},
+		{input: "12.3", want: 1230, valid: true},
+		{input: "12.30", want: 1230, valid: true},
+		{input: " 0.01 ", want: 1, valid: true},
+		{input: "0", valid: false},
+		{input: "1.001", valid: false},
+		{input: "-1", valid: false},
+		{input: "+1", valid: false},
+		{input: "1e2", valid: false},
+	}
+	for _, test := range tests {
+		t.Run(test.input, func(t *testing.T) {
+			got, err := CentsFromString(test.input)
+			if test.valid && err != nil {
+				t.Fatalf("CentsFromString(%q) error = %v", test.input, err)
+			}
+			if !test.valid && err == nil {
+				t.Fatalf("CentsFromString(%q) succeeded", test.input)
+			}
+			if test.valid && got != test.want {
+				t.Errorf("CentsFromString(%q) = %d, want %d", test.input, got, test.want)
+			}
+		})
+	}
+}
+
 func TestFixedPointConversions(t *testing.T) {
 	shares, err := SharesFromFloat(12.345678)
 	if err != nil {

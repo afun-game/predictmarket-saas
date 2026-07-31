@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (V3 hardening)
+- Per-merchant seamless circuit breaker: five consecutive callback/webhook
+  failures mark a merchant degraded, seamless orders are refused, and a
+  healthy delivery or the admin `reset-degraded` endpoint clears the flag.
+- Callback URL ownership verification (`verify-callback`): a signed challenge
+  must be echoed before seamless orders are accepted; changing the callback
+  URL invalidates the proof.
+- V2 IP allow-list enforcement (`allowed_ips`, exact IPs or CIDR) on all
+  signed merchant requests.
+- `merchant_api_audits` table records every state-changing V2 request with
+  request ID, idempotency key, client IP, and status code.
+- Layered rate limits: per-merchant-key pools for V2 writes and reads plus a
+  per-session pool for `/api/user/*` (Redis-backed).
+- Market void: admin `POST /api/v1/admin/markets/{id}/void` refunds every
+  order in full, emits `order.voided`/`market.voided` webhooks, records
+  `settlement_type = "void"` in the pull API, and delivers seamless credits
+  with reason `void`.
+- Migration 015 (`merchants` hardening columns, `market_settlements`
+  settlement type, `merchant_api_audits`).
+- Real-time seamless balance callback: `/api/user/me` queries the merchant
+  balance on demand and falls back to the last callback mirror.
+- Sandbox fake settlement accelerator (`cmd/sandbox-accelerator`) resolves due
+  events through the admin API for sandbox settlement testing.
+- Embedded hosted UI served at `/launch` when the V3 routes are enabled
+  (`web/hosted` is compiled into the API binary).
+- Configurable rate limits (`GLOBAL_RATE_LIMIT`, `V3_ORDER_RATE_LIMIT`,
+  `V3_QUERY_RATE_LIMIT`, `V3_USER_RATE_LIMIT`) for acceptance runs.
+- Integration and end-to-end coverage now exercises market void and the
+  1,000-order seamless load path (`make test-e2e`).
+
 ### Added
 - Initial project setup with Twill framework
 - Core component interfaces:

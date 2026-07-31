@@ -110,7 +110,124 @@ orders and their market settlement state first.
 ## Monitoring
 
 Scrape `/metrics` for request volume, latency, 5xx errors, successful orders,
-settlement lag, and stranded collateral. Alert when the scheduled settlement
-audit reports overdue events or a non-empty
-`predictmarket.event_resolved.dead_letter` subject. Grafana is optional; it is
-not a runtime dependency of the MVP.
+settlement lag, stranded collateral, `predictmarket_dead_letter_size`, and
+`predictmarket_shadow_wallet_drift_count`. Alert when the scheduled settlement
+audit reports overdue events, a non-empty
+`predictmarket.event_resolved.dead_letter` subject, merchant callback dead
+letters, or any shadow-wallet drift. Grafana is optional; it is not a runtime
+dependency of the MVP.
+
+## Seamless wallet callbacks
+
+Seamless merchants keep the authoritative balance on their side. The platform
+keeps a shadow wallet and delivers debit/credit/rollback callbacks from
+`callback_outbox`, plus settlement notifications from `webhook_outbox`.
+
+Inspect delivery history for one platform transaction:
+
+```bash
+curl -fsS -H "Authorization: Bearer <api_key>" \
+  -H "X-PM-Timestamp: <unix>" \
+  -H "X-PM-Signature: <hmac>" \
+  "https://api.example/api/v2/callbacks/<transaction_id>"
+```
+
+```sql
+SELECT transaction_id, type, reason, amount, status, callback_response, updated_at
+FROM seamless_transactions
+WHERE transaction_id = '<transaction_id>';
+
+SELECT id, type, status, attempts, last_error, next_attempt_at, delivered_at
+FROM callback_outbox
+WHERE transaction_id = '<transaction_id>'
+ORDER BY created_at;
+
+SELECT channel, outbox_id, merchant_id, transaction_id, attempts, last_error, created_at, replayed_at
+FROM callback_dead_letters
+WHERE replayed_at IS NULL
+ORDER BY created_at;
+```
+
+Shadow conservation: every `kind = 'shadow'` wallet must keep `balance = 0`
+after each committed operation. Free balance is reserved into a credit outbox
+row in the same database transaction. A non-zero shadow balance is an incident.
+
+### Replay a dead letter
+
+After fixing the merchant endpoint or payload issue, replay one dead-lettered
+outbox row. The admin endpoint moves the row back to `pending` and clears
+`last_error`; the dispatcher will attempt delivery again with the same
+`transaction_id`.
+
+```bash
+curl -fsS -X POST \
+  -H "Authorization: Bearer <admin_api_key>" \
+  "https://api.example/api/v1/admin/callback-dead-letters/callback/<outbox_id>/replay"
+
+curl -fsS -X POST \
+  -H "Authorization: Bearer <admin_api_key>" \
+  "https://api.example/api/v1/admin/callback-dead-letters/webhook/<outbox_id>/replay"
+```
+
+```sql
+-- Prefer the admin API above. Manual SQL is last resort and must keep
+-- transaction_id unchanged so merchant-side idempotency still holds.
+UPDATE callback_outbox
+SET status = 'pending', next_attempt_at = NOW(), last_error = NULL, updated_at = NOW()
+WHERE id = '<outbox_id>' AND status = 'dead_letter';
+
+UPDATE callback_dead_letters
+SET replayed_at = NOW()
+WHERE channel = 'callback' AND outbox_id = '<outbox_id>' AND replayed_at IS NULL;
+```
+
+Never create a replacement credit with a new `transaction_id` for money the
+merchant may already have received. Always replay the original outbox row.
+
+### Seamless merchant degraded
+
+The callback dispatcher marks a merchant `seamless_degraded` after five
+consecutive callback/webhook delivery failures. While degraded, seamless order
+placement is refused (`503 merchant_wallet_degraded`) so the platform does not
+create new rollback risk. The first healthy delivery clears the flag
+automatically.
+
+```bash
+# Inspect the degraded flag and reason.
+curl -fsS -H "Authorization: Bearer <admin_api_key>" \
+  "https://api.example/api/v1/merchants/<merchant_id>/config"
+
+SELECT id, seamless_degraded, seamless_degraded_at, seamless_degraded_reason, callback_verified_at
+FROM merchants WHERE id = '<merchant_id>';
+```
+
+Fix the merchant endpoint (or the integration), then reset the breaker:
+
+```bash
+curl -fsS -X POST \
+  -H "Authorization: Bearer <admin_api_key>" \
+  "https://api.example/api/v1/merchants/<merchant_id>/integration/reset-degraded"
+```
+
+After resetting, run `verify-callback` before resuming seamless traffic:
+
+```bash
+curl -fsS -X POST \
+  -H "Authorization: Bearer <admin_api_key>" \
+  "https://api.example/api/v1/merchants/<merchant_id>/integration/verify-callback"
+```
+
+### Callback ownership verification
+
+A seamless merchant's callback URL must be verified before orders are
+accepted. Verification posts a signed challenge to the configured URL and
+requires the exact challenge echoed back; the merchant simulator exposes
+`POST /verify` for this purpose. Re-run verification whenever the callback URL
+is changed.
+
+### Unknown debit / rollback-before-bet
+
+If a synchronous debit times out, the order is rejected and a rollback outbox
+row is enqueued with the same `transaction_id`. Merchants must treat
+rollback-before-bet as valid: record the original ID if unseen, then reverse it
+when the delayed debit arrives or when the rollback is processed.

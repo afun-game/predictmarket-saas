@@ -128,7 +128,7 @@ func (m *Metrics) write(w http.ResponseWriter, ctx context.Context) {
 	fmt.Fprintln(w, "# TYPE predictmarket_orders_total counter")
 	fmt.Fprintf(w, "predictmarket_orders_total %d\n", m.orders.Load())
 
-	lag, stranded, err := m.safetyGauges(ctx)
+	lag, stranded, deadLetters, shadowDrift, err := m.safetyGauges(ctx)
 	if err != nil {
 		fmt.Fprintf(w, "# safety gauge query failed: %s\n", strings.ReplaceAll(err.Error(), "\n", " "))
 	}
@@ -138,11 +138,17 @@ func (m *Metrics) write(w http.ResponseWriter, ctx context.Context) {
 	fmt.Fprintln(w, "# HELP predictmarket_stranded_collateral_amount Collateral locked without an open order.")
 	fmt.Fprintln(w, "# TYPE predictmarket_stranded_collateral_amount gauge")
 	fmt.Fprintf(w, "predictmarket_stranded_collateral_amount %.2f\n", stranded)
+	fmt.Fprintln(w, "# HELP predictmarket_dead_letter_size Pending merchant callback/webhook dead letters.")
+	fmt.Fprintln(w, "# TYPE predictmarket_dead_letter_size gauge")
+	fmt.Fprintf(w, "predictmarket_dead_letter_size %d\n", deadLetters)
+	fmt.Fprintln(w, "# HELP predictmarket_shadow_wallet_drift_count Shadow wallets failing conservation.")
+	fmt.Fprintln(w, "# TYPE predictmarket_shadow_wallet_drift_count gauge")
+	fmt.Fprintf(w, "predictmarket_shadow_wallet_drift_count %d\n", shadowDrift)
 }
 
-func (m *Metrics) safetyGauges(ctx context.Context) (float64, float64, error) {
+func (m *Metrics) safetyGauges(ctx context.Context) (float64, float64, int, int, error) {
 	if m == nil || m.database == nil {
-		return 0, 0, fmt.Errorf("metrics database is not configured")
+		return 0, 0, 0, 0, fmt.Errorf("metrics database is not configured")
 	}
 	queryCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
@@ -154,7 +160,7 @@ WHERE e.status <> 'resolved'
   AND EXISTS (SELECT 1 FROM markets AS m WHERE m.event_id = e.id)`
 	var lag float64
 	if err := m.database.QueryRowContext(queryCtx, lagQuery).Scan(&lag); err != nil {
-		return 0, 0, fmt.Errorf("query settlement lag: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("query settlement lag: %w", err)
 	}
 	const strandedQuery = `
 SELECT COALESCE(SUM(w.locked_balance), 0)
@@ -165,13 +171,36 @@ WHERE w.locked_balance > 0
       WHERE o.merchant_id = w.merchant_id
         AND o.user_id = w.user_id
         AND o.currency = w.currency
+        AND COALESCE(o.wallet_kind, 'user') = w.kind
         AND o.status IN ('pending', 'partial', 'filled')
   )`
 	var stranded float64
 	if err := m.database.QueryRowContext(queryCtx, strandedQuery).Scan(&stranded); err != nil {
-		return 0, 0, fmt.Errorf("query stranded collateral: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("query stranded collateral: %w", err)
 	}
-	return lag, stranded, nil
+	const deadLetterQuery = `
+SELECT COUNT(*) FROM callback_dead_letters WHERE replayed_at IS NULL`
+	var deadLetters int
+	if err := m.database.QueryRowContext(queryCtx, deadLetterQuery).Scan(&deadLetters); err != nil {
+		// Migration 014 may not be applied yet in older environments.
+		if !strings.Contains(err.Error(), "callback_dead_letters") {
+			return 0, 0, 0, 0, fmt.Errorf("query dead letters: %w", err)
+		}
+		deadLetters = 0
+	}
+	const shadowDriftQuery = `
+SELECT COUNT(*)
+FROM wallets AS w
+WHERE w.kind = 'shadow'
+  AND w.balance <> 0`
+	var shadowDrift int
+	if err := m.database.QueryRowContext(queryCtx, shadowDriftQuery).Scan(&shadowDrift); err != nil {
+		if !strings.Contains(err.Error(), "kind") {
+			return 0, 0, 0, 0, fmt.Errorf("query shadow drift: %w", err)
+		}
+		shadowDrift = 0
+	}
+	return lag, stranded, deadLetters, shadowDrift, nil
 }
 
 type statusWriter struct {

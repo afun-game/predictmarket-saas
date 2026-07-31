@@ -15,15 +15,21 @@ import (
 )
 
 var (
-	ErrEventNotFound       = errors.New("settlement event not found")
-	ErrEventUnresolved     = errors.New("event is not resolved")
-	ErrOutcomeNotOption    = errors.New("event outcome is not a market option")
-	ErrOrderWalletNotFound = errors.New("settlement order wallet not found")
+	ErrEventNotFound        = errors.New("settlement event not found")
+	ErrEventUnresolved      = errors.New("event is not resolved")
+	ErrOutcomeNotOption     = errors.New("event outcome is not a market option")
+	ErrOrderWalletNotFound  = errors.New("settlement order wallet not found")
+	ErrMarketNotFound       = errors.New("settlement market not found")
+	ErrMarketAlreadySettled = errors.New("settlement market has already been settled or voided")
 )
 
-// Service settles every market associated with a resolved event.
+// Service settles every market associated with a resolved event and voids
+// unsettled markets when a resolution is withdrawn.
 type Service interface {
 	SettleEvent(ctx context.Context, eventID string) error
+	// VoidMarket refunds every order on an unsettled market in full and marks
+	// the market voided (V3 §5.1 order.voided / market.voided events).
+	VoidMarket(ctx context.Context, marketID string) error
 }
 
 type implementation struct {
@@ -69,25 +75,40 @@ func (s *implementation) SettleEvent(ctx context.Context, eventID string) error 
 	return nil
 }
 
+func (s *implementation) VoidMarket(ctx context.Context, marketID string) error {
+	marketID = strings.TrimSpace(marketID)
+	if !isUUID(marketID) {
+		return fmt.Errorf("invalid market_id: must be a UUID")
+	}
+	if err := s.repository.VoidMarket(ctx, marketID, s.now().UTC()); err != nil {
+		return fmt.Errorf("void market: %w", err)
+	}
+	return nil
+}
+
 // Repository settles an event as independently atomic market transactions.
 type Repository interface {
 	SettleEvent(ctx context.Context, eventID string, settledAt time.Time) error
+	VoidMarket(ctx context.Context, marketID string, voidedAt time.Time) error
 }
 
 type settlementOrder struct {
-	id        string
-	walletID  string
-	side      string
-	option    string
-	currency  string
-	status    string
-	amount    *big.Int
-	filled    *big.Int
-	price     *big.Int
-	stake     *big.Int
-	payout    *big.Int
-	refund    *big.Int
-	lockedUse *big.Int
+	id         string
+	walletID   string
+	merchantID string
+	userID     string
+	side       string
+	option     string
+	currency   string
+	status     string
+	walletKind string
+	amount     *big.Int
+	filled     *big.Int
+	price      *big.Int
+	stake      *big.Int
+	payout     *big.Int
+	refund     *big.Int
+	lockedUse  *big.Int
 }
 
 func calculatePayouts(orders []*settlementOrder, winningOption string) {

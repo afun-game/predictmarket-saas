@@ -14,6 +14,8 @@ tags:
   - {name: Currency}
   - {name: Sports}
   - {name: Analytics}
+  - {name: Hosted}
+  - {name: V2 Integration}
 paths:
   /debug/twill/healthz:
     get:
@@ -63,6 +65,263 @@ paths:
       summary: Update merchant configuration
       requestBody: {$ref: "#/components/requestBodies/MerchantUpdate"}
       responses: {"200": {$ref: "#/components/responses/OK"}, "400": {$ref: "#/components/responses/Error"}}
+  /api/v1/merchants/{merchantID}/v3-secret/reissue:
+    post:
+      tags: [Merchants]
+      summary: Reissue a merchant V3 HMAC secret
+      security: [{adminBearer: []}]
+      parameters: [{$ref: "#/components/parameters/MerchantID"}]
+      responses: {"201": {$ref: "#/components/responses/Created"}, "401": {$ref: "#/components/responses/Error"}, "404": {$ref: "#/components/responses/Error"}, "503": {$ref: "#/components/responses/Error"}}
+  /api/v2/sessions:
+    post:
+      tags: [Hosted]
+      summary: Create a one-time hosted Launch session
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+      requestBody: {$ref: "#/components/requestBodies/LaunchSessionCreate"}
+      responses: {"201": {$ref: "#/components/responses/Created"}, "400": {$ref: "#/components/responses/Error"}, "401": {$ref: "#/components/responses/Error"}}
+  /api/v2/sessions/{sessionID}:
+    parameters: [{$ref: "#/components/parameters/SessionID"}]
+    get:
+      tags: [Hosted]
+      summary: Inspect a hosted browser session
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}, "404": {$ref: "#/components/responses/Error"}}
+    delete:
+      tags: [Hosted]
+      summary: Revoke a hosted browser session
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+      responses: {"204": {$ref: "#/components/responses/NoContent"}, "401": {$ref: "#/components/responses/Error"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/v2/users/{userID}/deposits:
+    post:
+      tags: [V2 Integration]
+      summary: Deposit transfer-wallet funds exactly once
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/UserID"}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+      requestBody: {$ref: "#/components/requestBodies/WalletTransfer"}
+      responses: {"201": {$ref: "#/components/responses/Created"}, "400": {$ref: "#/components/responses/Error"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/v2/users/{userID}/withdrawals:
+    post:
+      tags: [V2 Integration]
+      summary: Withdraw transfer-wallet funds exactly once
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/UserID"}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+      requestBody: {$ref: "#/components/requestBodies/WalletTransfer"}
+      responses: {"201": {$ref: "#/components/responses/Created"}, "400": {$ref: "#/components/responses/Error"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/v2/transfers/{merchantTransactionID}:
+    get:
+      tags: [V2 Integration]
+      summary: Look up a transfer terminal state after a timeout
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/MerchantTransactionID"}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/v2/users/{userID}/balance:
+    get:
+      tags: [V2 Integration]
+      summary: Get a transfer-wallet balance
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/UserID"}, {name: currency, in: query, schema: {$ref: "#/components/schemas/Currency"}}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/v2/orders:
+    get:
+      tags: [V2 Integration]
+      summary: List merchant orders with a keyset cursor
+      security: [{v2SignedMerchant: []}]
+      parameters:
+        - {name: user_id, in: query, schema: {type: string, maxLength: 255}}
+        - {name: market_id, in: query, schema: {type: string, format: uuid}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/OrderStatus"}}
+        - {$ref: "#/components/parameters/From"}
+        - {$ref: "#/components/parameters/To"}
+        - {$ref: "#/components/parameters/Cursor"}
+        - {$ref: "#/components/parameters/CursorLimit"}
+        - {$ref: "#/components/parameters/V2Timestamp"}
+        - {$ref: "#/components/parameters/V2Signature"}
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+    post:
+      tags: [V2 Integration]
+      summary: Place a transfer-wallet order on behalf of a user
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+      requestBody: {$ref: "#/components/requestBodies/OrderCreate"}
+      responses: {"201": {$ref: "#/components/responses/Created"}, "400": {$ref: "#/components/responses/Error"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/v2/orders/{orderID}:
+    get:
+      tags: [V2 Integration]
+      summary: Get one merchant-owned order
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/OrderID"}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}}
+    delete:
+      tags: [V2 Integration]
+      summary: Cancel one open order; repeated cancellation is safe
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/OrderID"}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/v2/trades:
+    get:
+      tags: [V2 Integration]
+      summary: List merchant executions with a keyset cursor
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/From"}, {$ref: "#/components/parameters/To"}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/CursorLimit"}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+  /api/v2/transactions:
+    get:
+      tags: [V2 Integration]
+      summary: List platform wallet ledger rows with a keyset cursor
+      security: [{v2SignedMerchant: []}]
+      parameters: [{name: user_id, in: query, schema: {type: string}}, {name: type, in: query, schema: {type: string}}, {$ref: "#/components/parameters/From"}, {$ref: "#/components/parameters/To"}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/CursorLimit"}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+  /api/v2/settlements:
+    get:
+      tags: [V2 Integration]
+      summary: List settled markets with a keyset cursor
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/From"}, {$ref: "#/components/parameters/To"}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/CursorLimit"}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}}
+  /api/v2/settlements/{marketID}/payouts:
+    get:
+      tags: [V2 Integration]
+      summary: List an owned market's settlement payouts
+      security: [{v2SignedMerchant: []}]
+      parameters: [{$ref: "#/components/parameters/MarketID"}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/CursorLimit"}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/v2/reports/daily:
+    get:
+      tags: [V2 Integration]
+      summary: Get a UTC daily reconciliation report
+      security: [{v2SignedMerchant: []}]
+      parameters: [{name: date, in: query, required: true, schema: {type: string, format: date}}, {name: currency, in: query, schema: {$ref: "#/components/schemas/Currency"}}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "400": {$ref: "#/components/responses/Error"}}
+  /api/v2/callbacks/{transactionID}:
+    get:
+      tags: [V2 Integration]
+      summary: Get seamless callback delivery history
+      security: [{v2SignedMerchant: []}]
+      parameters: [{name: transactionID, in: path, required: true, schema: {type: string, format: uuid}}, {$ref: "#/components/parameters/V2Timestamp"}, {$ref: "#/components/parameters/V2Signature"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/v1/admin/callback-dead-letters/{channel}/{outboxID}/replay:
+    post:
+      tags: [V2 Integration]
+      summary: Replay one dead-lettered callback or webhook
+      security: [{adminBearer: []}]
+      parameters:
+        - {name: channel, in: path, required: true, schema: {type: string, enum: [callback, webhook]}}
+        - {name: outboxID, in: path, required: true, schema: {type: string, format: uuid}}
+      responses: {"204": {$ref: "#/components/responses/NoContent"}, "401": {$ref: "#/components/responses/Error"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/v1/merchants/{merchantID}/integration/verify-callback:
+    post:
+      tags: [V2 Integration]
+      summary: Prove callback URL ownership with a signed challenge echo
+      security: [{adminBearer: []}]
+      parameters: [{name: merchantID, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}, "404": {$ref: "#/components/responses/Error"}, "502": {$ref: "#/components/responses/Error"}}
+  /api/v1/merchants/{merchantID}/integration/reset-degraded:
+    post:
+      tags: [V2 Integration]
+      summary: Clear a merchant's seamless degraded state
+      security: [{adminBearer: []}]
+      parameters: [{name: merchantID, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}}
+  /api/v1/admin/markets/{marketID}/void:
+    post:
+      tags: [Admin]
+      summary: Void an unsettled market and refund every order in full
+      security: [{adminBearer: []}]
+      parameters: [{name: marketID, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}, "404": {$ref: "#/components/responses/Error"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/user/session/exchange:
+    post:
+      tags: [Hosted]
+      summary: Exchange a one-time Launch token for a browser session
+      security: []
+      requestBody: {$ref: "#/components/requestBodies/LaunchExchange"}
+      responses: {"200": {$ref: "#/components/responses/OK"}, "400": {$ref: "#/components/responses/Error"}, "401": {$ref: "#/components/responses/Error"}}
+  /api/user/session/refresh:
+    post:
+      tags: [Hosted]
+      summary: Refresh a hosted browser session up to its maximum lifetime
+      security: [{userSessionBearer: []}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}}
+  /api/user/me:
+    get:
+      tags: [Hosted]
+      summary: Get the current hosted user profile and balance
+      security: [{userSessionBearer: []}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}}
+  /api/user/events:
+    get:
+      tags: [Hosted]
+      summary: List hosted event discovery data
+      security: [{userSessionBearer: []}]
+      parameters:
+        - {name: category, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/EventStatus"}}
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}}
+  /api/user/events/{eventID}:
+    get:
+      tags: [Hosted]
+      summary: Get hosted event discovery detail
+      security: [{userSessionBearer: []}]
+      parameters: [{$ref: "#/components/parameters/EventID"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/user/markets:
+    get:
+      tags: [Hosted]
+      summary: List current merchant markets for a hosted user
+      security: [{userSessionBearer: []}]
+      parameters:
+        - {name: event_id, in: query, schema: {type: string, format: uuid}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/MarketStatus"}}
+        - {$ref: "#/components/parameters/Page"}
+        - {$ref: "#/components/parameters/Limit"}
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}}
+  /api/user/markets/{marketID}:
+    get:
+      tags: [Hosted]
+      summary: Get a current merchant market for a hosted user
+      security: [{userSessionBearer: []}]
+      parameters: [{$ref: "#/components/parameters/MarketID"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/user/markets/{marketID}/orderbook:
+    get:
+      tags: [Hosted]
+      summary: Get a hosted user's tenant-scoped market order book
+      security: [{userSessionBearer: []}]
+      parameters: [{$ref: "#/components/parameters/MarketID"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}, "404": {$ref: "#/components/responses/Error"}}
+  /api/user/orders:
+    get:
+      tags: [Hosted]
+      summary: List the current hosted user's orders with a keyset cursor
+      security: [{userSessionBearer: []}]
+      parameters: [{name: market_id, in: query, schema: {type: string, format: uuid}}, {name: status, in: query, schema: {$ref: "#/components/schemas/OrderStatus"}}, {$ref: "#/components/parameters/From"}, {$ref: "#/components/parameters/To"}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/CursorLimit"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}}
+    post:
+      tags: [Hosted]
+      summary: Place an order as the current hosted user
+      security: [{userSessionBearer: []}]
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
+      requestBody: {$ref: "#/components/requestBodies/HostedOrderCreate"}
+      responses: {"201": {$ref: "#/components/responses/Created"}, "400": {$ref: "#/components/responses/Error"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/user/orders/{orderID}:
+    delete:
+      tags: [Hosted]
+      summary: Cancel one order owned by the current hosted user
+      security: [{userSessionBearer: []}]
+      parameters: [{$ref: "#/components/parameters/OrderID"}, {$ref: "#/components/parameters/IdempotencyKey"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}, "409": {$ref: "#/components/responses/Error"}}
+  /api/user/orders/{orderID}/trades:
+    get:
+      tags: [Hosted]
+      summary: List executions for one order owned by the current hosted user
+      security: [{userSessionBearer: []}]
+      parameters: [{$ref: "#/components/parameters/OrderID"}, {$ref: "#/components/parameters/From"}, {$ref: "#/components/parameters/To"}, {$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/CursorLimit"}]
+      responses: {"200": {$ref: "#/components/responses/OK"}, "404": {$ref: "#/components/responses/Error"}}
   /api/v1/events:
     get:
       tags: [Events]
@@ -281,9 +540,20 @@ paths:
       parameters: [{$ref: "#/components/parameters/TimeRange"}]
       responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}}
 components:
+  schemas:
+    Settlement:
+      type: object
+      properties:
+        market_id: {type: string, format: uuid}
+        event_id: {type: string, format: uuid}
+        winning_option: {type: string}
+        settlement_type: {type: string, enum: [settle, void]}
+        settled_at: {type: string, format: date-time}
   securitySchemes:
     merchantBearer: {type: http, scheme: bearer, bearerFormat: API key}
     adminBearer: {type: http, scheme: bearer, bearerFormat: Admin API key}
+    v2SignedMerchant: {type: http, scheme: bearer, bearerFormat: API key plus X-PM-Signature and X-PM-Timestamp HMAC headers}
+    userSessionBearer: {type: http, scheme: bearer, bearerFormat: Hosted browser session JWT}
   parameters:
     Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
     Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
@@ -292,7 +562,15 @@ components:
     MarketID: {name: marketID, in: path, required: true, schema: {type: string, format: uuid}}
     OrderID: {name: orderID, in: path, required: true, schema: {type: string, format: uuid}}
     UserID: {name: userID, in: path, required: true, schema: {type: string, maxLength: 255}}
+    MerchantTransactionID: {name: merchantTransactionID, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 255}}
+    SessionID: {name: sessionID, in: path, required: true, schema: {type: string, minLength: 1}}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: true, description: Unique key used to make POST retries safe, schema: {type: string, minLength: 1, maxLength: 255}}
+    V2Timestamp: {name: X-PM-Timestamp, in: header, required: true, description: Unix timestamp included in the HMAC input, schema: {type: string, pattern: '^[0-9]+$'}}
+    V2Signature: {name: X-PM-Signature, in: header, required: true, description: hex(HMAC-SHA256(api_secret, timestamp + '.' + raw_body)), schema: {type: string, pattern: '^[0-9a-fA-F]+$'}}
+    Cursor: {name: cursor, in: query, schema: {type: string}}
+    CursorLimit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+    From: {name: from, in: query, schema: {type: string, format: date-time}}
+    To: {name: to, in: query, schema: {type: string, format: date-time}}
     TimeRange: {name: time_range, in: query, schema: {type: string, enum: [24h, 7d, 30d, 90d, all], default: 7d}}
   responses:
     OK: {description: Success, content: {application/json: {schema: {$ref: "#/components/schemas/DataEnvelope"}}}}
@@ -306,6 +584,12 @@ components:
     MerchantUpdate:
       required: true
       content: {application/json: {schema: {$ref: "#/components/schemas/MerchantUpdate"}}}
+    LaunchSessionCreate:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/LaunchSessionCreate"}}}
+    LaunchExchange:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/LaunchExchange"}}}
     EventCreate:
       required: true
       content: {application/json: {schema: {$ref: "#/components/schemas/EventCreate"}}}
@@ -318,6 +602,12 @@ components:
     WalletCredit:
       required: true
       content: {application/json: {schema: {$ref: "#/components/schemas/WalletCredit"}}}
+    WalletTransfer:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/WalletTransfer"}}}
+    HostedOrderCreate:
+      required: true
+      content: {application/json: {schema: {$ref: "#/components/schemas/HostedOrderCreate"}}}
     CurrencyConversion:
       required: true
       content: {application/json: {schema: {$ref: "#/components/schemas/CurrencyConversion"}}}
@@ -354,6 +644,23 @@ components:
         name: {type: string}
         currency: {$ref: "#/components/schemas/Currency"}
         timezone: {type: string}
+    LaunchSessionCreate:
+      type: object
+      required: [user_id, currency]
+      additionalProperties: false
+      properties:
+        user_id: {type: string, maxLength: 255}
+        currency: {$ref: "#/components/schemas/Currency"}
+        locale: {type: string, maxLength: 35, default: en-US}
+        return_url: {type: string, format: uri}
+        ip: {type: string}
+        meta: {type: object, additionalProperties: {type: string}}
+    LaunchExchange:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token: {type: string, minLength: 1}
     EventCreate:
       type: object
       required: [source_type, source_id, title, category, end_time, resolution_time]
@@ -398,6 +705,25 @@ components:
         currency: {$ref: "#/components/schemas/Currency"}
         amount: {type: number, minimum: 0, exclusiveMinimum: true}
         type: {type: string, enum: [credit, admin_credit]}
+    WalletTransfer:
+      type: object
+      required: [merchant_txn_id, currency, amount]
+      additionalProperties: false
+      properties:
+        merchant_txn_id: {type: string, minLength: 1, maxLength: 255}
+        currency: {$ref: "#/components/schemas/Currency"}
+        amount: {type: string, pattern: '^([1-9][0-9]*)(\\.[0-9]{1,2})?$'}
+    HostedOrderCreate:
+      type: object
+      required: [market_id, type, option, amount, price]
+      additionalProperties: false
+      properties:
+        market_id: {type: string, format: uuid}
+        type: {type: string, enum: [buy, sell]}
+        option: {type: string}
+        amount: {type: number, minimum: 0, exclusiveMinimum: true, multipleOf: 0.000001}
+        price: {type: number, minimum: 0, maximum: 1, exclusiveMinimum: true, exclusiveMaximum: true}
+        time_in_force: {type: string, enum: [gtc, ioc], default: gtc}
     CurrencyConversion:
       type: object
       required: [amount, from, to]

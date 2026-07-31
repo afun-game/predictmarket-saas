@@ -1,0 +1,356 @@
+package v2query
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"math/big"
+	"strings"
+	"time"
+)
+
+func (s *implementation) ListTransactions(
+	ctx context.Context,
+	filters TransactionFilters,
+) (*TransactionPage, error) {
+	filters, cursor, err := normalizeTransactionFilters(filters)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireMerchant(ctx, s.database, filters.MerchantID); err != nil {
+		return nil, err
+	}
+	cursorTime, cursorID := cursorValues(cursor)
+	const query = `
+WITH ledger AS (
+    SELECT t.id, t.wallet_id, w.merchant_id, w.user_id, t.type,
+           t.amount, t.currency, t.related_order_id, t.status, t.created_at
+    FROM transactions AS t
+    JOIN wallets AS w ON w.id = t.wallet_id
+    UNION ALL
+    SELECT st.transaction_id AS id, NULL::uuid AS wallet_id,
+           st.merchant_id, st.user_id, st.type, st.amount, st.currency,
+           st.order_id AS related_order_id, st.status, st.created_at
+    FROM seamless_transactions AS st
+)
+SELECT id, COALESCE(wallet_id::text, ''), user_id, type, amount::text,
+       currency, related_order_id, status, created_at
+FROM ledger
+WHERE merchant_id = $1
+  AND ($2 = '' OR user_id = $2)
+  AND ($3 = '' OR type = $3)
+  AND ($4::timestamp IS NULL OR created_at >= $4)
+  AND ($5::timestamp IS NULL OR created_at <= $5)
+  AND ($6::timestamp IS NULL OR (created_at, id) < ($6::timestamp, $7::uuid))
+ORDER BY created_at DESC, id DESC
+LIMIT $8`
+	rows, err := s.database.QueryContext(
+		ctx,
+		query,
+		filters.MerchantID,
+		filters.UserID,
+		filters.Type,
+		filters.From,
+		filters.To,
+		cursorTime,
+		cursorID,
+		filters.Limit+1,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query V2 transactions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	values := make([]Transaction, 0, filters.Limit+1)
+	for rows.Next() {
+		value := Transaction{}
+		var relatedOrderID sql.NullString
+		if err := rows.Scan(
+			&value.ID,
+			&value.WalletID,
+			&value.UserID,
+			&value.Type,
+			&value.Amount,
+			&value.Currency,
+			&relatedOrderID,
+			&value.Status,
+			&value.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan V2 transaction: %w", err)
+		}
+		if relatedOrderID.Valid {
+			value.RelatedOrderID = &relatedOrderID.String
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate V2 transactions: %w", err)
+	}
+	page := &TransactionPage{Transactions: values}
+	if len(values) <= filters.Limit {
+		return page, nil
+	}
+	page.Transactions = values[:filters.Limit]
+	last := page.Transactions[len(page.Transactions)-1]
+	page.NextCursor = encodeCursor(last.CreatedAt, last.ID)
+	return page, nil
+}
+
+func (s *implementation) ListSettlements(
+	ctx context.Context,
+	filters SettlementFilters,
+) (*SettlementPage, error) {
+	filters, cursor, err := normalizeSettlementFilters(filters)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireMerchant(ctx, s.database, filters.MerchantID); err != nil {
+		return nil, err
+	}
+	cursorTime, cursorID := cursorValues(cursor)
+	const query = `
+SELECT settlement.market_id, settlement.event_id,
+       COALESCE(settlement.winning_option, ''), COALESCE(settlement.settlement_type, 'settle'),
+       settlement.settled_at
+FROM market_settlements AS settlement
+JOIN markets AS market ON market.id = settlement.market_id
+WHERE market.merchant_id = $1
+  AND ($2::timestamp IS NULL OR settlement.settled_at >= $2)
+  AND ($3::timestamp IS NULL OR settlement.settled_at <= $3)
+  AND ($4::timestamp IS NULL OR (settlement.settled_at, settlement.market_id) < ($4::timestamp, $5::uuid))
+ORDER BY settlement.settled_at DESC, settlement.market_id DESC
+LIMIT $6`
+	rows, err := s.database.QueryContext(
+		ctx,
+		query,
+		filters.MerchantID,
+		filters.From,
+		filters.To,
+		cursorTime,
+		cursorID,
+		filters.Limit+1,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query V2 settlements: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	values := make([]Settlement, 0, filters.Limit+1)
+	for rows.Next() {
+		value := Settlement{}
+		if err := rows.Scan(&value.MarketID, &value.EventID, &value.WinningOption, &value.SettlementType, &value.SettledAt); err != nil {
+			return nil, fmt.Errorf("scan V2 settlement: %w", err)
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate V2 settlements: %w", err)
+	}
+	page := &SettlementPage{Settlements: values}
+	if len(values) <= filters.Limit {
+		return page, nil
+	}
+	page.Settlements = values[:filters.Limit]
+	last := page.Settlements[len(page.Settlements)-1]
+	page.NextCursor = encodeCursor(last.SettledAt, last.MarketID)
+	return page, nil
+}
+
+func (s *implementation) ListPayouts(ctx context.Context, filters PayoutFilters) (*PayoutPage, error) {
+	filters, cursor, err := normalizePayoutFilters(filters)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireMarket(ctx, s.database, filters.MerchantID, filters.MarketID); err != nil {
+		return nil, err
+	}
+	cursorTime, cursorID := cursorValues(cursor)
+	const query = `
+SELECT payout.market_id, payout.order_id, payout.wallet_id, wallet.user_id, payout.currency,
+       payout.stake::text, payout.payout::text, payout.created_at
+FROM settlement_payouts AS payout
+JOIN wallets AS wallet ON wallet.id = payout.wallet_id
+WHERE payout.market_id = $1
+  AND ($2::timestamp IS NULL OR (payout.created_at, payout.order_id) < ($2::timestamp, $3::uuid))
+ORDER BY payout.created_at DESC, payout.order_id DESC
+LIMIT $4`
+	rows, err := s.database.QueryContext(
+		ctx,
+		query,
+		filters.MarketID,
+		cursorTime,
+		cursorID,
+		filters.Limit+1,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query V2 settlement payouts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	values := make([]Payout, 0, filters.Limit+1)
+	for rows.Next() {
+		value := Payout{}
+		if err := rows.Scan(
+			&value.MarketID,
+			&value.OrderID,
+			&value.WalletID,
+			&value.UserID,
+			&value.Currency,
+			&value.Stake,
+			&value.Payout,
+			&value.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan V2 settlement payout: %w", err)
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate V2 settlement payouts: %w", err)
+	}
+	page := &PayoutPage{Payouts: values}
+	if len(values) <= filters.Limit {
+		return page, nil
+	}
+	page.Payouts = values[:filters.Limit]
+	last := page.Payouts[len(page.Payouts)-1]
+	page.NextCursor = encodeCursor(last.CreatedAt, last.OrderID)
+	return page, nil
+}
+
+func (s *implementation) DailyReport(
+	ctx context.Context,
+	merchantID string,
+	date time.Time,
+	currency string,
+) (*DailyReport, error) {
+	merchantID = strings.TrimSpace(merchantID)
+	if !isUUID(merchantID) {
+		return nil, &ValidationError{Field: "merchant_id", Message: "must be a UUID"}
+	}
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if currency == "" || len(currency) > 10 {
+		return nil, &ValidationError{Field: "currency", Message: "is required and must not exceed 10 characters"}
+	}
+	if err := requireMerchant(ctx, s.database, merchantID); err != nil {
+		return nil, err
+	}
+	start := time.Date(date.UTC().Year(), date.UTC().Month(), date.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 1)
+	result := &DailyReport{Date: start.Format("2006-01-02"), Currency: currency}
+	const transactionTotals = `
+SELECT
+    COALESCE(SUM(amount) FILTER (WHERE type = 'bet' OR (type = 'debit' AND reason = 'bet')), 0)::text,
+    COALESCE(SUM(amount) FILTER (WHERE type = 'win' OR (type = 'credit' AND reason = 'payout')), 0)::text,
+    COALESCE(SUM(amount) FILTER (WHERE type = 'fee'), 0)::text
+FROM (
+    SELECT t.amount, t.type, '' AS reason, w.merchant_id, t.currency, t.created_at
+    FROM transactions AS t
+    JOIN wallets AS w ON w.id = t.wallet_id
+    UNION ALL
+    SELECT st.amount, st.type, st.reason, st.merchant_id, st.currency, st.created_at
+    FROM seamless_transactions AS st
+) AS ledger
+WHERE merchant_id = $1 AND currency = $2
+  AND created_at >= $3 AND created_at < $4`
+	if err := s.database.QueryRowContext(ctx, transactionTotals, merchantID, currency, start, end).Scan(
+		&result.Bets,
+		&result.Payouts,
+		&result.Fees,
+	); err != nil {
+		return nil, fmt.Errorf("query V2 daily transaction totals: %w", err)
+	}
+	const refundTotals = `
+SELECT COALESCE(SUM(
+    ROUND((o.amount - o.filled_amount) *
+        CASE WHEN o.type = 'buy' THEN o.price ELSE 1 - o.price END, 2)
+), 0)::text
+FROM orders AS o
+JOIN market_settlements AS settlement ON settlement.market_id = o.market_id
+WHERE o.merchant_id = $1 AND o.currency = $2
+  AND COALESCE(o.wallet_kind, 'user') = 'user'
+  AND settlement.settled_at >= $3 AND settlement.settled_at < $4`
+	if err := s.database.QueryRowContext(ctx, refundTotals, merchantID, currency, start, end).Scan(&result.Refunds); err != nil {
+		return nil, fmt.Errorf("query V2 daily refund totals: %w", err)
+	}
+	const seamlessRefundTotals = `
+SELECT COALESCE(SUM(amount), 0)::text
+FROM seamless_transactions
+WHERE merchant_id = $1 AND currency = $2 AND type = 'credit'
+  AND reason LIKE 'refund%'
+  AND created_at >= $3 AND created_at < $4`
+	var seamlessRefunds string
+	if err := s.database.QueryRowContext(ctx, seamlessRefundTotals, merchantID, currency, start, end).Scan(&seamlessRefunds); err != nil {
+		return nil, fmt.Errorf("query V2 seamless refund totals: %w", err)
+	}
+	result.Refunds = sumDecimalStrings(result.Refunds, seamlessRefunds)
+	const transferTotals = `
+SELECT
+    COALESCE(SUM(amount) FILTER (WHERE direction = 'deposit' AND status = 'completed'), 0)::text,
+    COALESCE(SUM(amount) FILTER (WHERE direction = 'withdrawal' AND status = 'completed'), 0)::text
+FROM wallet_transfers
+WHERE merchant_id = $1 AND currency = $2
+  AND created_at >= $3 AND created_at < $4`
+	if err := s.database.QueryRowContext(ctx, transferTotals, merchantID, currency, start, end).Scan(
+		&result.TransferDeposits,
+		&result.TransferWithdrawals,
+	); err != nil {
+		return nil, fmt.Errorf("query V2 daily transfer totals: %w", err)
+	}
+	result.GGR = difference(result.Bets, result.Payouts)
+	return result, nil
+}
+
+func cursorValues(value *cursor) (any, any) {
+	if value == nil {
+		return nil, nil
+	}
+	return value.CreatedAt, value.ID
+}
+
+func requireMerchant(ctx context.Context, database *sql.DB, merchantID string) error {
+	var exists bool
+	if err := database.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM merchants WHERE id = $1)", merchantID).Scan(&exists); err != nil {
+		return fmt.Errorf("query V2 merchant: %w", err)
+	}
+	if !exists {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func requireMarket(ctx context.Context, database *sql.DB, merchantID, marketID string) error {
+	var exists bool
+	if err := database.QueryRowContext(
+		ctx,
+		"SELECT EXISTS (SELECT 1 FROM markets WHERE id = $1 AND merchant_id = $2)",
+		marketID,
+		merchantID,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("query V2 market: %w", err)
+	}
+	if !exists {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func difference(left, right string) string {
+	leftValue, ok := new(big.Rat).SetString(left)
+	if !ok {
+		return "0.00"
+	}
+	rightValue, ok := new(big.Rat).SetString(right)
+	if !ok {
+		return "0.00"
+	}
+	return new(big.Rat).Sub(leftValue, rightValue).FloatString(2)
+}
+
+func sumDecimalStrings(left, right string) string {
+	leftValue, ok := new(big.Rat).SetString(left)
+	if !ok {
+		return right
+	}
+	rightValue, ok := new(big.Rat).SetString(right)
+	if !ok {
+		return left
+	}
+	return new(big.Rat).Add(leftValue, rightValue).FloatString(2)
+}

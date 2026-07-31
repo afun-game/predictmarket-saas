@@ -23,6 +23,7 @@ const (
 	defaultPage          = 1
 	defaultLimit         = 20
 	maxLimit             = 100
+	maxCursorLimit       = 500
 	maxPage              = 1000
 	maxUserIDLen         = 255
 	maxIdempotencyKeyLen = 255
@@ -41,6 +42,7 @@ type Service interface {
 	Get(ctx context.Context, orderID string) (*types.Order, error)
 	List(ctx context.Context, filters *ListFilters) ([]*types.Order, int, error)
 	ListCursor(ctx context.Context, filters *ListFilters) (*CursorPage, error)
+	ListTrades(ctx context.Context, filters *TradeListFilters) (*TradeCursorPage, error)
 	Cancel(ctx context.Context, orderID string) error
 	ListByUser(ctx context.Context, merchantID, userID string, page, limit int) ([]*types.Order, int, error)
 	ListByMarket(ctx context.Context, marketID string, page, limit int) ([]*types.Order, int, error)
@@ -60,18 +62,23 @@ type CreateRequest struct {
 	Price          float64 `json:"price"`
 	TimeInForce    string  `json:"time_in_force,omitempty"`
 	IdempotencyKey string  `json:"-"`
+	WalletKind     string  `json:"-"`
+	Channel        string  `json:"-"`
 }
 
 type ListFilters struct {
 	twill.AutoMarshal
 
-	MerchantID string `json:"merchant_id,omitempty"`
-	UserID     string `json:"user_id,omitempty"`
-	MarketID   string `json:"market_id,omitempty"`
-	Status     string `json:"status,omitempty"`
-	Cursor     string `json:"cursor,omitempty"`
-	Page       int    `json:"page,omitempty"`
-	Limit      int    `json:"limit,omitempty"`
+	MerchantID string     `json:"merchant_id,omitempty"`
+	UserID     string     `json:"user_id,omitempty"`
+	MarketID   string     `json:"market_id,omitempty"`
+	Status     string     `json:"status,omitempty"`
+	Cursor     string     `json:"cursor,omitempty"`
+	From       *time.Time `json:"from,omitempty"`
+	To         *time.Time `json:"to,omitempty"`
+	Page       int        `json:"page,omitempty"`
+	Limit      int        `json:"limit,omitempty"`
+	Keyset     bool       `json:"-"`
 }
 
 // CursorPage is an offset-free page for high-cardinality order histories.
@@ -79,6 +86,26 @@ type CursorPage struct {
 	twill.AutoMarshal
 
 	Orders     []*types.Order `json:"orders"`
+	NextCursor string         `json:"next_cursor,omitempty"`
+}
+
+// TradeListFilters scopes an execution history to one merchant or order.
+type TradeListFilters struct {
+	twill.AutoMarshal
+
+	MerchantID string     `json:"merchant_id,omitempty"`
+	OrderID    string     `json:"order_id,omitempty"`
+	Cursor     string     `json:"cursor,omitempty"`
+	From       *time.Time `json:"from,omitempty"`
+	To         *time.Time `json:"to,omitempty"`
+	Limit      int        `json:"limit,omitempty"`
+}
+
+// TradeCursorPage is a stable keyset page of executions.
+type TradeCursorPage struct {
+	twill.AutoMarshal
+
+	Trades     []*types.Trade `json:"trades"`
 	NextCursor string         `json:"next_cursor,omitempty"`
 }
 
@@ -198,6 +225,8 @@ func (s *implementation) Create(ctx context.Context, req *CreateRequest) (*types
 		Price:          input.Price,
 		TimeInForce:    input.TimeInForce,
 		IdempotencyKey: input.IdempotencyKey,
+		WalletKind:     input.WalletKind,
+		Channel:        input.Channel,
 		Status:         "pending",
 		CreatedAt:      s.now().UTC(),
 	}
@@ -289,7 +318,12 @@ func (s *implementation) List(
 // ListCursor returns orders using the immutable (created_at, id) keyset. It
 // intentionally avoids COUNT(*) and OFFSET for deep history pages.
 func (s *implementation) ListCursor(ctx context.Context, filters *ListFilters) (*CursorPage, error) {
-	normalized, err := normalizeFilters(filters)
+	keysetFilters := ListFilters{Keyset: true}
+	if filters != nil {
+		keysetFilters = *filters
+		keysetFilters.Keyset = true
+	}
+	normalized, err := normalizeFilters(&keysetFilters)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +340,32 @@ func (s *implementation) ListCursor(ctx context.Context, filters *ListFilters) (
 		return page, nil
 	}
 	page.Orders = values[:normalized.Limit]
-	page.NextCursor = encodeCursor(page.Orders[len(page.Orders)-1])
+	lastOrder := page.Orders[len(page.Orders)-1]
+	page.NextCursor = encodeCursor(lastOrder.CreatedAt, lastOrder.ID)
+	return page, nil
+}
+
+// ListTrades returns executions ordered newest first with a stable keyset cursor.
+func (s *implementation) ListTrades(ctx context.Context, filters *TradeListFilters) (*TradeCursorPage, error) {
+	normalized, err := normalizeTradeFilters(filters)
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := decodeCursor(normalized.Cursor)
+	if err != nil {
+		return nil, err
+	}
+	values, err := s.repository.ListTrades(ctx, normalized, cursor)
+	if err != nil {
+		return nil, fmt.Errorf("list trades by cursor: %w", err)
+	}
+	page := &TradeCursorPage{Trades: values}
+	if len(values) <= normalized.Limit {
+		return page, nil
+	}
+	page.Trades = values[:normalized.Limit]
+	lastTrade := page.Trades[len(page.Trades)-1]
+	page.NextCursor = encodeCursor(lastTrade.CreatedAt, lastTrade.ID)
 	return page, nil
 }
 
@@ -407,8 +466,16 @@ func validateCreateRequest(req *CreateRequest) (*CreateRequest, error) {
 	input.Currency = strings.ToUpper(strings.TrimSpace(input.Currency))
 	input.TimeInForce = strings.ToLower(strings.TrimSpace(input.TimeInForce))
 	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
+	input.WalletKind = strings.ToLower(strings.TrimSpace(input.WalletKind))
+	input.Channel = strings.ToLower(strings.TrimSpace(input.Channel))
 	if input.TimeInForce == "" {
 		input.TimeInForce = "gtc"
+	}
+	if input.WalletKind == "" {
+		input.WalletKind = "user"
+	}
+	if input.Channel == "" {
+		input.Channel = "api"
 	}
 	if input.UserID == "" || len(input.UserID) > maxUserIDLen {
 		return nil, &ValidationError{Field: "user_id", Message: "is required and must be at most 255 characters"}
@@ -432,6 +499,12 @@ func validateCreateRequest(req *CreateRequest) (*CreateRequest, error) {
 	}
 	if input.TimeInForce != "gtc" && input.TimeInForce != "ioc" {
 		return nil, &ValidationError{Field: "time_in_force", Message: "must be gtc or ioc"}
+	}
+	if input.WalletKind != "user" && input.WalletKind != "shadow" {
+		return nil, &ValidationError{Field: "wallet_kind", Message: "is not supported"}
+	}
+	if input.Channel != "api" && input.Channel != "hosted" {
+		return nil, &ValidationError{Field: "channel", Message: "is not supported"}
 	}
 	if len(input.IdempotencyKey) > maxIdempotencyKeyLen {
 		return nil, &ValidationError{Field: "idempotency_key", Message: "must be at most 255 characters"}
@@ -481,9 +554,51 @@ func normalizeFilters(filters *ListFilters) (ListFilters, error) {
 	if value.Status != "" && !validStatus(value.Status) {
 		return ListFilters{}, &ValidationError{Field: "status", Message: "is not supported"}
 	}
+	if value.From != nil && value.To != nil && value.From.After(*value.To) {
+		return ListFilters{}, &ValidationError{Field: "from", Message: "must not be after to"}
+	}
+	if value.Keyset {
+		value.Limit, err = normalizeCursorLimit(value.Limit)
+		if err != nil {
+			return ListFilters{}, err
+		}
+		return value, nil
+	}
 	value.Page, value.Limit, err = normalizePagination(value.Page, value.Limit)
 	if err != nil {
 		return ListFilters{}, err
+	}
+	return value, nil
+}
+
+func normalizeTradeFilters(filters *TradeListFilters) (TradeListFilters, error) {
+	value := TradeListFilters{}
+	if filters != nil {
+		value = *filters
+	}
+	var err error
+	if strings.TrimSpace(value.MerchantID) != "" {
+		value.MerchantID, err = validateUUIDField("merchant_id", value.MerchantID)
+		if err != nil {
+			return TradeListFilters{}, err
+		}
+	}
+	if strings.TrimSpace(value.OrderID) != "" {
+		value.OrderID, err = validateUUIDField("order_id", value.OrderID)
+		if err != nil {
+			return TradeListFilters{}, err
+		}
+	}
+	if value.MerchantID == "" && value.OrderID == "" {
+		return TradeListFilters{}, &ValidationError{Field: "merchant_id", Message: "is required when order_id is omitted"}
+	}
+	value.Cursor = strings.TrimSpace(value.Cursor)
+	value.Limit, err = normalizeCursorLimit(value.Limit)
+	if err != nil {
+		return TradeListFilters{}, err
+	}
+	if value.From != nil && value.To != nil && value.From.After(*value.To) {
+		return TradeListFilters{}, &ValidationError{Field: "from", Message: "must not be after to"}
 	}
 	return value, nil
 }
@@ -515,8 +630,8 @@ func decodeCursor(value string) (*Cursor, error) {
 	return &Cursor{CreatedAt: createdAt.UTC(), ID: encoded.ID}, nil
 }
 
-func encodeCursor(value *types.Order) string {
-	encoded, err := json.Marshal(encodedCursor{CreatedAt: value.CreatedAt.UTC().Format(time.RFC3339Nano), ID: value.ID})
+func encodeCursor(createdAt time.Time, id string) string {
+	encoded, err := json.Marshal(encodedCursor{CreatedAt: createdAt.UTC().Format(time.RFC3339Nano), ID: id})
 	if err != nil {
 		panic(fmt.Errorf("marshal order cursor: %w", err))
 	}
@@ -600,6 +715,16 @@ func normalizePagination(page, limit int) (int, int, error) {
 		return 0, 0, &ValidationError{Field: "limit", Message: "must be between 1 and 100"}
 	}
 	return page, limit, nil
+}
+
+func normalizeCursorLimit(limit int) (int, error) {
+	if limit == 0 {
+		limit = defaultLimit
+	}
+	if limit < 1 || limit > maxCursorLimit {
+		return 0, &ValidationError{Field: "limit", Message: "must be between 1 and 500"}
+	}
+	return limit, nil
 }
 
 func validCurrency(currency string) bool {

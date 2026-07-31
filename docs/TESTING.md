@@ -8,14 +8,25 @@ The project uses four test layers:
 2. PostgreSQL, Redis, and NATS integration tests exercise each component.
 3. The end-to-end test starts the real application and uses only public HTTP APIs.
 4. A k6 scenario measures authenticated read-path latency and failure rate.
+5. The V3 merchant counterpart and acceptance checklist exercise callback
+   idempotency, rollback ordering, and webhook delivery semantics.
 
 ## Commands
 
 ```bash
 go test -race ./...
+go test ./cmd/merchant-sim
 make test-integration
 make test-e2e
 ```
+
+For the V3 merchant contract, see
+[`V3_ACCEPTANCE_CHECKLIST.md`](V3_ACCEPTANCE_CHECKLIST.md). The counterpart can
+be started with `make merchant-sim` and supports deterministic insufficient-fund,
+HTTP 5xx, and timeout injection.
+
+Set `V3_ALLOW_PRIVATE_CALLBACK_URLS=1` only for local sandbox runs that point
+the seamless callback client at a private TLS endpoint such as `127.0.0.1`.
 
 The GitHub Actions workflow runs the equivalent dependency-aware commands
 without starting Docker Compose itself:
@@ -40,6 +51,27 @@ The end-to-end flow covers:
 - automatic, idempotent settlement;
 - wallet payout and locked-balance verification;
 - per-currency settlement audit and pool conservation.
+
+## V3 hardening coverage
+
+The V3 hardening suite is exercised by unit tests that run without external
+services:
+
+- `TestV3IPWhitelistRejectsForeignIP` / `TestV3IPWhitelistAllowsMatchingIP` —
+  merchant IP allow-list enforcement on signed V2 requests.
+- `TestAdminVoidMarketEndpoint` — the market-void admin route.
+- `TestWriteSeamlessOrderErrorMapsHardeningErrors` — degraded/unverified HTTP
+  mapping.
+- `TestDegradedTrackerFlipsAfterThreshold` / `TestDegradedTrackerRecoversOnSuccess`
+  — per-merchant circuit breaker.
+- `TestDeliverVerification*` — callback ownership challenge echo.
+- `TestMemoryLimiter*` / `TestDisabledLimiterAlwaysAllows` — layered rate limits.
+- `TestConfigureIntegrationInvalidatesCallbackVerificationOnURLChange` —
+  callback URL changes invalidate the ownership proof.
+
+Integration-only tests (PostgreSQL): `TestSettlementPostgresVoidRefundsFullCollateral`,
+plus the existing transfer and seamless outbox cases. The full V3 acceptance
+gate lives in `docs/V3_ACCEPTANCE_CHECKLIST.md`.
 
 ## Share-model regression baseline
 

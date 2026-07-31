@@ -21,10 +21,10 @@ func init() {
 		Iface: reflect.TypeOf((*Service)(nil)).Elem(),
 		Impl:  reflect.TypeOf(implementation{}),
 		LocalStubFn: func(impl any, caller string, tracer trace.Tracer) any {
-			return service_local_stub{impl: impl.(Service), tracer: tracer, getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Get", Remote: false, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "List", Remote: false, Generated: true}), registerMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Register", Remote: false, Generated: true}), updateMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Update", Remote: false, Generated: true}), validateAPIKeyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ValidateAPIKey", Remote: false, Generated: true})}
+			return service_local_stub{impl: impl.(Service), tracer: tracer, configureIntegrationMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ConfigureIntegration", Remote: false, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Get", Remote: false, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "List", Remote: false, Generated: true}), registerMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Register", Remote: false, Generated: true}), reissueV3SecretMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ReissueV3Secret", Remote: false, Generated: true}), updateMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Update", Remote: false, Generated: true}), validateAPIKeyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ValidateAPIKey", Remote: false, Generated: true})}
 		},
 		ClientStubFn: func(stub codegen.Stub, caller string) any {
-			return service_client_stub{stub: stub, getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Get", Remote: true, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "List", Remote: true, Generated: true}), registerMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Register", Remote: true, Generated: true}), updateMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Update", Remote: true, Generated: true}), validateAPIKeyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ValidateAPIKey", Remote: true, Generated: true})}
+			return service_client_stub{stub: stub, configureIntegrationMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ConfigureIntegration", Remote: true, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Get", Remote: true, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "List", Remote: true, Generated: true}), registerMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Register", Remote: true, Generated: true}), reissueV3SecretMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ReissueV3Secret", Remote: true, Generated: true}), updateMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Update", Remote: true, Generated: true}), validateAPIKeyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ValidateAPIKey", Remote: true, Generated: true})}
 		},
 		ServerStubFn: func(impl any, addLoad func(uint64, float64)) codegen.Server {
 			return service_server_stub{impl: impl.(Service), addLoad: addLoad}
@@ -45,17 +45,39 @@ var _ twill.Unrouted = (*implementation)(nil)
 // Local stub implementations.
 
 type service_local_stub struct {
-	impl                  Service
-	tracer                trace.Tracer
-	getMetrics            *codegen.MethodMetrics
-	listMetrics           *codegen.MethodMetrics
-	registerMetrics       *codegen.MethodMetrics
-	updateMetrics         *codegen.MethodMetrics
-	validateAPIKeyMetrics *codegen.MethodMetrics
+	impl                        Service
+	tracer                      trace.Tracer
+	configureIntegrationMetrics *codegen.MethodMetrics
+	getMetrics                  *codegen.MethodMetrics
+	listMetrics                 *codegen.MethodMetrics
+	registerMetrics             *codegen.MethodMetrics
+	reissueV3SecretMetrics      *codegen.MethodMetrics
+	updateMetrics               *codegen.MethodMetrics
+	validateAPIKeyMetrics       *codegen.MethodMetrics
 }
 
 // Check that service_local_stub implements the Service interface.
 var _ Service = (*service_local_stub)(nil)
+
+func (s service_local_stub) ConfigureIntegration(ctx context.Context, a0 string, a1 *IntegrationRequest) (r0 *types.Merchant, err error) {
+	// Update metrics.
+	begin := s.configureIntegrationMetrics.Begin()
+	defer func() { s.configureIntegrationMetrics.End(begin, err != nil, 0, 0) }()
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.tracer.Start(ctx, "merchant.Service.ConfigureIntegration", trace.WithSpanKind(trace.SpanKindInternal))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
+			span.End()
+		}()
+	}
+
+	return s.impl.ConfigureIntegration(ctx, a0, a1)
+}
 
 func (s service_local_stub) Get(ctx context.Context, a0 string) (r0 *types.Merchant, err error) {
 	// Update metrics.
@@ -117,6 +139,26 @@ func (s service_local_stub) Register(ctx context.Context, a0 *RegisterRequest) (
 	return s.impl.Register(ctx, a0)
 }
 
+func (s service_local_stub) ReissueV3Secret(ctx context.Context, a0 string) (r0 *types.Merchant, err error) {
+	// Update metrics.
+	begin := s.reissueV3SecretMetrics.Begin()
+	defer func() { s.reissueV3SecretMetrics.End(begin, err != nil, 0, 0) }()
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.tracer.Start(ctx, "merchant.Service.ReissueV3Secret", trace.WithSpanKind(trace.SpanKindInternal))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
+			span.End()
+		}()
+	}
+
+	return s.impl.ReissueV3Secret(ctx, a0)
+}
+
 func (s service_local_stub) Update(ctx context.Context, a0 string, a1 *UpdateRequest) (r0 *types.Merchant, err error) {
 	// Update metrics.
 	begin := s.updateMetrics.Begin()
@@ -160,16 +202,70 @@ func (s service_local_stub) ValidateAPIKey(ctx context.Context, a0 string) (r0 *
 // Client stub implementations.
 
 type service_client_stub struct {
-	stub                  codegen.Stub
-	getMetrics            *codegen.MethodMetrics
-	listMetrics           *codegen.MethodMetrics
-	registerMetrics       *codegen.MethodMetrics
-	updateMetrics         *codegen.MethodMetrics
-	validateAPIKeyMetrics *codegen.MethodMetrics
+	stub                        codegen.Stub
+	configureIntegrationMetrics *codegen.MethodMetrics
+	getMetrics                  *codegen.MethodMetrics
+	listMetrics                 *codegen.MethodMetrics
+	registerMetrics             *codegen.MethodMetrics
+	reissueV3SecretMetrics      *codegen.MethodMetrics
+	updateMetrics               *codegen.MethodMetrics
+	validateAPIKeyMetrics       *codegen.MethodMetrics
 }
 
 // Check that service_client_stub implements the Service interface.
 var _ Service = (*service_client_stub)(nil)
+
+func (s service_client_stub) ConfigureIntegration(ctx context.Context, a0 string, a1 *IntegrationRequest) (r0 *types.Merchant, err error) {
+	// Update metrics.
+	var requestBytes, replyBytes int
+	begin := s.configureIntegrationMetrics.Begin()
+	defer func() { s.configureIntegrationMetrics.End(begin, err != nil, requestBytes, replyBytes) }()
+
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.stub.Tracer().Start(ctx, "merchant.Service.ConfigureIntegration", trace.WithSpanKind(trace.SpanKindClient))
+	}
+
+	defer func() {
+		// Catch and return any panics detected during encoding/decoding/rpc.
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+			if err != nil {
+				err = errors.Join(twill.RemoteCallError, err)
+			}
+		}
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+
+	}()
+
+	// Encode arguments.
+	enc := codegen.NewEncoder()
+	enc.String(a0)
+	servicetwill_enc_ptr_IntegrationRequest_dd3c29b7(enc, a1)
+	var shardKey uint64
+
+	// Call the remote method.
+	requestBytes = len(enc.Data())
+	var results []byte
+	results, err = s.stub.Run(ctx, 0, enc.Data(), shardKey)
+	replyBytes = len(results)
+	if err != nil {
+		err = errors.Join(twill.RemoteCallError, err)
+		return
+	}
+
+	// Decode the results.
+	dec := codegen.NewDecoder(results)
+	r0 = servicetwill_dec_ptr_Merchant_f549ca00(dec)
+	err = dec.Error()
+	return
+}
 
 func (s service_client_stub) Get(ctx context.Context, a0 string) (r0 *types.Merchant, err error) {
 	// Update metrics.
@@ -213,7 +309,7 @@ func (s service_client_stub) Get(ctx context.Context, a0 string) (r0 *types.Merc
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 0, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 1, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -271,7 +367,7 @@ func (s service_client_stub) List(ctx context.Context, a0 int, a1 int) (r0 []*ty
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 1, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 2, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -327,7 +423,63 @@ func (s service_client_stub) Register(ctx context.Context, a0 *RegisterRequest) 
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 2, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 3, enc.Data(), shardKey)
+	replyBytes = len(results)
+	if err != nil {
+		err = errors.Join(twill.RemoteCallError, err)
+		return
+	}
+
+	// Decode the results.
+	dec := codegen.NewDecoder(results)
+	r0 = servicetwill_dec_ptr_Merchant_f549ca00(dec)
+	err = dec.Error()
+	return
+}
+
+func (s service_client_stub) ReissueV3Secret(ctx context.Context, a0 string) (r0 *types.Merchant, err error) {
+	// Update metrics.
+	var requestBytes, replyBytes int
+	begin := s.reissueV3SecretMetrics.Begin()
+	defer func() { s.reissueV3SecretMetrics.End(begin, err != nil, requestBytes, replyBytes) }()
+
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.stub.Tracer().Start(ctx, "merchant.Service.ReissueV3Secret", trace.WithSpanKind(trace.SpanKindClient))
+	}
+
+	defer func() {
+		// Catch and return any panics detected during encoding/decoding/rpc.
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+			if err != nil {
+				err = errors.Join(twill.RemoteCallError, err)
+			}
+		}
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+
+	}()
+
+	// Preallocate a buffer of the right size.
+	size := 0
+	size += (4 + len(a0))
+	enc := codegen.NewEncoder()
+	enc.Reset(size)
+
+	// Encode arguments.
+	enc.String(a0)
+	var shardKey uint64
+
+	// Call the remote method.
+	requestBytes = len(enc.Data())
+	var results []byte
+	results, err = s.stub.Run(ctx, 4, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -385,7 +537,7 @@ func (s service_client_stub) Update(ctx context.Context, a0 string, a1 *UpdateRe
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 3, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 5, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -441,7 +593,7 @@ func (s service_client_stub) ValidateAPIKey(ctx context.Context, a0 string) (r0 
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 4, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 6, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -460,7 +612,7 @@ func (s service_client_stub) ValidateAPIKey(ctx context.Context, a0 string) (r0 
 // you run "go build" or "go run".
 var _ codegen.LatestVersion = codegen.Version[[0][24]struct{}](`
 
-ERROR: You generated this file with 'twill generate' (devel) (codegen
+ERROR: You generated this file with 'twill generate' v0.24.7 (codegen
 version v0.24.0). The generated code is incompatible with the version of the
 github.com/nxsky/twill module that you're using. The twill module
 version can be found in your go.mod file or by running the following command.
@@ -491,12 +643,16 @@ var _ codegen.Server = (*service_server_stub)(nil)
 // GetStubFn implements the codegen.Server interface.
 func (s service_server_stub) GetStubFn(method string) func(ctx context.Context, args []byte) ([]byte, error) {
 	switch method {
+	case "ConfigureIntegration":
+		return s.configureIntegration
 	case "Get":
 		return s.get
 	case "List":
 		return s.list
 	case "Register":
 		return s.register
+	case "ReissueV3Secret":
+		return s.reissueV3Secret
 	case "Update":
 		return s.update
 	case "ValidateAPIKey":
@@ -504,6 +660,33 @@ func (s service_server_stub) GetStubFn(method string) func(ctx context.Context, 
 	default:
 		return nil
 	}
+}
+
+func (s service_server_stub) configureIntegration(ctx context.Context, args []byte) (res []byte, err error) {
+	// Catch and return any panics detected during encoding/decoding/rpc.
+	defer func() {
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+		}
+	}()
+
+	// Decode arguments.
+	dec := codegen.NewDecoder(args)
+	var a0 string
+	a0 = dec.String()
+	var a1 *IntegrationRequest
+	a1 = servicetwill_dec_ptr_IntegrationRequest_dd3c29b7(dec)
+
+	// TODO(rgrandl): The deferred function above will recover from panics in the
+	// user code: fix this.
+	// Call the local method.
+	r0, appErr := s.impl.ConfigureIntegration(ctx, a0, a1)
+
+	// Encode the results.
+	enc := codegen.NewEncoder()
+	servicetwill_enc_ptr_Merchant_f549ca00(enc, r0)
+	enc.Error(appErr)
+	return enc.Data(), nil
 }
 
 func (s service_server_stub) get(ctx context.Context, args []byte) (res []byte, err error) {
@@ -583,6 +766,31 @@ func (s service_server_stub) register(ctx context.Context, args []byte) (res []b
 	return enc.Data(), nil
 }
 
+func (s service_server_stub) reissueV3Secret(ctx context.Context, args []byte) (res []byte, err error) {
+	// Catch and return any panics detected during encoding/decoding/rpc.
+	defer func() {
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+		}
+	}()
+
+	// Decode arguments.
+	dec := codegen.NewDecoder(args)
+	var a0 string
+	a0 = dec.String()
+
+	// TODO(rgrandl): The deferred function above will recover from panics in the
+	// user code: fix this.
+	// Call the local method.
+	r0, appErr := s.impl.ReissueV3Secret(ctx, a0)
+
+	// Encode the results.
+	enc := codegen.NewEncoder()
+	servicetwill_enc_ptr_Merchant_f549ca00(enc, r0)
+	enc.Error(appErr)
+	return enc.Data(), nil
+}
+
 func (s service_server_stub) update(ctx context.Context, args []byte) (res []byte, err error) {
 	// Catch and return any panics detected during encoding/decoding/rpc.
 	defer func() {
@@ -644,6 +852,11 @@ type service_reflect_stub struct {
 // Check that service_reflect_stub implements the Service interface.
 var _ Service = (*service_reflect_stub)(nil)
 
+func (s service_reflect_stub) ConfigureIntegration(ctx context.Context, a0 string, a1 *IntegrationRequest) (r0 *types.Merchant, err error) {
+	err = s.caller("ConfigureIntegration", ctx, []any{a0, a1}, []any{&r0})
+	return
+}
+
 func (s service_reflect_stub) Get(ctx context.Context, a0 string) (r0 *types.Merchant, err error) {
 	err = s.caller("Get", ctx, []any{a0}, []any{&r0})
 	return
@@ -659,6 +872,11 @@ func (s service_reflect_stub) Register(ctx context.Context, a0 *RegisterRequest)
 	return
 }
 
+func (s service_reflect_stub) ReissueV3Secret(ctx context.Context, a0 string) (r0 *types.Merchant, err error) {
+	err = s.caller("ReissueV3Secret", ctx, []any{a0}, []any{&r0})
+	return
+}
+
 func (s service_reflect_stub) Update(ctx context.Context, a0 string, a1 *UpdateRequest) (r0 *types.Merchant, err error) {
 	err = s.caller("Update", ctx, []any{a0, a1}, []any{&r0})
 	return
@@ -670,6 +888,82 @@ func (s service_reflect_stub) ValidateAPIKey(ctx context.Context, a0 string) (r0
 }
 
 // AutoMarshal implementations.
+
+var _ codegen.AutoMarshal = (*IntegrationRequest)(nil)
+
+type __is_IntegrationRequest[T ~struct {
+	twill.AutoMarshal
+	WalletMode           *string  "json:\"wallet_mode,omitempty\""
+	CallbackURL          *string  "json:\"callback_url,omitempty\""
+	WebhookURL           *string  "json:\"webhook_url,omitempty\""
+	WebhookEvents        []string "json:\"webhook_events,omitempty\""
+	RotateCallbackSecret bool     "json:\"rotate_callback_secret,omitempty\""
+}] struct{}
+
+var _ __is_IntegrationRequest[IntegrationRequest]
+
+func (x *IntegrationRequest) WeaverMarshal(enc *codegen.Encoder) {
+	if x == nil {
+		panic(fmt.Errorf("IntegrationRequest.WeaverMarshal: nil receiver"))
+	}
+	servicetwill_enc_ptr_string_3e89801b(enc, x.WalletMode)
+	servicetwill_enc_ptr_string_3e89801b(enc, x.CallbackURL)
+	servicetwill_enc_ptr_string_3e89801b(enc, x.WebhookURL)
+	servicetwill_enc_slice_string_4af10117(enc, x.WebhookEvents)
+	enc.Bool(x.RotateCallbackSecret)
+}
+
+func (x *IntegrationRequest) WeaverUnmarshal(dec *codegen.Decoder) {
+	if x == nil {
+		panic(fmt.Errorf("IntegrationRequest.WeaverUnmarshal: nil receiver"))
+	}
+	x.WalletMode = servicetwill_dec_ptr_string_3e89801b(dec)
+	x.CallbackURL = servicetwill_dec_ptr_string_3e89801b(dec)
+	x.WebhookURL = servicetwill_dec_ptr_string_3e89801b(dec)
+	x.WebhookEvents = servicetwill_dec_slice_string_4af10117(dec)
+	x.RotateCallbackSecret = dec.Bool()
+}
+
+func servicetwill_enc_ptr_string_3e89801b(enc *codegen.Encoder, arg *string) {
+	if arg == nil {
+		enc.Bool(false)
+	} else {
+		enc.Bool(true)
+		enc.String(*arg)
+	}
+}
+
+func servicetwill_dec_ptr_string_3e89801b(dec *codegen.Decoder) *string {
+	if !dec.Bool() {
+		return nil
+	}
+	var res string
+	res = dec.String()
+	return &res
+}
+
+func servicetwill_enc_slice_string_4af10117(enc *codegen.Encoder, arg []string) {
+	if arg == nil {
+		enc.Len(-1)
+		return
+	}
+	enc.Len(len(arg))
+	for i := 0; i < len(arg); i++ {
+		enc.String(arg[i])
+	}
+}
+
+func servicetwill_dec_slice_string_4af10117(dec *codegen.Decoder) []string {
+	n := dec.Len()
+	if n == -1 {
+		return nil
+	}
+	res := make([]string, n)
+	for i := 0; i < n; i++ {
+		res[i] = dec.String()
+	}
+	return res
+}
 
 var _ codegen.AutoMarshal = (*RegisterRequest)(nil)
 
@@ -732,25 +1026,25 @@ func (x *UpdateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.Timezone = servicetwill_dec_ptr_string_3e89801b(dec)
 }
 
-func servicetwill_enc_ptr_string_3e89801b(enc *codegen.Encoder, arg *string) {
+// Encoding/decoding implementations.
+
+func servicetwill_enc_ptr_IntegrationRequest_dd3c29b7(enc *codegen.Encoder, arg *IntegrationRequest) {
 	if arg == nil {
 		enc.Bool(false)
 	} else {
 		enc.Bool(true)
-		enc.String(*arg)
+		(*arg).WeaverMarshal(enc)
 	}
 }
 
-func servicetwill_dec_ptr_string_3e89801b(dec *codegen.Decoder) *string {
+func servicetwill_dec_ptr_IntegrationRequest_dd3c29b7(dec *codegen.Decoder) *IntegrationRequest {
 	if !dec.Bool() {
 		return nil
 	}
-	var res string
-	res = dec.String()
+	var res IntegrationRequest
+	(&res).WeaverUnmarshal(dec)
 	return &res
 }
-
-// Encoding/decoding implementations.
 
 func servicetwill_enc_ptr_Merchant_f549ca00(enc *codegen.Encoder, arg *types.Merchant) {
 	if arg == nil {

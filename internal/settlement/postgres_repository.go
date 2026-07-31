@@ -3,6 +3,7 @@ package settlement
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -16,6 +17,275 @@ type postgresRepository struct {
 
 func newPostgresRepository(database *sql.DB) *postgresRepository {
 	return &postgresRepository{database: database}
+}
+
+func (r *postgresRepository) VoidMarket(
+	ctx context.Context,
+	marketID string,
+	voidedAt time.Time,
+) error {
+	databaseTx, err := r.database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin market void: %w", err)
+	}
+	defer func() { _ = databaseTx.Rollback() }()
+
+	eventID, err := lockMarketForVoid(ctx, databaseTx, marketID)
+	if err != nil {
+		return err
+	}
+	orders, err := lockVoidOrders(ctx, databaseTx, marketID)
+	if err != nil {
+		return err
+	}
+	calculateVoidRefunds(orders)
+	if err := applyOrderVoids(ctx, databaseTx, marketID, eventID, orders, voidedAt); err != nil {
+		return err
+	}
+	const insertVoid = `
+INSERT INTO market_settlements (market_id, event_id, winning_option, settlement_type, settled_at)
+VALUES ($1, $2, NULL, 'void', $3)`
+	if _, err := databaseTx.ExecContext(ctx, insertVoid, marketID, eventID, voidedAt); err != nil {
+		return fmt.Errorf("insert market void: %w", err)
+	}
+	if _, err := databaseTx.ExecContext(
+		ctx,
+		"UPDATE markets SET status = 'voided', settled_at = $2 WHERE id = $1",
+		marketID,
+		voidedAt,
+	); err != nil {
+		return fmt.Errorf("mark market voided: %w", err)
+	}
+	if err := enqueueMarketVoidedWebhook(ctx, databaseTx, marketID, eventID, voidedAt, orders); err != nil {
+		return err
+	}
+	if err := databaseTx.Commit(); err != nil {
+		return fmt.Errorf("commit market void: %w", err)
+	}
+	return nil
+}
+
+// lockMarketForVoid locks an unsettled market and returns its event ID.
+func lockMarketForVoid(ctx context.Context, databaseTx *sql.Tx, marketID string) (string, error) {
+	const query = `
+SELECT m.event_id
+FROM markets AS m
+LEFT JOIN market_settlements AS s ON s.market_id = m.id
+WHERE m.id = $1 AND s.market_id IS NULL
+FOR UPDATE OF m`
+	var eventID string
+	err := databaseTx.QueryRowContext(ctx, query, marketID).Scan(&eventID)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Distinguish a missing market from an already settled one.
+		var exists bool
+		if checkErr := databaseTx.QueryRowContext(
+			ctx, "SELECT EXISTS (SELECT 1 FROM markets WHERE id = $1)", marketID,
+		).Scan(&exists); checkErr != nil {
+			return "", fmt.Errorf("check void market existence: %w", checkErr)
+		}
+		if !exists {
+			return "", ErrMarketNotFound
+		}
+		return "", ErrMarketAlreadySettled
+	}
+	if err != nil {
+		return "", fmt.Errorf("lock market for void: %w", err)
+	}
+	return eventID, nil
+}
+
+// lockVoidOrders locks every order and its wallet for a market being voided.
+func lockVoidOrders(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	marketID string,
+) ([]*settlementOrder, error) {
+	const query = `
+SELECT o.id, w.id, o.merchant_id, o.user_id, o.type, o.option, o.currency, o.status,
+       COALESCE(o.wallet_kind, 'user'), o.amount::text, o.filled_amount::text, o.price::text
+FROM orders AS o
+LEFT JOIN wallets AS w
+  ON w.merchant_id = o.merchant_id
+ AND w.user_id = o.user_id
+ AND w.currency = o.currency
+ AND w.kind = COALESCE(o.wallet_kind, 'user')
+WHERE o.market_id = $1
+ORDER BY o.id
+FOR UPDATE OF o`
+	rows, err := databaseTx.QueryContext(ctx, query, marketID)
+	if err != nil {
+		return nil, fmt.Errorf("lock void orders: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	orders := []*settlementOrder{}
+	for rows.Next() {
+		order := &settlementOrder{}
+		var walletID sql.NullString
+		var amount string
+		var filled string
+		var price string
+		if err := rows.Scan(
+			&order.id, &walletID, &order.merchantID, &order.userID, &order.side, &order.option, &order.currency,
+			&order.status, &order.walletKind, &amount, &filled, &price,
+		); err != nil {
+			return nil, fmt.Errorf("scan void order: %w", err)
+		}
+		if !walletID.Valid {
+			return nil, fmt.Errorf("%w: order %s", ErrOrderWalletNotFound, order.id)
+		}
+		order.walletID = walletID.String
+		order.amount, err = parseShares(amount)
+		if err != nil {
+			return nil, err
+		}
+		order.filled, err = parseShares(filled)
+		if err != nil {
+			return nil, err
+		}
+		order.price, err = parseFixed(price, 6)
+		if err != nil {
+			return nil, err
+		}
+		orders = append(orders, order)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate void orders: %w", err)
+	}
+	if err := lockSettlementWallets(ctx, databaseTx, orders); err != nil {
+		return nil, err
+	}
+	return orders, nil
+}
+
+// calculateVoidRefunds refunds the full collateral of every order, including
+// the unfilled remainder that was locked at placement.
+func calculateVoidRefunds(orders []*settlementOrder) {
+	for _, order := range orders {
+		order.refund = collateralCents(order.side, order.amount, order.price)
+		order.lockedUse = new(big.Int).Set(order.refund)
+	}
+}
+
+// applyOrderVoids credits refunds per wallet, emits shadow credits and webhooks,
+// and marks every order voided.
+func applyOrderVoids(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	marketID string,
+	eventID string,
+	orders []*settlementOrder,
+	voidedAt time.Time,
+) error {
+	walletRefunds := map[string]*big.Int{}
+	for _, order := range orders {
+		if walletRefunds[order.walletID] == nil {
+			walletRefunds[order.walletID] = new(big.Int)
+		}
+		walletRefunds[order.walletID].Add(walletRefunds[order.walletID], order.refund)
+	}
+	for walletID, total := range walletRefunds {
+		const updateWallet = `
+UPDATE wallets
+SET balance = balance + $2::numeric,
+    locked_balance = locked_balance - $2::numeric,
+    updated_at = $3
+WHERE id = $1 AND locked_balance >= $2::numeric`
+		result, err := databaseTx.ExecContext(ctx, updateWallet, walletID, formatCents(total), voidedAt)
+		if err != nil {
+			return fmt.Errorf("refund voided wallet %s: %w", walletID, err)
+		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil || rowsAffected != 1 {
+			return fmt.Errorf("voided wallet %s has insufficient locked balance", walletID)
+		}
+	}
+	for _, order := range orders {
+		if order.walletKind == "shadow" {
+			if err := enqueueSettlementShadowCredit(
+				ctx, databaseTx, order, marketID, eventID, order.refund, "void", voidedAt,
+			); err != nil {
+				return err
+			}
+		}
+		if _, err := databaseTx.ExecContext(
+			ctx, "UPDATE orders SET status = 'voided' WHERE id = $1", order.id,
+		); err != nil {
+			return fmt.Errorf("mark order voided: %w", err)
+		}
+		if err := enqueueOrderVoidedWebhook(
+			ctx, databaseTx, marketID, eventID, order, voidedAt,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func enqueueOrderVoidedWebhook(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	marketID string,
+	eventID string,
+	order *settlementOrder,
+	voidedAt time.Time,
+) error {
+	payload, err := json.Marshal(map[string]any{
+		"webhook_id": "",
+		"type":       "order.voided",
+		"data": map[string]any{
+			"market_id":      marketID,
+			"event_id":       eventID,
+			"winning_option": nil,
+			"order_id":       order.id,
+			"user_id":        order.userID,
+			"stake":          formatCents(order.refund),
+			"payout":         "0.00",
+			"refund":         formatCents(order.refund),
+			"currency":       order.currency,
+			"settled_at":     voidedAt.UTC().Format(time.RFC3339),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal order voided webhook: %w", err)
+	}
+	return insertWebhookOutbox(ctx, databaseTx, order.merchantID, "order.voided", payload, voidedAt)
+}
+
+func enqueueMarketVoidedWebhook(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	marketID string,
+	eventID string,
+	voidedAt time.Time,
+	orders []*settlementOrder,
+) error {
+	if len(orders) == 0 {
+		return nil
+	}
+	payload, err := json.Marshal(map[string]any{
+		"webhook_id": "",
+		"type":       "market.voided",
+		"data": map[string]any{
+			"market_id":      marketID,
+			"event_id":       eventID,
+			"winning_option": nil,
+			"settled_at":     voidedAt.UTC().Format(time.RFC3339),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal market voided webhook: %w", err)
+	}
+	seen := map[string]struct{}{}
+	for _, order := range orders {
+		if _, exists := seen[order.merchantID]; exists {
+			continue
+		}
+		seen[order.merchantID] = struct{}{}
+		if err := insertWebhookOutbox(ctx, databaseTx, order.merchantID, "market.voided", payload, voidedAt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *postgresRepository) SettleEvent(
@@ -179,7 +449,7 @@ func settleMarket(
 		return err
 	}
 	for _, order := range orders {
-		if err := applyOrderSettlement(ctx, databaseTx, marketID, order, settledAt); err != nil {
+		if err := applyOrderSettlement(ctx, databaseTx, marketID, eventID, winningOption, order, settledAt); err != nil {
 			return err
 		}
 	}
@@ -199,6 +469,9 @@ VALUES ($1, $2, $3, $4)`
 	); err != nil {
 		return fmt.Errorf("mark market settled: %w", err)
 	}
+	if err := enqueueMarketSettledWebhook(ctx, databaseTx, marketID, eventID, winningOption, settledAt, orders); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -208,13 +481,14 @@ func lockSettlementOrders(
 	marketID string,
 ) ([]*settlementOrder, error) {
 	const query = `
-SELECT o.id, w.id, o.type, o.option, o.currency, o.status,
-       o.amount::text, o.filled_amount::text, o.price::text
+SELECT o.id, w.id, o.merchant_id, o.user_id, o.type, o.option, o.currency, o.status,
+       COALESCE(o.wallet_kind, 'user'), o.amount::text, o.filled_amount::text, o.price::text
 FROM orders AS o
 LEFT JOIN wallets AS w
   ON w.merchant_id = o.merchant_id
  AND w.user_id = o.user_id
  AND w.currency = o.currency
+ AND w.kind = COALESCE(o.wallet_kind, 'user')
 WHERE o.market_id = $1
 ORDER BY o.id
 FOR UPDATE OF o`
@@ -232,8 +506,8 @@ FOR UPDATE OF o`
 		var filled string
 		var price string
 		if err := rows.Scan(
-			&order.id, &walletID, &order.side, &order.option, &order.currency,
-			&order.status, &amount, &filled, &price,
+			&order.id, &walletID, &order.merchantID, &order.userID, &order.side, &order.option, &order.currency,
+			&order.status, &order.walletKind, &amount, &filled, &price,
 		); err != nil {
 			return nil, fmt.Errorf("scan settlement order: %w", err)
 		}
@@ -434,6 +708,8 @@ func applyOrderSettlement(
 	ctx context.Context,
 	databaseTx *sql.Tx,
 	marketID string,
+	eventID string,
+	winningOption string,
 	order *settlementOrder,
 	settledAt time.Time,
 ) error {
@@ -461,6 +737,22 @@ WHERE id = $1 AND locked_balance >= $4::numeric`
 			return fmt.Errorf("settled wallet for order %s has insufficient locked balance", order.id)
 		}
 	}
+	if order.walletKind == "shadow" {
+		if order.refund.Sign() > 0 {
+			if err := enqueueSettlementShadowCredit(
+				ctx, databaseTx, order, marketID, eventID, order.refund, "refund_cancel", settledAt,
+			); err != nil {
+				return err
+			}
+		}
+		if order.payout.Sign() > 0 {
+			if err := enqueueSettlementShadowCredit(
+				ctx, databaseTx, order, marketID, eventID, order.payout, "payout", settledAt,
+			); err != nil {
+				return err
+			}
+		}
+	}
 	if order.status == "pending" || order.status == "partial" {
 		if _, err := databaseTx.ExecContext(
 			ctx, "UPDATE orders SET status = 'cancelled' WHERE id = $1", order.id,
@@ -469,6 +761,11 @@ WHERE id = $1 AND locked_balance >= $4::numeric`
 		}
 	}
 	if order.filled.Sign() == 0 {
+		if err := enqueueOrderSettledWebhook(
+			ctx, databaseTx, marketID, eventID, winningOption, order, settledAt,
+		); err != nil {
+			return err
+		}
 		return nil
 	}
 	const payoutQuery = `
@@ -492,6 +789,190 @@ INSERT INTO settlement_payouts (
 		); err != nil {
 			return err
 		}
+	}
+	if err := enqueueOrderSettledWebhook(
+		ctx, databaseTx, marketID, eventID, winningOption, order, settledAt,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+func enqueueSettlementShadowCredit(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	order *settlementOrder,
+	marketID string,
+	eventID string,
+	amount *big.Int,
+	reason string,
+	settledAt time.Time,
+) error {
+	const debitQuery = `
+UPDATE wallets
+SET balance = balance - $2::numeric, updated_at = $3
+WHERE id = $1 AND balance >= $2::numeric`
+	result, err := databaseTx.ExecContext(
+		ctx,
+		debitQuery,
+		order.walletID,
+		formatCents(amount),
+		settledAt,
+	)
+	if err != nil {
+		return fmt.Errorf("reserve settlement shadow credit for order %s: %w", order.id, err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil || rowsAffected != 1 {
+		return fmt.Errorf("settlement shadow credit for order %s exceeds available balance", order.id)
+	}
+	const outboxQuery = `
+WITH transaction AS (
+    INSERT INTO seamless_transactions (
+        transaction_id, merchant_id, user_id, currency, type, reason, amount,
+        order_id, status, created_at, updated_at
+    ) VALUES (
+        gen_random_uuid(), $1, $2, $3, 'credit', $4, $5::numeric,
+        $6, 'pending_delivery', $7, $7
+    )
+    RETURNING transaction_id
+)
+INSERT INTO callback_outbox (
+    merchant_id, transaction_id, user_id, currency, type, reason, amount,
+    order_id, market_id, event_id, status, next_attempt_at, created_at, updated_at
+)
+SELECT $1, transaction_id, $2, $3, 'credit', $4, $5::numeric,
+       $6, $8, $9, 'pending', $7, $7, $7
+FROM transaction`
+	if _, err := databaseTx.ExecContext(
+		ctx,
+		outboxQuery,
+		order.merchantID,
+		order.userID,
+		order.currency,
+		reason,
+		formatCents(amount),
+		order.id,
+		settledAt,
+		marketID,
+		eventID,
+	); err != nil {
+		return fmt.Errorf("enqueue settlement shadow credit for order %s: %w", order.id, err)
+	}
+	return nil
+}
+
+func enqueueOrderSettledWebhook(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	marketID string,
+	eventID string,
+	winningOption string,
+	order *settlementOrder,
+	settledAt time.Time,
+) error {
+	payload, err := json.Marshal(map[string]any{
+		"webhook_id": "",
+		"type":       "order.settled",
+		"data": map[string]any{
+			"market_id":      marketID,
+			"event_id":       eventID,
+			"winning_option": winningOption,
+			"order_id":       order.id,
+			"user_id":        order.userID,
+			"stake":          formatCents(order.stake),
+			"payout":         formatCents(order.payout),
+			"currency":       order.currency,
+			"settled_at":     settledAt.UTC().Format(time.RFC3339),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal order settled webhook: %w", err)
+	}
+	return insertWebhookOutbox(ctx, databaseTx, order.merchantID, "order.settled", payload, settledAt)
+}
+
+func enqueueMarketSettledWebhook(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	marketID string,
+	eventID string,
+	winningOption string,
+	settledAt time.Time,
+	orders []*settlementOrder,
+) error {
+	if len(orders) == 0 {
+		return nil
+	}
+	payload, err := json.Marshal(map[string]any{
+		"webhook_id": "",
+		"type":       "market.settled",
+		"data": map[string]any{
+			"market_id":      marketID,
+			"event_id":       eventID,
+			"winning_option": winningOption,
+			"settled_at":     settledAt.UTC().Format(time.RFC3339),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal market settled webhook: %w", err)
+	}
+	// One market.settled webhook per distinct merchant owning orders on the market.
+	seen := map[string]struct{}{}
+	for _, order := range orders {
+		if _, exists := seen[order.merchantID]; exists {
+			continue
+		}
+		seen[order.merchantID] = struct{}{}
+		if err := insertWebhookOutbox(ctx, databaseTx, order.merchantID, "market.settled", payload, settledAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func insertWebhookOutbox(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	merchantID string,
+	eventType string,
+	payload []byte,
+	createdAt time.Time,
+) error {
+	// Only enqueue when the merchant has a delivery target configured.
+	const configured = `
+SELECT EXISTS (
+    SELECT 1 FROM merchants
+    WHERE id = $1
+      AND (
+        COALESCE(webhook_url, '') <> ''
+        OR COALESCE(callback_url, '') <> ''
+      )
+      AND (
+        COALESCE(array_length(webhook_events, 1), 0) = 0
+        OR $2 = ANY(webhook_events)
+      )
+)`
+	var ready bool
+	if err := databaseTx.QueryRowContext(ctx, configured, merchantID, eventType).Scan(&ready); err != nil {
+		return fmt.Errorf("check merchant webhook configuration: %w", err)
+	}
+	if !ready {
+		return nil
+	}
+	const insert = `
+WITH outbox AS (
+    SELECT gen_random_uuid() AS id
+)
+INSERT INTO webhook_outbox (
+    id, merchant_id, event_type, payload, status, next_attempt_at, created_at, updated_at
+)
+SELECT outbox.id, $1, $2,
+       jsonb_set($3::jsonb, '{webhook_id}', to_jsonb(outbox.id::text), true),
+       'pending', $4, $4, $4
+FROM outbox`
+	if _, err := databaseTx.ExecContext(ctx, insert, merchantID, eventType, string(payload), createdAt); err != nil {
+		return fmt.Errorf("insert webhook outbox: %w", err)
 	}
 	return nil
 }

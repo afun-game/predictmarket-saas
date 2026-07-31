@@ -11,6 +11,7 @@ type walletKey struct {
 	MerchantID string
 	UserID     string
 	Currency   string
+	Kind       string
 }
 
 // Repository stores wallets and transaction history atomically.
@@ -19,6 +20,14 @@ type Repository interface {
 	Create(ctx context.Context, wallet *types.Wallet) error
 	Get(ctx context.Context, key walletKey) (*types.Wallet, error)
 	Credit(ctx context.Context, wallet *types.Wallet, transaction *types.Transaction) error
+	Transfer(
+		ctx context.Context,
+		value *Transfer,
+		wallet *types.Wallet,
+		transaction *types.Transaction,
+		amountCents int64,
+	) (*Transfer, error)
+	GetTransfer(ctx context.Context, merchantID, merchantTransactionID string) (*Transfer, error)
 	Debit(
 		ctx context.Context,
 		key walletKey,

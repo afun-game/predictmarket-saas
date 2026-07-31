@@ -15,16 +15,32 @@ type Merchant struct {
 	Email  string `json:"email"`
 	APIKey string `json:"api_key"`
 	// APIKeyPrefix is a non-secret lookup hint; the complete key is bcrypt-hashed.
-	APIKeyPrefix string `json:"-"`
-	APISecret    string `json:"-"`        // Never expose in JSON
-	Status       string `json:"status"`   // active, suspended, inactive
-	Currency     string `json:"currency"` // USD, EUR, CNY, etc.
-	Timezone     string `json:"timezone"` // IANA timezone
+	APIKeyPrefix                string     `json:"-"`
+	APISecret                   string     `json:"-"` // Never expose in JSON.
+	APISecretEncrypted          string     `json:"-"` // AES-256-GCM ciphertext for V3 HMAC verification.
+	APISecretSecondaryEncrypted string     `json:"-"` // Previous V3 HMAC secret during a bounded rotation window.
+	APISecretSecondaryExpiresAt *time.Time `json:"-"`
+	Status                      string     `json:"status"`   // active, suspended, inactive
+	Currency                    string     `json:"currency"` // USD, EUR, CNY, etc.
+	Timezone                    string     `json:"timezone"` // IANA timezone
+	WalletMode                  string     `json:"wallet_mode"`
+	CallbackURL                 string     `json:"-"`
+	CallbackSecret              string     `json:"-"` // Cleartext only when issued.
+	CallbackSecretEncrypted     string     `json:"-"`
+	WebhookURL                  string     `json:"-"`
+	WebhookEvents               []string   `json:"-"`
+	AllowedIPs                  []string   `json:"-"`
 	// FeeRate mirrors the legacy column for persistence compatibility. It is
 	// fixed at zero until administrator fee configuration is available.
 	FeeRate   float64   `json:"-"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	// SeamlessDegraded is set by the callback dispatcher after repeated merchant
+	// callback failures; seamless order placement is refused while set.
+	SeamlessDegraded bool `json:"-"`
+	// CallbackVerifiedAt records when an administrator proved callback URL
+	// ownership by echoing a signed verification challenge.
+	CallbackVerifiedAt *time.Time `json:"-"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 // Event represents a prediction event
@@ -81,10 +97,25 @@ type Order struct {
 	Currency       string     `json:"currency"`
 	Price          float64    `json:"price"`
 	TimeInForce    string     `json:"time_in_force"` // gtc, ioc
-	Status         string     `json:"status"`        // pending, filled, partial, cancelled
+	WalletKind     string     `json:"-"`
+	Channel        string     `json:"-"`
+	Status         string     `json:"status"` // pending, filled, partial, cancelled
 	IdempotencyKey string     `json:"-"`
 	CreatedAt      time.Time  `json:"created_at"`
 	FilledAt       *time.Time `json:"filled_at,omitempty"`
+}
+
+// Trade represents one persisted execution between a maker and taker order.
+type Trade struct {
+	twill.AutoMarshal
+
+	ID           string    `json:"id"`
+	MarketID     string    `json:"market_id"`
+	MakerOrderID string    `json:"maker_order_id"`
+	TakerOrderID string    `json:"taker_order_id"`
+	Shares       float64   `json:"shares"`
+	MatchedPrice float64   `json:"matched_price"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // Wallet represents a virtual credit wallet (Play Money)
@@ -95,6 +126,7 @@ type Wallet struct {
 	MerchantID    string    `json:"merchant_id"`
 	UserID        string    `json:"user_id"`
 	Currency      string    `json:"currency"`
+	Kind          string    `json:"kind"`
 	Balance       float64   `json:"balance"`
 	LockedBalance float64   `json:"locked_balance"` // Locked for pending orders
 	UpdatedAt     time.Time `json:"updated_at"`

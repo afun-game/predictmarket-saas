@@ -10,6 +10,48 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+func TestConfigureIntegrationIssuesCallbackSecret(t *testing.T) {
+	t.Parallel()
+
+	service := newService(newMemoryRepository())
+	service.encryptSecret = func(secret string) (string, error) {
+		return "enc:" + secret, nil
+	}
+	created, err := service.Register(context.Background(), &RegisterRequest{
+		Name:  "Seamless Merchant",
+		Email: "seamless@example.com",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	mode := "seamless"
+	callbackURL := "https://merchant.example/callback"
+	webhookURL := "https://merchant.example/webhook"
+	configured, err := service.ConfigureIntegration(context.Background(), created.ID, &IntegrationRequest{
+		WalletMode:           &mode,
+		CallbackURL:          &callbackURL,
+		WebhookURL:           &webhookURL,
+		WebhookEvents:        []string{"order.settled", "market.settled"},
+		RotateCallbackSecret: true,
+	})
+	if err != nil {
+		t.Fatalf("ConfigureIntegration() error = %v", err)
+	}
+	if configured.WalletMode != "seamless" || configured.CallbackURL != callbackURL {
+		t.Fatalf("configured = %#v", configured)
+	}
+	if !strings.HasPrefix(configured.CallbackSecret, "cb_live_") {
+		t.Fatalf("callback secret = %q", configured.CallbackSecret)
+	}
+	stored, err := service.repository.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if stored.CallbackSecretEncrypted == "" || stored.CallbackSecretEncrypted == configured.CallbackSecret {
+		t.Fatal("callback secret was not encrypted at rest")
+	}
+}
+
 func TestRegisterAndValidateAPIKey(t *testing.T) {
 	t.Parallel()
 
@@ -170,6 +212,49 @@ func TestUpdateMerchantConfig(t *testing.T) {
 	}
 }
 
+func TestReissueV3SecretKeepsPriorSecretForRotationWindow(t *testing.T) {
+	t.Parallel()
+
+	service := newService(newMemoryRepository())
+	now := time.Date(2026, time.July, 30, 8, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return now }
+	service.encryptSecret = func(secret string) (string, error) {
+		return "encrypted:" + secret, nil
+	}
+	created, err := service.Register(context.Background(), &RegisterRequest{
+		Name:  "Acme",
+		Email: "admin@example.com",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	prior, err := service.repository.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+
+	reissued, err := service.ReissueV3Secret(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("ReissueV3Secret() error = %v", err)
+	}
+	if reissued.APISecret == "" || reissued.APISecret == created.APISecret || reissued.APIKey != "" {
+		t.Errorf("reissued merchant = %#v", reissued)
+	}
+	stored, err := service.repository.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("GetByID() after reissue error = %v", err)
+	}
+	if stored.APISecret != hashSecret(reissued.APISecret) || stored.APISecretEncrypted != "encrypted:"+reissued.APISecret {
+		t.Errorf("stored primary V3 secret = %#v", stored)
+	}
+	if stored.APISecretSecondaryEncrypted != prior.APISecretEncrypted {
+		t.Errorf("stored secondary secret = %q, want %q", stored.APISecretSecondaryEncrypted, prior.APISecretEncrypted)
+	}
+	if stored.APISecretSecondaryExpiresAt == nil || !stored.APISecretSecondaryExpiresAt.Equal(now.Add(v3SecretRotationWindow)) {
+		t.Errorf("secondary secret expiry = %v", stored.APISecretSecondaryExpiresAt)
+	}
+}
+
 func TestListUsesStablePaginationAndHidesSecrets(t *testing.T) {
 	t.Parallel()
 
@@ -212,5 +297,53 @@ func TestValidateAPIKeyRejectsUnknownKey(t *testing.T) {
 	_, err := service.ValidateAPIKey(context.Background(), "pk_live_unknown")
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("ValidateAPIKey() error = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestConfigureIntegrationInvalidatesCallbackVerificationOnURLChange(t *testing.T) {
+	t.Parallel()
+
+	service := newService(newMemoryRepository())
+	service.encryptSecret = func(secret string) (string, error) {
+		return "enc:" + secret, nil
+	}
+	created, err := service.Register(context.Background(), &RegisterRequest{
+		Name:  "Verify Merchant",
+		Email: "verify@example.com",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	mode := "seamless"
+	callbackURL := "https://merchant.example/callback"
+	configured, err := service.ConfigureIntegration(context.Background(), created.ID, &IntegrationRequest{
+		WalletMode:           &mode,
+		CallbackURL:          &callbackURL,
+		RotateCallbackSecret: true,
+	})
+	if err != nil {
+		t.Fatalf("ConfigureIntegration() error = %v", err)
+	}
+	verifiedAt := time.Now().UTC()
+	configured.CallbackVerifiedAt = &verifiedAt
+	if err := service.repository.Update(context.Background(), configured); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	changedURL := "https://merchant.example/callback-v2"
+	if _, err := service.ConfigureIntegration(context.Background(), created.ID, &IntegrationRequest{
+		CallbackURL: &changedURL,
+	}); err != nil {
+		t.Fatalf("ConfigureIntegration(changed URL) error = %v", err)
+	}
+	stored, err := service.repository.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if stored.CallbackVerifiedAt != nil {
+		t.Fatal("callback verification survived a callback URL change")
+	}
+	if stored.CallbackURL != changedURL {
+		t.Fatalf("stored callback URL = %q, want %q", stored.CallbackURL, changedURL)
 	}
 }

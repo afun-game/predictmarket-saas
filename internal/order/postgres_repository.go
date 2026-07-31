@@ -17,7 +17,7 @@ import (
 
 const orderColumns = `
     id, merchant_id, user_id, market_id, type, option, amount,
-    filled_amount, currency, price, time_in_force, status, idempotency_key, created_at, filled_at`
+    filled_amount, currency, price, time_in_force, wallet_kind, channel, status, idempotency_key, created_at, filled_at`
 
 type postgresRepository struct {
 	database *sql.DB
@@ -28,7 +28,7 @@ func newPostgresRepository(database *sql.DB) *postgresRepository {
 }
 
 func (r *postgresRepository) Place(ctx context.Context, incoming *types.Order) (float64, error) {
-	return r.place(ctx, incoming, 0, false)
+	return r.place(ctx, incoming, 0, false, false)
 }
 
 func (r *postgresRepository) PlaceWithLockedCollateral(
@@ -36,7 +36,18 @@ func (r *postgresRepository) PlaceWithLockedCollateral(
 	incoming *types.Order,
 	collateralCents int64,
 ) error {
-	_, err := r.place(ctx, incoming, collateralCents, true)
+	_, err := r.place(ctx, incoming, collateralCents, true, false)
+	return err
+}
+
+// PlaceWithFundedCollateral atomically adds merchant-authorized funds to a
+// shadow wallet and locks them while placing the order.
+func (r *postgresRepository) PlaceWithFundedCollateral(
+	ctx context.Context,
+	incoming *types.Order,
+	collateralCents int64,
+) error {
+	_, err := r.place(ctx, incoming, collateralCents, true, true)
 	return err
 }
 
@@ -45,6 +56,7 @@ func (r *postgresRepository) place(
 	incoming *types.Order,
 	collateralCents int64,
 	lockCollateral bool,
+	fundCollateral bool,
 ) (float64, error) {
 	databaseTx, err := r.database.BeginTx(ctx, nil)
 	if err != nil {
@@ -78,6 +90,11 @@ FOR UPDATE`,
 	}
 	if err != nil {
 		return 0, fmt.Errorf("lock order market: %w", err)
+	}
+	if fundCollateral {
+		if err := fundShadowWallet(ctx, databaseTx, incoming, collateralCents); err != nil {
+			return 0, err
+		}
 	}
 	if lockCollateral {
 		if err := lockOrderWallet(ctx, databaseTx, incoming, collateralCents); err != nil {
@@ -156,12 +173,140 @@ FOR UPDATE`,
 			if err := unlockOrderWallet(ctx, databaseTx, incoming, refundCents); err != nil {
 				return 0, err
 			}
+			reason := "refund_price_improvement"
+			if incoming.Status == "cancelled" && priceImprovement == 0 {
+				reason = "refund_ioc"
+			}
+			if err := enqueueShadowCredit(ctx, databaseTx, incoming, refundCents, reason); err != nil {
+				return 0, err
+			}
 		}
 	}
 	if err := databaseTx.Commit(); err != nil {
 		return 0, fmt.Errorf("commit order placement: %w", err)
 	}
 	return fixed.CentsToFloat(priceImprovement), nil
+}
+
+func fundShadowWallet(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	order *types.Order,
+	collateralCents int64,
+) error {
+	if order.WalletKind != "shadow" {
+		return errors.New("funded collateral requires a shadow wallet")
+	}
+	const ensureQuery = `
+INSERT INTO wallets (
+    id, merchant_id, user_id, currency, kind, balance, locked_balance, updated_at
+) VALUES (gen_random_uuid(), $1, $2, $3, 'shadow', 0, 0, $4)
+ON CONFLICT (merchant_id, user_id, currency, kind) DO NOTHING`
+	if _, err := databaseTx.ExecContext(
+		ctx,
+		ensureQuery,
+		order.MerchantID,
+		order.UserID,
+		order.Currency,
+		order.CreatedAt,
+	); err != nil {
+		return fmt.Errorf("ensure shadow wallet: %w", err)
+	}
+	const creditQuery = `
+UPDATE wallets
+SET balance = balance + $5::numeric, updated_at = $6
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = $4`
+	result, err := databaseTx.ExecContext(
+		ctx,
+		creditQuery,
+		order.MerchantID,
+		order.UserID,
+		order.Currency,
+		order.WalletKind,
+		fixed.FormatCents(collateralCents),
+		order.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("credit shadow wallet: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("count shadow wallet credit: %w", err)
+	}
+	if rowsAffected != 1 {
+		return wallet.ErrNotFound
+	}
+	return nil
+}
+
+func enqueueShadowCredit(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	order *types.Order,
+	amountCents int64,
+	reason string,
+) error {
+	if order.WalletKind != "shadow" || amountCents == 0 {
+		return nil
+	}
+	const debitQuery = `
+UPDATE wallets
+SET balance = balance - $5::numeric, updated_at = $6
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = $4
+  AND balance >= $5::numeric`
+	result, err := databaseTx.ExecContext(
+		ctx,
+		debitQuery,
+		order.MerchantID,
+		order.UserID,
+		order.Currency,
+		order.WalletKind,
+		fixed.FormatCents(amountCents),
+		order.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("reserve shadow credit: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("count shadow credit reservation: %w", err)
+	}
+	if rowsAffected != 1 {
+		return wallet.ErrInsufficientBalance
+	}
+	const outboxQuery = `
+WITH transaction AS (
+    INSERT INTO seamless_transactions (
+        transaction_id, merchant_id, user_id, currency, type, reason, amount,
+        order_id, status, created_at, updated_at
+    ) VALUES (
+        gen_random_uuid(), $1, $2, $3, 'credit', $4, $5::numeric,
+        $6, 'pending_delivery', $7, $7
+    )
+    RETURNING transaction_id
+)
+INSERT INTO callback_outbox (
+    merchant_id, transaction_id, user_id, currency, type, reason, amount,
+    order_id, market_id, status, next_attempt_at, created_at, updated_at
+)
+SELECT $1, transaction_id, $2, $3, 'credit', $4, $5::numeric,
+       $6, $8, 'pending', $7, $7, $7
+FROM transaction`
+	if _, err := databaseTx.ExecContext(
+		ctx,
+		outboxQuery,
+		order.MerchantID,
+		order.UserID,
+		order.Currency,
+		reason,
+		fixed.FormatCents(amountCents),
+		order.ID,
+		order.CreatedAt,
+		order.MarketID,
+	); err != nil {
+		return fmt.Errorf("enqueue shadow credit: %w", err)
+	}
+	return nil
 }
 
 func (r *postgresRepository) Get(ctx context.Context, orderID string) (*types.Order, error) {
@@ -187,7 +332,9 @@ FROM orders
 WHERE ($1 = '' OR merchant_id = NULLIF($1, '')::uuid)
   AND ($2 = '' OR user_id = $2)
   AND ($3 = '' OR market_id = NULLIF($3, '')::uuid)
-  AND ($4 = '' OR status = $4)`
+  AND ($4 = '' OR status = $4)
+  AND ($5::timestamp IS NULL OR created_at >= $5)
+  AND ($6::timestamp IS NULL OR created_at <= $6)`
 	var total int
 	if err := r.database.QueryRowContext(
 		ctx,
@@ -196,12 +343,14 @@ WHERE ($1 = '' OR merchant_id = NULLIF($1, '')::uuid)
 		filters.UserID,
 		filters.MarketID,
 		filters.Status,
+		filters.From,
+		filters.To,
 	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count orders: %w", err)
 	}
 	query := "SELECT " + orderColumns + whereClause + `
 ORDER BY created_at DESC, id
-LIMIT $5 OFFSET $6`
+LIMIT $7 OFFSET $8`
 	rows, err := r.database.QueryContext(
 		ctx,
 		query,
@@ -209,6 +358,8 @@ LIMIT $5 OFFSET $6`
 		filters.UserID,
 		filters.MarketID,
 		filters.Status,
+		filters.From,
+		filters.To,
 		filters.Limit,
 		(filters.Page-1)*filters.Limit,
 	)
@@ -253,9 +404,11 @@ WHERE ($1 = '' OR merchant_id = $1::uuid)
   AND ($2 = '' OR user_id = $2)
   AND ($3 = '' OR market_id = $3::uuid)
   AND ($4 = '' OR status = $4)
-  AND ($5::timestamp IS NULL OR (created_at, id) < ($5::timestamp, $6::uuid))
+  AND ($5::timestamp IS NULL OR created_at >= $5)
+  AND ($6::timestamp IS NULL OR created_at <= $6)
+  AND ($7::timestamp IS NULL OR (created_at, id) < ($7::timestamp, $8::uuid))
 ORDER BY created_at DESC, id DESC
-LIMIT $7`
+LIMIT $9`
 	rows, err := r.database.QueryContext(
 		ctx,
 		query,
@@ -263,6 +416,8 @@ LIMIT $7`
 		filters.UserID,
 		filters.MarketID,
 		filters.Status,
+		filters.From,
+		filters.To,
 		cursorTime,
 		cursorID,
 		filters.Limit+1,
@@ -282,6 +437,61 @@ LIMIT $7`
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate cursor orders: %w", err)
+	}
+	return values, nil
+}
+
+func (r *postgresRepository) ListTrades(
+	ctx context.Context,
+	filters TradeListFilters,
+	cursor *Cursor,
+) ([]*types.Trade, error) {
+	var cursorTime any
+	var cursorID any
+	if cursor == nil {
+		cursorTime = nil
+		cursorID = nil
+	} else {
+		cursorTime = cursor.CreatedAt
+		cursorID = cursor.ID
+	}
+	const query = `
+SELECT t.id, t.market_id, t.maker_order_id, t.taker_order_id,
+       t.shares, t.matched_price, t.created_at
+FROM trades AS t
+JOIN orders AS maker ON maker.id = t.maker_order_id
+WHERE ($1 = '' OR maker.merchant_id = $1::uuid)
+  AND ($2 = '' OR t.maker_order_id = $2::uuid OR t.taker_order_id = $2::uuid)
+  AND ($3::timestamp IS NULL OR t.created_at >= $3)
+  AND ($4::timestamp IS NULL OR t.created_at <= $4)
+  AND ($5::timestamp IS NULL OR (t.created_at, t.id) < ($5::timestamp, $6::uuid))
+ORDER BY t.created_at DESC, t.id DESC
+LIMIT $7`
+	rows, err := r.database.QueryContext(
+		ctx,
+		query,
+		filters.MerchantID,
+		filters.OrderID,
+		filters.From,
+		filters.To,
+		cursorTime,
+		cursorID,
+		filters.Limit+1,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query trades by cursor: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	values := make([]*types.Trade, 0, filters.Limit+1)
+	for rows.Next() {
+		value, err := scanTrade(rows)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate trades by cursor: %w", err)
 	}
 	return values, nil
 }
@@ -327,6 +537,9 @@ func (r *postgresRepository) cancel(
 			if err := unlockOrderWallet(ctx, databaseTx, value, collateralCents); err != nil {
 				return nil, 0, err
 			}
+			if err := enqueueShadowCredit(ctx, databaseTx, value, collateralCents, "refund_cancel"); err != nil {
+				return nil, 0, err
+			}
 		}
 	}
 	if err := databaseTx.Commit(); err != nil {
@@ -343,16 +556,17 @@ func lockOrderWallet(
 ) error {
 	const query = `
 UPDATE wallets
-SET balance = balance - $4::numeric,
-    locked_balance = locked_balance + $4::numeric,
-    updated_at = $5
-WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND balance >= $4::numeric`
+SET balance = balance - $5::numeric,
+    locked_balance = locked_balance + $5::numeric,
+    updated_at = $6
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = $4 AND balance >= $5::numeric`
 	result, err := databaseTx.ExecContext(
 		ctx,
 		query,
 		order.MerchantID,
 		order.UserID,
 		order.Currency,
+		order.WalletKind,
 		fixed.FormatCents(collateralCents),
 		order.CreatedAt,
 	)
@@ -370,16 +584,17 @@ func unlockOrderWallet(
 ) error {
 	const query = `
 UPDATE wallets
-SET balance = balance + $4::numeric,
-    locked_balance = locked_balance - $4::numeric,
-    updated_at = $5
-WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND locked_balance >= $4::numeric`
+SET balance = balance + $5::numeric,
+    locked_balance = locked_balance - $5::numeric,
+    updated_at = $6
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = $4 AND locked_balance >= $5::numeric`
 	result, err := databaseTx.ExecContext(
 		ctx,
 		query,
 		order.MerchantID,
 		order.UserID,
 		order.Currency,
+		order.WalletKind,
 		fixed.FormatCents(collateralCents),
 		order.CreatedAt,
 	)
@@ -406,7 +621,7 @@ func requireOrderWalletUpdate(
 	const query = `
 SELECT balance, locked_balance
 FROM wallets
-WHERE merchant_id = $1 AND user_id = $2 AND currency = $3`
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = $4`
 	var balance float64
 	var lockedBalance float64
 	err = databaseTx.QueryRowContext(
@@ -415,6 +630,7 @@ WHERE merchant_id = $1 AND user_id = $2 AND currency = $3`
 		order.MerchantID,
 		order.UserID,
 		order.Currency,
+		order.WalletKind,
 	).Scan(&balance, &lockedBalance)
 	if errors.Is(err, sql.ErrNoRows) {
 		return wallet.ErrNotFound
@@ -485,6 +701,8 @@ func scanOrder(row rowScanner) (*types.Order, error) {
 		&value.Currency,
 		&value.Price,
 		&value.TimeInForce,
+		&value.WalletKind,
+		&value.Channel,
 		&value.Status,
 		&idempotencyKey,
 		&value.CreatedAt,
@@ -503,12 +721,30 @@ func scanOrder(row rowScanner) (*types.Order, error) {
 	return value, nil
 }
 
+func scanTrade(row rowScanner) (*types.Trade, error) {
+	value := &types.Trade{}
+	if err := row.Scan(
+		&value.ID,
+		&value.MarketID,
+		&value.MakerOrderID,
+		&value.TakerOrderID,
+		&value.Shares,
+		&value.MatchedPrice,
+		&value.CreatedAt,
+	); err != nil {
+		return nil, fmt.Errorf("scan trade: %w", err)
+	}
+	value.Shares = fixed.SharesToFloat(storedShareUnits(value.Shares))
+	value.MatchedPrice = fixed.PriceToFloat(storedPriceUnits(value.MatchedPrice))
+	return value, nil
+}
+
 func insertOrder(ctx context.Context, databaseTx *sql.Tx, value *types.Order) error {
 	const query = `
 INSERT INTO orders (
     id, merchant_id, user_id, market_id, type, option, amount,
-    filled_amount, currency, price, time_in_force, status, idempotency_key, created_at, filled_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`
+    filled_amount, currency, price, time_in_force, wallet_kind, channel, status, idempotency_key, created_at, filled_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`
 	amount := fixed.FormatShares(storedShareUnits(value.Amount))
 	filledAmount := fixed.FormatShares(storedShareUnits(value.FilledAmount))
 	price := fixed.FormatPrice(storedPriceUnits(value.Price))
@@ -526,6 +762,8 @@ INSERT INTO orders (
 		value.Currency,
 		price,
 		value.TimeInForce,
+		value.WalletKind,
+		value.Channel,
 		value.Status,
 		nullableIdempotencyKey(value.IdempotencyKey),
 		value.CreatedAt,

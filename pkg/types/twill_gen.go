@@ -23,7 +23,7 @@ import (
 // you run "go build" or "go run".
 var _ codegen.LatestVersion = codegen.Version[[0][24]struct{}](`
 
-ERROR: You generated this file with 'twill generate' (devel) (codegen
+ERROR: You generated this file with 'twill generate' v0.24.7 (codegen
 version v0.24.0). The generated code is incompatible with the version of the
 github.com/nxsky/twill module that you're using. The twill module
 version can be found in your go.mod file or by running the following command.
@@ -263,18 +263,30 @@ var _ codegen.AutoMarshal = (*Merchant)(nil)
 
 type __is_Merchant[T ~struct {
 	twill.AutoMarshal
-	ID           string    "json:\"id\""
-	Name         string    "json:\"name\""
-	Email        string    "json:\"email\""
-	APIKey       string    "json:\"api_key\""
-	APIKeyPrefix string    "json:\"-\""
-	APISecret    string    "json:\"-\""
-	Status       string    "json:\"status\""
-	Currency     string    "json:\"currency\""
-	Timezone     string    "json:\"timezone\""
-	FeeRate      float64   "json:\"-\""
-	CreatedAt    time.Time "json:\"created_at\""
-	UpdatedAt    time.Time "json:\"updated_at\""
+	ID                          string     "json:\"id\""
+	Name                        string     "json:\"name\""
+	Email                       string     "json:\"email\""
+	APIKey                      string     "json:\"api_key\""
+	APIKeyPrefix                string     "json:\"-\""
+	APISecret                   string     "json:\"-\""
+	APISecretEncrypted          string     "json:\"-\""
+	APISecretSecondaryEncrypted string     "json:\"-\""
+	APISecretSecondaryExpiresAt *time.Time "json:\"-\""
+	Status                      string     "json:\"status\""
+	Currency                    string     "json:\"currency\""
+	Timezone                    string     "json:\"timezone\""
+	WalletMode                  string     "json:\"wallet_mode\""
+	CallbackURL                 string     "json:\"-\""
+	CallbackSecret              string     "json:\"-\""
+	CallbackSecretEncrypted     string     "json:\"-\""
+	WebhookURL                  string     "json:\"-\""
+	WebhookEvents               []string   "json:\"-\""
+	AllowedIPs                  []string   "json:\"-\""
+	FeeRate                     float64    "json:\"-\""
+	SeamlessDegraded            bool       "json:\"-\""
+	CallbackVerifiedAt          *time.Time "json:\"-\""
+	CreatedAt                   time.Time  "json:\"created_at\""
+	UpdatedAt                   time.Time  "json:\"updated_at\""
 }] struct{}
 
 var _ __is_Merchant[Merchant]
@@ -289,10 +301,22 @@ func (x *Merchant) WeaverMarshal(enc *codegen.Encoder) {
 	enc.String(x.APIKey)
 	enc.String(x.APIKeyPrefix)
 	enc.String(x.APISecret)
+	enc.String(x.APISecretEncrypted)
+	enc.String(x.APISecretSecondaryEncrypted)
+	servicetwill_enc_ptr_Time_7d81a94d(enc, x.APISecretSecondaryExpiresAt)
 	enc.String(x.Status)
 	enc.String(x.Currency)
 	enc.String(x.Timezone)
+	enc.String(x.WalletMode)
+	enc.String(x.CallbackURL)
+	enc.String(x.CallbackSecret)
+	enc.String(x.CallbackSecretEncrypted)
+	enc.String(x.WebhookURL)
+	servicetwill_enc_slice_string_4af10117(enc, x.WebhookEvents)
+	servicetwill_enc_slice_string_4af10117(enc, x.AllowedIPs)
 	enc.Float64(x.FeeRate)
+	enc.Bool(x.SeamlessDegraded)
+	servicetwill_enc_ptr_Time_7d81a94d(enc, x.CallbackVerifiedAt)
 	enc.EncodeBinaryMarshaler(&x.CreatedAt)
 	enc.EncodeBinaryMarshaler(&x.UpdatedAt)
 }
@@ -307,10 +331,22 @@ func (x *Merchant) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.APIKey = dec.String()
 	x.APIKeyPrefix = dec.String()
 	x.APISecret = dec.String()
+	x.APISecretEncrypted = dec.String()
+	x.APISecretSecondaryEncrypted = dec.String()
+	x.APISecretSecondaryExpiresAt = servicetwill_dec_ptr_Time_7d81a94d(dec)
 	x.Status = dec.String()
 	x.Currency = dec.String()
 	x.Timezone = dec.String()
+	x.WalletMode = dec.String()
+	x.CallbackURL = dec.String()
+	x.CallbackSecret = dec.String()
+	x.CallbackSecretEncrypted = dec.String()
+	x.WebhookURL = dec.String()
+	x.WebhookEvents = servicetwill_dec_slice_string_4af10117(dec)
+	x.AllowedIPs = servicetwill_dec_slice_string_4af10117(dec)
 	x.FeeRate = dec.Float64()
+	x.SeamlessDegraded = dec.Bool()
+	x.CallbackVerifiedAt = servicetwill_dec_ptr_Time_7d81a94d(dec)
 	dec.DecodeBinaryUnmarshaler(&x.CreatedAt)
 	dec.DecodeBinaryUnmarshaler(&x.UpdatedAt)
 }
@@ -330,6 +366,8 @@ type __is_Order[T ~struct {
 	Currency       string     "json:\"currency\""
 	Price          float64    "json:\"price\""
 	TimeInForce    string     "json:\"time_in_force\""
+	WalletKind     string     "json:\"-\""
+	Channel        string     "json:\"-\""
 	Status         string     "json:\"status\""
 	IdempotencyKey string     "json:\"-\""
 	CreatedAt      time.Time  "json:\"created_at\""
@@ -353,6 +391,8 @@ func (x *Order) WeaverMarshal(enc *codegen.Encoder) {
 	enc.String(x.Currency)
 	enc.Float64(x.Price)
 	enc.String(x.TimeInForce)
+	enc.String(x.WalletKind)
+	enc.String(x.Channel)
 	enc.String(x.Status)
 	enc.String(x.IdempotencyKey)
 	enc.EncodeBinaryMarshaler(&x.CreatedAt)
@@ -374,10 +414,53 @@ func (x *Order) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.Currency = dec.String()
 	x.Price = dec.Float64()
 	x.TimeInForce = dec.String()
+	x.WalletKind = dec.String()
+	x.Channel = dec.String()
 	x.Status = dec.String()
 	x.IdempotencyKey = dec.String()
 	dec.DecodeBinaryUnmarshaler(&x.CreatedAt)
 	x.FilledAt = servicetwill_dec_ptr_Time_7d81a94d(dec)
+}
+
+var _ codegen.AutoMarshal = (*Trade)(nil)
+
+type __is_Trade[T ~struct {
+	twill.AutoMarshal
+	ID           string    "json:\"id\""
+	MarketID     string    "json:\"market_id\""
+	MakerOrderID string    "json:\"maker_order_id\""
+	TakerOrderID string    "json:\"taker_order_id\""
+	Shares       float64   "json:\"shares\""
+	MatchedPrice float64   "json:\"matched_price\""
+	CreatedAt    time.Time "json:\"created_at\""
+}] struct{}
+
+var _ __is_Trade[Trade]
+
+func (x *Trade) WeaverMarshal(enc *codegen.Encoder) {
+	if x == nil {
+		panic(fmt.Errorf("Trade.WeaverMarshal: nil receiver"))
+	}
+	enc.String(x.ID)
+	enc.String(x.MarketID)
+	enc.String(x.MakerOrderID)
+	enc.String(x.TakerOrderID)
+	enc.Float64(x.Shares)
+	enc.Float64(x.MatchedPrice)
+	enc.EncodeBinaryMarshaler(&x.CreatedAt)
+}
+
+func (x *Trade) WeaverUnmarshal(dec *codegen.Decoder) {
+	if x == nil {
+		panic(fmt.Errorf("Trade.WeaverUnmarshal: nil receiver"))
+	}
+	x.ID = dec.String()
+	x.MarketID = dec.String()
+	x.MakerOrderID = dec.String()
+	x.TakerOrderID = dec.String()
+	x.Shares = dec.Float64()
+	x.MatchedPrice = dec.Float64()
+	dec.DecodeBinaryUnmarshaler(&x.CreatedAt)
 }
 
 var _ codegen.AutoMarshal = (*Transaction)(nil)
@@ -435,6 +518,7 @@ type __is_Wallet[T ~struct {
 	MerchantID    string    "json:\"merchant_id\""
 	UserID        string    "json:\"user_id\""
 	Currency      string    "json:\"currency\""
+	Kind          string    "json:\"kind\""
 	Balance       float64   "json:\"balance\""
 	LockedBalance float64   "json:\"locked_balance\""
 	UpdatedAt     time.Time "json:\"updated_at\""
@@ -450,6 +534,7 @@ func (x *Wallet) WeaverMarshal(enc *codegen.Encoder) {
 	enc.String(x.MerchantID)
 	enc.String(x.UserID)
 	enc.String(x.Currency)
+	enc.String(x.Kind)
 	enc.Float64(x.Balance)
 	enc.Float64(x.LockedBalance)
 	enc.EncodeBinaryMarshaler(&x.UpdatedAt)
@@ -463,6 +548,7 @@ func (x *Wallet) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.MerchantID = dec.String()
 	x.UserID = dec.String()
 	x.Currency = dec.String()
+	x.Kind = dec.String()
 	x.Balance = dec.Float64()
 	x.LockedBalance = dec.Float64()
 	dec.DecodeBinaryUnmarshaler(&x.UpdatedAt)

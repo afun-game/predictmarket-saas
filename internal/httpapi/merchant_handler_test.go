@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/order"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
+	"github.com/afun-game/predictmarket-saas/pkg/types"
 )
 
 type registrationCredentials struct {
@@ -27,6 +29,14 @@ type registrationCredentials struct {
 }
 
 var httpRequestSequence atomic.Uint64
+
+type v3SecretReissuerStub struct {
+	merchant.Service
+}
+
+func (v3SecretReissuerStub) ReissueV3Secret(_ context.Context, merchantID string) (*types.Merchant, error) {
+	return &types.Merchant{ID: merchantID, APISecret: "sk_live_reissued"}, nil
+}
 
 func TestMerchantHTTPFlow(t *testing.T) {
 	t.Parallel()
@@ -148,6 +158,41 @@ func TestMerchantHTTPRejectsInvalidRequests(t *testing.T) {
 	)
 	if response.Code != http.StatusBadRequest {
 		t.Errorf("invalid page status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+}
+
+func TestReissueV3SecretRequiresAdministrator(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(
+		v3SecretReissuerStub{Service: merchant.NewService()},
+		event.NewService(),
+		market.NewService(),
+		wallet.NewService(),
+		order.NewService(),
+		currency.NewService(),
+		"admin-secret",
+	)
+	path := "/api/v1/merchants/merchant-1/v3-secret/reissue"
+	denied := performRequest(t, handler, http.MethodPost, path, nil, "Bearer merchant-key")
+	if denied.Code != http.StatusUnauthorized {
+		t.Errorf("merchant reissue status = %d, want %d", denied.Code, http.StatusUnauthorized)
+	}
+	created := performRequest(t, handler, http.MethodPost, path, nil, "Bearer admin-secret")
+	if created.Code != http.StatusCreated {
+		t.Fatalf("admin reissue status = %d, body = %s", created.Code, created.Body.String())
+	}
+	credentials := struct {
+		Data struct {
+			MerchantID string `json:"merchant_id"`
+			APISecret  string `json:"api_secret"`
+		} `json:"data"`
+	}{}
+	if err := json.Unmarshal(created.Body.Bytes(), &credentials); err != nil {
+		t.Fatalf("decode V3 secret response: %v", err)
+	}
+	if credentials.Data.MerchantID != "merchant-1" || credentials.Data.APISecret != "sk_live_reissued" {
+		t.Errorf("reissued credentials = %#v", credentials.Data)
 	}
 }
 

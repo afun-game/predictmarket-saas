@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/afun-game/predictmarket-saas/internal/market"
+	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -88,6 +89,27 @@ func TestOrderPostgresIntegration(t *testing.T) {
 	}
 	if tradeCount != 3 {
 		t.Errorf("trade count = %d, want 3", tradeCount)
+	}
+	trades, err := fixture.service.ListTrades(ctx, &TradeListFilters{
+		MerchantID: fixture.merchantID,
+		Limit:      2,
+	})
+	if err != nil {
+		t.Fatalf("ListTrades() error = %v", err)
+	}
+	if len(trades.Trades) != 2 || trades.NextCursor == "" {
+		t.Errorf("first trade cursor page = %#v", trades)
+	}
+	secondTradePage, err := fixture.service.ListTrades(ctx, &TradeListFilters{
+		MerchantID: fixture.merchantID,
+		Cursor:     trades.NextCursor,
+		Limit:      2,
+	})
+	if err != nil {
+		t.Fatalf("ListTrades(second page) error = %v", err)
+	}
+	if len(secondTradePage.Trades) != 1 || secondTradePage.NextCursor != "" {
+		t.Errorf("second trade cursor page = %#v", secondTradePage)
 	}
 	request := &CreateRequest{
 		MerchantID:     fixture.merchantID,
@@ -491,6 +513,15 @@ func (s *integrationWalletService) Credit(context.Context, string, string, strin
 }
 func (s *integrationWalletService) CreditWithIdempotency(context.Context, string, string, string, float64, string, string) error {
 	return errors.New("not implemented in integration adapter")
+}
+func (s *integrationWalletService) Deposit(context.Context, *wallet.TransferRequest) (*wallet.Transfer, error) {
+	return nil, errors.New("not implemented in integration adapter")
+}
+func (s *integrationWalletService) Withdraw(context.Context, *wallet.TransferRequest) (*wallet.Transfer, error) {
+	return nil, errors.New("not implemented in integration adapter")
+}
+func (s *integrationWalletService) GetTransfer(context.Context, string, string) (*wallet.Transfer, error) {
+	return nil, errors.New("not implemented in integration adapter")
 }
 func (s *integrationWalletService) Debit(context.Context, string, string, string, float64, string) error {
 	return errors.New("not implemented in integration adapter")

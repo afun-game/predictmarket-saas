@@ -39,6 +39,7 @@ WHERE w.locked_balance > 0
       WHERE o.merchant_id = w.merchant_id
         AND o.user_id = w.user_id
         AND o.currency = w.currency
+        AND COALESCE(o.wallet_kind, 'user') = w.kind
         AND o.status IN ('pending', 'partial', 'filled')
   )
 ORDER BY w.id
@@ -77,13 +78,36 @@ FOR UPDATE OF w SKIP LOCKED`
 		}
 		recoveredCents += wallet.locked
 	}
+	shadowDrift, err := countShadowDrift(ctx, databaseTx)
+	if err != nil {
+		return nil, err
+	}
 	if err := databaseTx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit wallet reconciliation: %w", err)
+	}
+	if shadowDrift > 0 {
+		return nil, fmt.Errorf("shadow wallet conservation failed for %d wallets", shadowDrift)
 	}
 	return &Result{
 		WalletsRecovered: len(wallets),
 		AmountRecovered:  fixed.CentsToFloat(recoveredCents),
 	}, nil
+}
+
+func countShadowDrift(ctx context.Context, databaseTx *sql.Tx) (int, error) {
+	// After every committed seamless path, free shadow funds are moved into the
+	// credit outbox in the same transaction. A non-zero available balance means
+	// unlock happened without a matching credit reservation.
+	const query = `
+SELECT COUNT(*)
+FROM wallets AS w
+WHERE w.kind = 'shadow'
+  AND w.balance <> 0`
+	var drift int
+	if err := databaseTx.QueryRowContext(ctx, query).Scan(&drift); err != nil {
+		return 0, fmt.Errorf("count shadow wallet drift: %w", err)
+	}
+	return drift, nil
 }
 
 func recoverWalletLock(ctx context.Context, databaseTx *sql.Tx, wallet strandedWallet) error {

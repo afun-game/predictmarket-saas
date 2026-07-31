@@ -106,8 +106,56 @@ func TestWalletPostgresIntegration(t *testing.T) {
 			t.Errorf("transaction = %#v", transaction)
 		}
 	}
+	fixture.assertTransfers(t, ctx)
 
 	fixture.assertAutoCreateAndMerchantValidation(t, ctx)
+}
+
+func (f *walletIntegrationFixture) assertTransfers(t *testing.T, ctx context.Context) {
+	t.Helper()
+	request := &TransferRequest{
+		MerchantID:            f.merchantID,
+		MerchantTransactionID: "wallet-postgres-deposit",
+		UserID:                f.userID,
+		Currency:              "USD",
+		Amount:                "10.25",
+	}
+	first, err := f.service.Deposit(ctx, request)
+	if err != nil {
+		t.Fatalf("Deposit() error = %v", err)
+	}
+	retry, err := f.service.Deposit(ctx, request)
+	if err != nil {
+		t.Fatalf("Deposit(retry) error = %v", err)
+	}
+	if retry.ID != first.ID || retry.TransactionID != first.TransactionID {
+		t.Errorf("idempotent transfer = %#v, want %#v", retry, first)
+	}
+	if _, err := f.service.Withdraw(ctx, &TransferRequest{
+		MerchantID:            f.merchantID,
+		MerchantTransactionID: "wallet-postgres-withdrawal",
+		UserID:                f.userID,
+		Currency:              "USD",
+		Amount:                "5.25",
+	}); err != nil {
+		t.Fatalf("Withdraw() error = %v", err)
+	}
+	available, locked, err := f.service.GetBalance(ctx, f.merchantID, f.userID, "USD")
+	if err != nil {
+		t.Fatalf("GetBalance(after transfers) error = %v", err)
+	}
+	if available != 35 || locked != 20 {
+		t.Errorf("balance after transfers = (%v, %v), want (35, 20)", available, locked)
+	}
+	if _, err := f.service.Withdraw(ctx, &TransferRequest{
+		MerchantID:            f.merchantID,
+		MerchantTransactionID: "wallet-postgres-insufficient",
+		UserID:                f.userID,
+		Currency:              "USD",
+		Amount:                "35.01",
+	}); !errors.Is(err, ErrInsufficientBalance) {
+		t.Errorf("Withdraw(insufficient) error = %v, want ErrInsufficientBalance", err)
+	}
 }
 
 type walletIntegrationFixture struct {
@@ -198,6 +246,11 @@ func (f *walletIntegrationFixture) assertAutoCreateAndMerchantValidation(
 func (f *walletIntegrationFixture) cleanup() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	_, _ = f.database.ExecContext(
+		ctx,
+		`DELETE FROM wallet_transfers WHERE merchant_id = $1`,
+		f.merchantID,
+	)
 	_, _ = f.database.ExecContext(
 		ctx,
 		`DELETE FROM transactions

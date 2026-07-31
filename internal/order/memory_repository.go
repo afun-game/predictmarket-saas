@@ -166,6 +166,17 @@ func (r *memoryRepository) ListAfter(
 	return values, nil
 }
 
+func (r *memoryRepository) ListTrades(
+	ctx context.Context,
+	_ TradeListFilters,
+	_ *Cursor,
+) ([]*types.Trade, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return []*types.Trade{}, nil
+}
+
 func afterCursor(value *types.Order, cursor *Cursor) bool {
 	if cursor == nil {
 		return true
@@ -180,7 +191,9 @@ func matchesOrderFilters(value *types.Order, filters ListFilters) bool {
 	return (filters.MerchantID == "" || value.MerchantID == filters.MerchantID) &&
 		(filters.UserID == "" || value.UserID == filters.UserID) &&
 		(filters.MarketID == "" || value.MarketID == filters.MarketID) &&
-		(filters.Status == "" || value.Status == filters.Status)
+		(filters.Status == "" || value.Status == filters.Status) &&
+		(filters.From == nil || !value.CreatedAt.Before(*filters.From)) &&
+		(filters.To == nil || !value.CreatedAt.After(*filters.To))
 }
 
 func (r *memoryRepository) Cancel(

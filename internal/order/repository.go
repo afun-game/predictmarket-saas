@@ -15,6 +15,7 @@ type Repository interface {
 	GetByIdempotency(ctx context.Context, merchantID, key string) (*types.Order, error)
 	List(ctx context.Context, filters ListFilters) ([]*types.Order, int, error)
 	ListAfter(ctx context.Context, filters ListFilters, cursor *Cursor) ([]*types.Order, error)
+	ListTrades(ctx context.Context, filters TradeListFilters, cursor *Cursor) ([]*types.Trade, error)
 	Cancel(ctx context.Context, orderID string) (*types.Order, float64, error)
 	GetOrderBook(ctx context.Context, marketID string) (*market.OrderBook, error)
 }

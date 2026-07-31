@@ -17,11 +17,17 @@ type memoryRepository struct {
 	idByKey                  map[walletKey]string
 	transactions             map[string]*types.Transaction
 	transactionByIdempotency map[transactionIdempotencyKey]string
+	transfers                map[transferKey]*Transfer
 }
 
 type transactionIdempotencyKey struct {
 	walletID string
 	key      string
+}
+
+type transferKey struct {
+	merchantID            string
+	merchantTransactionID string
 }
 
 func newMemoryRepository() *memoryRepository {
@@ -30,6 +36,7 @@ func newMemoryRepository() *memoryRepository {
 		idByKey:                  map[walletKey]string{},
 		transactions:             map[string]*types.Transaction{},
 		transactionByIdempotency: map[transactionIdempotencyKey]string{},
+		transfers:                map[transferKey]*Transfer{},
 	}
 }
 
@@ -104,6 +111,72 @@ func (r *memoryRepository) Credit(
 	transaction.WalletID = walletID
 	r.transactions[transaction.ID] = cloneTransaction(transaction)
 	return nil
+}
+
+func (r *memoryRepository) Transfer(
+	ctx context.Context,
+	value *Transfer,
+	wallet *types.Wallet,
+	transaction *types.Transaction,
+	amountCents int64,
+) (*Transfer, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	key := transferKey{merchantID: value.MerchantID, merchantTransactionID: value.MerchantTransactionID}
+	if existing, exists := r.transfers[key]; exists {
+		if !sameTransfer(existing, value) {
+			return nil, ErrTransferConflict
+		}
+		return cloneTransfer(existing), nil
+	}
+	walletKey := keyFromWallet(wallet)
+	walletID, exists := r.idByKey[walletKey]
+	if value.Direction == "deposit" && !exists {
+		walletID = wallet.ID
+		r.byID[walletID] = cloneWallet(wallet)
+		r.idByKey[walletKey] = walletID
+	}
+	if !exists && value.Direction == "withdrawal" {
+		return nil, ErrNotFound
+	}
+	storedWallet := r.byID[walletID]
+	if value.Direction == "withdrawal" && moneyLessThan(storedWallet.Balance, fixed.CentsToFloat(amountCents)) {
+		return nil, ErrInsufficientBalance
+	}
+	if _, exists := r.transactions[transaction.ID]; exists {
+		return nil, fmt.Errorf("transaction ID already exists: %s", transaction.ID)
+	}
+	if value.Direction == "deposit" {
+		storedWallet.Balance = addMoney(storedWallet.Balance, fixed.CentsToFloat(amountCents))
+	} else {
+		storedWallet.Balance = subtractMoney(storedWallet.Balance, fixed.CentsToFloat(amountCents))
+	}
+	storedWallet.UpdatedAt = value.UpdatedAt
+	transaction.WalletID = walletID
+	r.transactions[transaction.ID] = cloneTransaction(transaction)
+	r.transfers[key] = cloneTransfer(value)
+	return cloneTransfer(value), nil
+}
+
+func (r *memoryRepository) GetTransfer(
+	ctx context.Context,
+	merchantID string,
+	merchantTransactionID string,
+) (*Transfer, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	value, exists := r.transfers[transferKey{merchantID: merchantID, merchantTransactionID: merchantTransactionID}]
+	if !exists {
+		return nil, ErrTransferNotFound
+	}
+	return cloneTransfer(value), nil
 }
 
 func (r *memoryRepository) Debit(
@@ -231,10 +304,15 @@ func (r *memoryRepository) walletForUpdate(key walletKey) (*types.Wallet, error)
 }
 
 func keyFromWallet(value *types.Wallet) walletKey {
+	kind := value.Kind
+	if kind == "" {
+		kind = userWalletKind
+	}
 	return walletKey{
 		MerchantID: value.MerchantID,
 		UserID:     value.UserID,
 		Currency:   value.Currency,
+		Kind:       kind,
 	}
 }
 

@@ -99,6 +99,69 @@ func TestCreditWithIdempotencyKeyDoesNotDoubleCredit(t *testing.T) {
 	}
 }
 
+func TestTransfersAreIdempotentAndPreserveBalances(t *testing.T) {
+	service := newService(newMemoryRepository())
+	ctx := context.Background()
+	depositRequest := &TransferRequest{
+		MerchantID:            testMerchantID,
+		MerchantTransactionID: "deposit-001",
+		UserID:                "transfer-user",
+		Currency:              "usd",
+		Amount:                "10.25",
+	}
+	first, err := service.Deposit(ctx, depositRequest)
+	if err != nil {
+		t.Fatalf("Deposit() error = %v", err)
+	}
+	retry, err := service.Deposit(ctx, depositRequest)
+	if err != nil {
+		t.Fatalf("Deposit(retry) error = %v", err)
+	}
+	if first.ID != retry.ID || first.TransactionID != retry.TransactionID || first.Amount != 10.25 {
+		t.Errorf("idempotent deposits = %#v, %#v", first, retry)
+	}
+	assertTransferBalance(t, service, "transfer-user", 10.25)
+
+	conflicting := *depositRequest
+	conflicting.Amount = "10.26"
+	if _, err := service.Deposit(ctx, &conflicting); !errors.Is(err, ErrTransferConflict) {
+		t.Fatalf("Deposit(conflict) error = %v, want ErrTransferConflict", err)
+	}
+
+	withdrawal, err := service.Withdraw(ctx, &TransferRequest{
+		MerchantID:            testMerchantID,
+		MerchantTransactionID: "withdrawal-001",
+		UserID:                "transfer-user",
+		Currency:              "USD",
+		Amount:                "4.20",
+	})
+	if err != nil {
+		t.Fatalf("Withdraw() error = %v", err)
+	}
+	if withdrawal.Direction != "withdrawal" || withdrawal.Status != "completed" {
+		t.Errorf("withdrawal = %#v", withdrawal)
+	}
+	assertTransferBalance(t, service, "transfer-user", 6.05)
+
+	found, err := service.GetTransfer(ctx, testMerchantID, "deposit-001")
+	if err != nil {
+		t.Fatalf("GetTransfer() error = %v", err)
+	}
+	if found.ID != first.ID {
+		t.Errorf("GetTransfer() = %#v, want ID %q", found, first.ID)
+	}
+	if _, err := service.Withdraw(ctx, &TransferRequest{
+		MerchantID:            testMerchantID,
+		MerchantTransactionID: "withdrawal-insufficient",
+		UserID:                "transfer-user",
+		Currency:              "USD",
+		Amount:                "6.06",
+	}); !errors.Is(err, ErrInsufficientBalance) {
+		t.Fatalf("Withdraw(insufficient) error = %v, want ErrInsufficientBalance", err)
+	}
+	assertTransferBalance(t, service, "transfer-user", 6.05)
+}
+
 func TestBalanceFailuresDoNotCreateTransactions(t *testing.T) {
 	service := newService(newMemoryRepository())
 	ctx := context.Background()
@@ -260,5 +323,16 @@ func assertBalance(t *testing.T, service *implementation, available, locked floa
 	}
 	if gotAvailable != available || gotLocked != locked {
 		t.Errorf("balance = (%v, %v), want (%v, %v)", gotAvailable, gotLocked, available, locked)
+	}
+}
+
+func assertTransferBalance(t *testing.T, service *implementation, userID string, available float64) {
+	t.Helper()
+	gotAvailable, gotLocked, err := service.GetBalance(context.Background(), testMerchantID, userID, "USD")
+	if err != nil {
+		t.Fatalf("GetBalance() error = %v", err)
+	}
+	if gotAvailable != available || gotLocked != 0 {
+		t.Errorf("balance = (%v, %v), want (%v, 0)", gotAvailable, gotLocked, available)
 	}
 }

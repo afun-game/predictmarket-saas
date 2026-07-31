@@ -203,6 +203,10 @@ func writeWalletServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "insufficient_balance", "available balance is insufficient")
 	case errors.Is(err, wallet.ErrInsufficientLocked):
 		writeError(w, http.StatusConflict, "insufficient_locked_balance", "locked balance is insufficient")
+	case errors.Is(err, wallet.ErrTransferNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "wallet transfer was not found")
+	case errors.Is(err, wallet.ErrTransferConflict):
+		writeError(w, http.StatusConflict, "transfer_conflict", "merchant transaction ID was reused with different details")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 	}
