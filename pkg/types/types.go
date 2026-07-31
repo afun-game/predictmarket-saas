@@ -32,7 +32,7 @@ type Merchant struct {
 	AllowedIPs                  []string   `json:"-"`
 	// FeeRate mirrors the legacy column for persistence compatibility. It is
 	// fixed at zero until administrator fee configuration is available.
-	FeeRate   float64   `json:"-"`
+	FeeRate float64 `json:"-"`
 	// SeamlessDegraded is set by the callback dispatcher after repeated merchant
 	// callback failures; seamless order placement is refused while set.
 	SeamlessDegraded bool `json:"-"`
