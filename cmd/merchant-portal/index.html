@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PredictMarket 模拟商户门户</title>
+<style>
+  :root { color-scheme: light; --ink:#142033; --muted:#657188; --line:#e6eaf0; --primary:#216cff; }
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: var(--ink); }
+  h1 { font-size: 1.25rem; }
+  label { display:block; margin: .6rem 0 .2rem; font-size:.85rem; color: var(--muted); }
+  input { width:100%; box-sizing:border-box; padding:.5rem; border:1px solid var(--line); border-radius:6px; }
+  button { margin-top: 1rem; padding:.6rem 1.2rem; border:0; border-radius:6px; background:var(--primary); color:#fff; cursor:pointer; }
+  button.secondary { background:#eef2f7; color:var(--ink); }
+  section { border:1px solid var(--line); border-radius:10px; padding:1rem; margin:1rem 0; }
+  pre { background:#f6f8fb; padding:.75rem; border-radius:6px; overflow:auto; font-size:.8rem; }
+  .ok { color:#0a7d33; } .err { color:#c62828; }
+  details { margin-top:.75rem; }
+  summary { cursor:pointer; color:var(--muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<h1>PredictMarket 模拟商户门户</h1>
+<p>本地代理运行于 <code>localhost:8091</code>，目标 API：<code id="apiLabel"></code>。
+所有商户/admin 请求由代理服务端转发并签名，浏览器无跨域问题。</p>
+
+<section>
+  <label for="adminKey">Admin API Key（创建演示市场需要；留空则跳过步骤 2）</label>
+  <input id="adminKey" type="password" autocomplete="off">
+  <label for="merchantId">Merchant ID</label>
+  <input id="merchantId" type="text" autocomplete="off">
+  <label for="apiKey">Merchant API Key</label>
+  <input id="apiKey" type="password" autocomplete="off">
+  <label for="apiSecret">Merchant API Secret</label>
+  <input id="apiSecret" type="password" autocomplete="off">
+  <label for="userId">终端用户 ID（商户侧用户唯一 ID）</label>
+  <input id="userId" type="text" value="portal-user">
+  <div>
+    <button id="readyz">1. 探测环境</button>
+    <button id="register">1b. 注册测试商户</button>
+    <button id="demo" class="secondary">2. 创建演示事件+市场（需 admin）</button>
+    <button id="launch">3. 启动托管页</button>
+  </div>
+</section>
+
+<pre id="output">等待操作…</pre>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const apiLabel = $("apiLabel");
+apiLabel.textContent = window.location.origin;
+const saved = JSON.parse(localStorage.getItem("portal") || "{}");
+for (const key of ["adminKey", "merchantId", "apiKey", "apiSecret", "userId"]) {
+  if (saved[key]) $(key).value = saved[key];
+}
+function save() {
+  const values = {};
+  for (const key of ["adminKey", "merchantId", "apiKey", "apiSecret", "userId"]) {
+    values[key] = $(key).value.trim();
+  }
+  localStorage.setItem("portal", JSON.stringify(values));
+}
+async function call(path, body) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  const payload = await response.json();
+  return { status: response.status, payload };
+}
+function show(message) {
+  $("output").textContent = message;
+}
+function credentialBody() {
+  save();
+  return {
+    admin_key: $("adminKey").value.trim(),
+    merchant_id: $("merchantId").value.trim(),
+    api_key: $("apiKey").value.trim(),
+    api_secret: $("apiSecret").value.trim(),
+    user_id: $("userId").value.trim() || "portal-user",
+  };
+}
+$("readyz").addEventListener("click", async () => {
+  const { status, payload } = await call("/api/readyz");
+  show(`GET /readyz → ${status}\n${JSON.stringify(payload, null, 2)}`);
+});
+$("register").addEventListener("click", async () => {
+  save();
+  const suffix = Date.now().toString(36);
+  const { status, payload } = await call("/api/register", {
+    name: "Portal Merchant",
+    email: `portal-${suffix}@example.com`,
+    currency: "USD",
+    timezone: "UTC",
+  });
+  const data = payload && payload.data;
+  if (status === 201 && data) {
+    $("merchantId").value = data.merchant_id || "";
+    $("apiKey").value = data.api_key || "";
+    $("apiSecret").value = data.api_secret || "";
+    save();
+    show(`注册成功（HTTP ${status}）\nmerchant_id: ${data.merchant_id}\napi_key: ${data.api_key}\napi_secret: ${data.api_secret}`);
+  } else {
+    show(`注册失败（HTTP ${status}）\n${JSON.stringify(payload, null, 2)}`);
+  }
+});
+$("demo").addEventListener("click", async () => {
+  const { status, payload } = await call("/api/demo-setup", credentialBody());
+  show(`创建演示市场（HTTP ${status}）\n${JSON.stringify(payload, null, 2)}`);
+});
+$("launch").addEventListener("click", async () => {
+  const { status, payload } = await call("/api/launch", credentialBody());
+  if (status === 200 && payload.launch_url) {
+    show(`启动成功（HTTP ${status}）\nlaunch_url: ${payload.launch_url}`);
+    window.open(payload.launch_url, "_blank", "noopener");
+  } else {
+    show(`启动失败（HTTP ${status}）\n${JSON.stringify(payload, null, 2)}`);
+  }
+});
+</script>
+</body>
+</html>

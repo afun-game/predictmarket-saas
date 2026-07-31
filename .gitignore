@@ -1,8 +1,8 @@
 # Binaries
 /api
-merchant-sim
-sandbox-accelerator
-merchant-portal
+/merchant-sim
+/sandbox-accelerator
+/merchant-portal
 *.exe
 *.exe~
 *.dll
