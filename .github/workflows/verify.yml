@@ -165,11 +165,48 @@ jobs:
             --query SecretString \
             --output text | jq -er '.admin_api_key')"
 
+          SECRET_ARGS=(
+            --from-literal=DATABASE_URL="$TASK_DATABASE_URL"
+            --from-literal=REDIS_URL='redis://predictmarket-redis:6379/0'
+            --from-literal=NATS_URL='nats://predictmarket-nats:4222'
+            --from-literal=ADMIN_API_KEY="$TASK_ADMIN_API_KEY"
+          )
+
+          # V3 hosted routes are enabled only when all three values are
+          # present; warn instead of failing so the deployment still proceeds.
+          TASK_MERCHANT_SECRET_ENCRYPTION_KEY="$(aws secretsmanager get-secret-value \
+            --region "$AWS_REGION" \
+            --secret-id "$APPLICATION_SECRET_ID" \
+            --query SecretString \
+            --output text | jq -er '.merchant_secret_encryption_key // empty' 2>/dev/null || true)"
+          TASK_SESSION_JWT_SECRET="$(aws secretsmanager get-secret-value \
+            --region "$AWS_REGION" \
+            --secret-id "$APPLICATION_SECRET_ID" \
+            --query SecretString \
+            --output text | jq -er '.session_jwt_secret // empty' 2>/dev/null || true)"
+          TASK_HOSTED_UI_URL="$(aws secretsmanager get-secret-value \
+            --region "$AWS_REGION" \
+            --secret-id "$APPLICATION_SECRET_ID" \
+            --query SecretString \
+            --output text | jq -er '.hosted_ui_url // empty' 2>/dev/null || true)"
+          if [ -n "$TASK_MERCHANT_SECRET_ENCRYPTION_KEY" ]; then
+            SECRET_ARGS+=(--from-literal=MERCHANT_SECRET_ENCRYPTION_KEY="$TASK_MERCHANT_SECRET_ENCRYPTION_KEY")
+          else
+            echo "::warning::predictmarket/dev/application is missing merchant_secret_encryption_key; V3 routes stay disabled"
+          fi
+          if [ -n "$TASK_SESSION_JWT_SECRET" ]; then
+            SECRET_ARGS+=(--from-literal=SESSION_JWT_SECRET="$TASK_SESSION_JWT_SECRET")
+          else
+            echo "::warning::predictmarket/dev/application is missing session_jwt_secret; V3 routes stay disabled"
+          fi
+          if [ -n "$TASK_HOSTED_UI_URL" ]; then
+            SECRET_ARGS+=(--from-literal=HOSTED_UI_URL="$TASK_HOSTED_UI_URL")
+          else
+            echo "::warning::predictmarket/dev/application is missing hosted_ui_url; V3 routes stay disabled"
+          fi
+
           kubectl -n "$K8S_NAMESPACE" create secret generic predictmarket-secrets \
-            --from-literal=DATABASE_URL="$TASK_DATABASE_URL" \
-            --from-literal=REDIS_URL='redis://predictmarket-redis:6379/0' \
-            --from-literal=NATS_URL='nats://predictmarket-nats:4222' \
-            --from-literal=ADMIN_API_KEY="$TASK_ADMIN_API_KEY" \
+            "${SECRET_ARGS[@]}" \
             --dry-run=client --output=yaml | kubectl apply -f -
 
       - name: Deploy Redis and NATS dependencies

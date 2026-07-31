@@ -23,6 +23,26 @@ and application credentials are read at deployment time from AWS Secrets
 Manager via a GitHub OIDC role restricted to the `dev` branch; neither long-
 lived AWS credentials nor populated Kubernetes Secret manifests are committed.
 
+The development secret `predictmarket/dev/application` is read by the workflow.
+In addition to `admin_api_key`, store these keys to enable the V3 hosted API in
+the dev environment (the deploy job warns and leaves V3 disabled when absent):
+
+```bash
+aws secretsmanager put-secret-value \
+  --region ap-east-1 \
+  --secret-id predictmarket/dev/application \
+  --secret-string '{
+    "admin_api_key": "<existing>",
+    "merchant_secret_encryption_key": "<base64url 32 bytes>",
+    "session_jwt_secret": "<base64url 32 bytes>",
+    "hosted_ui_url": "https://<dev-host>/launch"
+  }'
+```
+
+Generate the two secrets with `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`.
+Set `hosted_ui_url` to the dev environment's public `/launch` address (the
+embedded hosted UI is served by the API at `GET /launch` when V3 is enabled).
+
 Redis and NATS data are disposable in this environment. The workflow runs the
 versioned migration Job before it waits for the API rollout. AWS resources and
 the namespace are bootstrap infrastructure; the workflow deliberately has no
