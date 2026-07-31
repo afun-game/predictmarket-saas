@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: predictmarket-api
+  labels:
+    app.kubernetes.io/name: predictmarket-api
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-east-1:042831095537:certificate/0cb10722-218b-43e0-92e2-7370fb0c8e12
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/success-codes: '200'
+spec:
+  ingressClassName: alb
+  rules:
+    - host: market.afx-game.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: predictmarket-api
+                port:
+                  number: 80

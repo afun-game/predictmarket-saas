@@ -6,4 +6,5 @@ resources:
   - redis.yaml
   - nats.yaml
   - api.yaml
+  - ingress.yaml
   - migration-job.yaml
