@@ -2,6 +2,7 @@
 /api
 merchant-sim
 sandbox-accelerator
+merchant-portal
 *.exe
 *.exe~
 *.dll

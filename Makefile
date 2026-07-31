@@ -37,6 +37,10 @@ run: ## Run the application locally
 merchant-sim: ## Run the V3 merchant callback/webhook simulator
 	go run ./cmd/merchant-sim
 
+.PHONY: merchant-portal
+merchant-portal: ## Run the local merchant portal against a target API (default localhost:8080)
+	go run ./cmd/merchant-portal -api "$${PORTAL_API:-http://localhost:8080}"
+
 .PHONY: test
 test: ## Run tests
 	@echo "Running tests..."
