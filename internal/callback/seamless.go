@@ -209,6 +209,9 @@ func (c *SeamlessCoordinator) enqueueRollback(
 	if c.worker == nil {
 		return errors.New("rollback enqueuer is not configured")
 	}
+	// The order is never persisted for an unknown/failed debit, so it must not
+	// be referenced by the rollback outbox row (FK would reject the insert).
+	// The transaction_id is the authoritative idempotency key for the merchant.
 	return c.worker.EnqueueRollback(
 		ctx,
 		prepared.Order.MerchantID,
@@ -216,7 +219,7 @@ func (c *SeamlessCoordinator) enqueueRollback(
 		prepared.Order.Currency,
 		prepared.CollateralCents,
 		transactionID,
-		prepared.Order.ID,
+		"",
 		prepared.Order.MarketID,
 	)
 }

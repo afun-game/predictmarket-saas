@@ -1,10 +1,10 @@
 # v0.3.0 方案设计：商户站点集成 API（Launch / 无缝钱包 / 结算 / 对账）
 
-> **状态（2026-07-31）**：Phase 1–2 核心实现已落地；Phase 3 核心路径已接入，
-> 但混沌/并发验收、void 事件和生产级接入契约仍待补齐。
-> 参照体育博彩 / 游戏供应商（provider）的标准集成模式设计：
-> 站点服务器换取用户启动 URL、单一（无缝）钱包回调下注、结算推送 + 拉取对账。
-> Phase 4（沙箱和真实托管联调）待实施；本仓库已补齐 `merchant-sim` 与认证清单初稿。
+> **状态（2026-07-31 更新）**：Phase 1–2 完成；Phase 3 功能、并发验收与
+> 混沌验收均已落地（含 void 事件、熔断、IP 白名单、回调验证、审计、分层限流与
+> 实时余额回调）；Phase 4 的配套资产（`merchant-sim`、沙箱结算加速器、托管前端
+> 原型、认证清单）齐备，仅剩真实环境联调与商务决策项（见 §十一）。
+> 实施与验收记录见 `docs/V3_ACCEPTANCE_CHECKLIST.md`。
 
 ---
 
@@ -323,6 +323,12 @@ v0.2 遗留：`api_secret` 无盐 SHA-256 且是死代码。本期正式启用�
   `X-PM-Timestamp` 偏差 > 300s 拒绝；nonce（Idempotency-Key 兼任）Redis 去重防重放。
 - **轮换**：primary/secondary 双密钥并存窗口（≤7 天），双验签，商户切完删旧。
 - v2 全端点强制验签；v1 维持 Bearer-only 直至下线。
+- **防重放实现决策（已定）**：v2 变更类端点的幂等由主库唯一约束承担——
+  入金/出金以 `(merchant_id, merchant_txn_id)`、下单以 `idempotency_key`
+  唯一去重，因此这些端点不再占用 Redis nonce（`RequireSignedMerchantWithoutReplay`）；
+  `POST /v2/sessions` 与 `DELETE /v2/sessions/{id}` 仍走 Redis nonce 防重放。
+  效果与 §7.1「nonce Redis 去重」等价（重复业务操作无法造成重复记账），
+  但省去一次 Redis 往返。
 
 ### 7.2 回调签名（平台→站点）
 

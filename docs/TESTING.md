@@ -73,6 +73,29 @@ Integration-only tests (PostgreSQL): `TestSettlementPostgresVoidRefundsFullColla
 plus the existing transfer and seamless outbox cases. The full V3 acceptance
 gate lives in `docs/V3_ACCEPTANCE_CHECKLIST.md`.
 
+## Seamless chaos suite (Phase 3 acceptance)
+
+`internal/callback/seamless_chaos_integration_test.go` drives the platform
+seamless coordinator against the in-process merchant simulator
+(`internal/merchantsim`, the same counterpart shipped in `cmd/merchant-sim`)
+and requires PostgreSQL (`INTEGRATION_TEST=1`):
+
+- healthy debit places an order with shadow-wallet conservation;
+- debit timeout → `ErrDebitUnknown`, rollback enqueued with the same
+  transaction ID, delivered, cleanly reversed, duplicate redelivery is a
+  no-op;
+- transient 5xx → rollback delivered; rollback-before-bet credits once;
+- persistent 5xx → dead letter → runbook replay re-delivers the original row;
+- insufficient funds → rejected with no rollback row;
+- duplicate debit (same idempotency key) → one callback;
+- settlement credit delivered and duplicate redelivery acknowledged without a
+  second balance change.
+
+The suite caught a real bug: rollbacks for unknown debits referenced the
+never-persisted order, failing the `callback_outbox.order_id` foreign key and
+silently dropping the rollback. They now carry `order_id = NULL` and are
+reconciled by `transaction_id`.
+
 ## Share-model regression baseline
 
 `make test-v2-regression` verifies the share-model financial invariants:

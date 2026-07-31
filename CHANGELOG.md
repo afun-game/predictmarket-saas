@@ -36,6 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `V3_QUERY_RATE_LIMIT`, `V3_USER_RATE_LIMIT`) for acceptance runs.
 - Integration and end-to-end coverage now exercises market void and the
   1,000-order seamless load path (`make test-e2e`).
+- Seamless chaos suite (`internal/callback/seamless_chaos_integration_test.go`)
+  drives the coordinator through timeout / 5xx / rollback-before-bet /
+  duplicate-delivery / dead-letter-replay faults against the merchant
+  simulator; `internal/merchantsim` now hosts the simulator logic shared with
+  `cmd/merchant-sim` (adds transient `-fail-count` and `-delay-count`
+  injection).
+- Fix: rollback callbacks for unknown debits no longer reference the
+  never-persisted order, so the outbox insert no longer fails the
+  `callback_outbox.order_id` foreign key and the rollback is always delivered.
 
 ### Added
 - Initial project setup with Twill framework

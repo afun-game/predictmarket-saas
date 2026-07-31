@@ -76,6 +76,9 @@ test-integration-ci: ## Run integration tests against already-running dependenci
 		go test -race -count=1 -run '^TestSettlementPostgres' ./internal/settlement
 	INTEGRATION_TEST=1 \
 		DATABASE_URL="$${DATABASE_URL:-postgres://predictmarket:password@localhost:5432/predictmarket?sslmode=disable}" \
+		go test -race -count=1 -run '^TestSeamlessChaos' ./internal/callback
+	INTEGRATION_TEST=1 \
+		DATABASE_URL="$${DATABASE_URL:-postgres://predictmarket:password@localhost:5432/predictmarket?sslmode=disable}" \
 		NATS_URL="$${NATS_URL:-nats://localhost:4222}" \
 		go test -race -count=1 -run '^TestSettlementWorkerPostgresNATSIntegration$$' ./internal/settlementworker
 	INTEGRATION_TEST=1 \

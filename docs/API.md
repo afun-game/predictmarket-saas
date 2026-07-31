@@ -905,7 +905,9 @@ above remain the source of truth for reconciliation.
 
 Use the [V3 acceptance checklist](V3_ACCEPTANCE_CHECKLIST.md) and
 `go run ./cmd/merchant-sim` to exercise the callback contract before requesting
-a production seamless-wallet key. In the sandbox, run
+a production seamless-wallet key. The same counterpart is driven automatically
+by the platform chaos suite (`internal/callback/seamless_chaos_integration_test.go`,
+`INTEGRATION_TEST=1`). In the sandbox, run
 `go run ./cmd/sandbox-accelerator -merchant-key <key> -admin-key <key>` to
 automatically resolve due events so settlement webhooks, seamless credits, and
 reconciliation can be tested end to end.
