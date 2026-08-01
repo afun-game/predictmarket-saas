@@ -17,6 +17,7 @@ import (
 
 type merchantContextKey struct{}
 type userSessionContextKey struct{}
+type adminContextKey struct{}
 
 const (
 	signatureTimestampHeader = "X-PM-Timestamp"
@@ -165,6 +166,95 @@ func RequireUserSession(validator UserSessionValidator, next http.Handler) http.
 	})
 }
 
+// AdminPrincipal is the authenticated administrator identity carried by a
+// console session cookie.
+type AdminPrincipal struct {
+	ID       string
+	Username string
+	Role     string
+}
+
+// AdminSessionValidator verifies an administrator session JWT.
+type AdminSessionValidator interface {
+	ValidateAdminSession(ctx context.Context, token string) (*AdminPrincipal, error)
+}
+
+const (
+	// AdminSessionCookie is the HttpOnly cookie holding the console session.
+	AdminSessionCookie = "pm_admin_session"
+	adminSessionMaxAge = 12 * 60 * 60 // seconds
+)
+
+// RequireAdminSession authenticates console requests via the session cookie.
+func RequireAdminSession(validator AdminSessionValidator, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie(AdminSessionCookie)
+		if err != nil || cookie.Value == "" {
+			writeAdminUnauthorized(w)
+			return
+		}
+		principal, err := validator.ValidateAdminSession(r.Context(), cookie.Value)
+		if err != nil {
+			writeAdminUnauthorized(w)
+			return
+		}
+		ctx := context.WithValue(r.Context(), adminContextKey{}, principal)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// RequireAdminRole restricts a route to a specific admin role.
+func RequireAdminRole(role string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		principal, ok := AdminPrincipalFromContext(r.Context())
+		if !ok || principal.Role != role {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			if err := json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]string{
+					"code":    "forbidden",
+					"message": "this action requires the " + role + " role",
+				},
+			}); err != nil {
+				return
+			}
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// AdminPrincipalFromContext returns the authenticated administrator.
+func AdminPrincipalFromContext(ctx context.Context) (*AdminPrincipal, bool) {
+	principal, ok := ctx.Value(adminContextKey{}).(*AdminPrincipal)
+	return principal, ok
+}
+
+// SetAdminSessionCookie issues the console session cookie.
+func SetAdminSessionCookie(w http.ResponseWriter, token string, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     AdminSessionCookie,
+		Value:    token,
+		Path:     "/",
+		MaxAge:   adminSessionMaxAge,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// ClearAdminSessionCookie removes the console session cookie.
+func ClearAdminSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     AdminSessionCookie,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
 // RequireAdmin authenticates an administrator Bearer token.
 func RequireAdmin(adminAPIKey string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -245,6 +335,19 @@ func writeUnauthorized(w http.ResponseWriter) {
 		"error": map[string]string{
 			"code":    "unauthorized",
 			"message": "a valid API key is required",
+		},
+	}); err != nil {
+		return
+	}
+}
+
+func writeAdminUnauthorized(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]string{
+			"code":    "unauthorized",
+			"message": "a valid admin session is required",
 		},
 	}); err != nil {
 		return

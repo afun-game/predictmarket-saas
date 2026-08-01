@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Admin console)
+- SaaS 后台管理控制台（第一期）：零构建 SPA 嵌入 API 二进制，`/admin` 托管。
+- 管理员身份体系：`admin_accounts` + `admin_action_logs`（迁移 016），
+  bcrypt 密码登录、5 次失败锁定 15 分钟、会话 JWT（HttpOnly Cookie，
+  复用 `SESSION_JWT_SECRET`）、`super_admin`/`operator` 两级 RBAC、
+  `ADMIN_USERNAME`/`ADMIN_PASSWORD` 引导首个超管。
+- 商户管理：列表/搜索/详情（含用户/市场/订单/交易量统计）、费率/币种/
+  时区配置（解除 `merchants_fee_rate_disabled` 冻结）、挂起/启用（确认词
+  双确认 + 审计）；挂起商户在所有 API 鉴权边界立即失效。
+- 商户用户管理：用户列表/详情（钱包余额与锁定）、流水查询、封禁/解封；
+  封禁用户在 v3 会话创建/换取/下单/撤单链路返回 403。
+- 事件管理：列表/搜索、创建/编辑、状态流转、结算操作台（确认词）；
+  已结算事件不可再编辑。
+- 市场管理：列表/搜索、详情（订单簿 + 事件标题）、状态流转、加流动性、
+  作废（确认词）；`/api/v1/admin/markets/{id}/void` 改挂会话鉴权。
+- 监控与仪表盘：全局订单/资金流水检索、审计日志查询、平台总览聚合
+  （商户/用户/市场/今日订单与交易量/手续费/待结算 + 14 天序列）。
+- 每个管理员写操作写入 `admin_action_logs`（操作人/动作/资源/前后状态/IP）。
+- 管理台前端 `web/admin`：登录、仪表盘、商户/用户/事件/市场/订单/流水/
+  审计 8 个页面，全部中文，复用托管页视觉语言。
+
 ### Added (V3 hardening)
 - Per-merchant seamless circuit breaker: five consecutive callback/webhook
   failures mark a merchant degraded, seamless orders are refused, and a

@@ -21,10 +21,10 @@ func init() {
 		Iface: reflect.TypeOf((*Service)(nil)).Elem(),
 		Impl:  reflect.TypeOf(implementation{}),
 		LocalStubFn: func(impl any, caller string, tracer trace.Tracer) any {
-			return service_local_stub{impl: impl.(Service), tracer: tracer, configureIntegrationMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ConfigureIntegration", Remote: false, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Get", Remote: false, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "List", Remote: false, Generated: true}), registerMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Register", Remote: false, Generated: true}), reissueV3SecretMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ReissueV3Secret", Remote: false, Generated: true}), updateMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Update", Remote: false, Generated: true}), validateAPIKeyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ValidateAPIKey", Remote: false, Generated: true})}
+			return service_local_stub{impl: impl.(Service), tracer: tracer, configureIntegrationMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ConfigureIntegration", Remote: false, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Get", Remote: false, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "List", Remote: false, Generated: true}), registerMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Register", Remote: false, Generated: true}), reissueV3SecretMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ReissueV3Secret", Remote: false, Generated: true}), updateMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Update", Remote: false, Generated: true}), updateStatusMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "UpdateStatus", Remote: false, Generated: true}), validateAPIKeyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ValidateAPIKey", Remote: false, Generated: true})}
 		},
 		ClientStubFn: func(stub codegen.Stub, caller string) any {
-			return service_client_stub{stub: stub, configureIntegrationMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ConfigureIntegration", Remote: true, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Get", Remote: true, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "List", Remote: true, Generated: true}), registerMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Register", Remote: true, Generated: true}), reissueV3SecretMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ReissueV3Secret", Remote: true, Generated: true}), updateMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Update", Remote: true, Generated: true}), validateAPIKeyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ValidateAPIKey", Remote: true, Generated: true})}
+			return service_client_stub{stub: stub, configureIntegrationMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ConfigureIntegration", Remote: true, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Get", Remote: true, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "List", Remote: true, Generated: true}), registerMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Register", Remote: true, Generated: true}), reissueV3SecretMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ReissueV3Secret", Remote: true, Generated: true}), updateMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "Update", Remote: true, Generated: true}), updateStatusMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "UpdateStatus", Remote: true, Generated: true}), validateAPIKeyMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/merchant/Service", Method: "ValidateAPIKey", Remote: true, Generated: true})}
 		},
 		ServerStubFn: func(impl any, addLoad func(uint64, float64)) codegen.Server {
 			return service_server_stub{impl: impl.(Service), addLoad: addLoad}
@@ -53,6 +53,7 @@ type service_local_stub struct {
 	registerMetrics             *codegen.MethodMetrics
 	reissueV3SecretMetrics      *codegen.MethodMetrics
 	updateMetrics               *codegen.MethodMetrics
+	updateStatusMetrics         *codegen.MethodMetrics
 	validateAPIKeyMetrics       *codegen.MethodMetrics
 }
 
@@ -179,6 +180,26 @@ func (s service_local_stub) Update(ctx context.Context, a0 string, a1 *UpdateReq
 	return s.impl.Update(ctx, a0, a1)
 }
 
+func (s service_local_stub) UpdateStatus(ctx context.Context, a0 string, a1 string) (r0 *types.Merchant, err error) {
+	// Update metrics.
+	begin := s.updateStatusMetrics.Begin()
+	defer func() { s.updateStatusMetrics.End(begin, err != nil, 0, 0) }()
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.tracer.Start(ctx, "merchant.Service.UpdateStatus", trace.WithSpanKind(trace.SpanKindInternal))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
+			span.End()
+		}()
+	}
+
+	return s.impl.UpdateStatus(ctx, a0, a1)
+}
+
 func (s service_local_stub) ValidateAPIKey(ctx context.Context, a0 string) (r0 *types.Merchant, err error) {
 	// Update metrics.
 	begin := s.validateAPIKeyMetrics.Begin()
@@ -209,6 +230,7 @@ type service_client_stub struct {
 	registerMetrics             *codegen.MethodMetrics
 	reissueV3SecretMetrics      *codegen.MethodMetrics
 	updateMetrics               *codegen.MethodMetrics
+	updateStatusMetrics         *codegen.MethodMetrics
 	validateAPIKeyMetrics       *codegen.MethodMetrics
 }
 
@@ -551,6 +573,64 @@ func (s service_client_stub) Update(ctx context.Context, a0 string, a1 *UpdateRe
 	return
 }
 
+func (s service_client_stub) UpdateStatus(ctx context.Context, a0 string, a1 string) (r0 *types.Merchant, err error) {
+	// Update metrics.
+	var requestBytes, replyBytes int
+	begin := s.updateStatusMetrics.Begin()
+	defer func() { s.updateStatusMetrics.End(begin, err != nil, requestBytes, replyBytes) }()
+
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.stub.Tracer().Start(ctx, "merchant.Service.UpdateStatus", trace.WithSpanKind(trace.SpanKindClient))
+	}
+
+	defer func() {
+		// Catch and return any panics detected during encoding/decoding/rpc.
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+			if err != nil {
+				err = errors.Join(twill.RemoteCallError, err)
+			}
+		}
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+
+	}()
+
+	// Preallocate a buffer of the right size.
+	size := 0
+	size += (4 + len(a0))
+	size += (4 + len(a1))
+	enc := codegen.NewEncoder()
+	enc.Reset(size)
+
+	// Encode arguments.
+	enc.String(a0)
+	enc.String(a1)
+	var shardKey uint64
+
+	// Call the remote method.
+	requestBytes = len(enc.Data())
+	var results []byte
+	results, err = s.stub.Run(ctx, 6, enc.Data(), shardKey)
+	replyBytes = len(results)
+	if err != nil {
+		err = errors.Join(twill.RemoteCallError, err)
+		return
+	}
+
+	// Decode the results.
+	dec := codegen.NewDecoder(results)
+	r0 = servicetwill_dec_ptr_Merchant_f549ca00(dec)
+	err = dec.Error()
+	return
+}
+
 func (s service_client_stub) ValidateAPIKey(ctx context.Context, a0 string) (r0 *types.Merchant, err error) {
 	// Update metrics.
 	var requestBytes, replyBytes int
@@ -593,7 +673,7 @@ func (s service_client_stub) ValidateAPIKey(ctx context.Context, a0 string) (r0 
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 6, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 7, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -655,6 +735,8 @@ func (s service_server_stub) GetStubFn(method string) func(ctx context.Context, 
 		return s.reissueV3Secret
 	case "Update":
 		return s.update
+	case "UpdateStatus":
+		return s.updateStatus
 	case "ValidateAPIKey":
 		return s.validateAPIKey
 	default:
@@ -818,6 +900,33 @@ func (s service_server_stub) update(ctx context.Context, args []byte) (res []byt
 	return enc.Data(), nil
 }
 
+func (s service_server_stub) updateStatus(ctx context.Context, args []byte) (res []byte, err error) {
+	// Catch and return any panics detected during encoding/decoding/rpc.
+	defer func() {
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+		}
+	}()
+
+	// Decode arguments.
+	dec := codegen.NewDecoder(args)
+	var a0 string
+	a0 = dec.String()
+	var a1 string
+	a1 = dec.String()
+
+	// TODO(rgrandl): The deferred function above will recover from panics in the
+	// user code: fix this.
+	// Call the local method.
+	r0, appErr := s.impl.UpdateStatus(ctx, a0, a1)
+
+	// Encode the results.
+	enc := codegen.NewEncoder()
+	servicetwill_enc_ptr_Merchant_f549ca00(enc, r0)
+	enc.Error(appErr)
+	return enc.Data(), nil
+}
+
 func (s service_server_stub) validateAPIKey(ctx context.Context, args []byte) (res []byte, err error) {
 	// Catch and return any panics detected during encoding/decoding/rpc.
 	defer func() {
@@ -879,6 +988,11 @@ func (s service_reflect_stub) ReissueV3Secret(ctx context.Context, a0 string) (r
 
 func (s service_reflect_stub) Update(ctx context.Context, a0 string, a1 *UpdateRequest) (r0 *types.Merchant, err error) {
 	err = s.caller("Update", ctx, []any{a0, a1}, []any{&r0})
+	return
+}
+
+func (s service_reflect_stub) UpdateStatus(ctx context.Context, a0 string, a1 string) (r0 *types.Merchant, err error) {
+	err = s.caller("UpdateStatus", ctx, []any{a0, a1}, []any{&r0})
 	return
 }
 
@@ -1001,9 +1115,10 @@ var _ codegen.AutoMarshal = (*UpdateRequest)(nil)
 
 type __is_UpdateRequest[T ~struct {
 	twill.AutoMarshal
-	Name     *string "json:\"name,omitempty\""
-	Currency *string "json:\"currency,omitempty\""
-	Timezone *string "json:\"timezone,omitempty\""
+	Name     *string  "json:\"name,omitempty\""
+	Currency *string  "json:\"currency,omitempty\""
+	Timezone *string  "json:\"timezone,omitempty\""
+	FeeRate  *float64 "json:\"fee_rate,omitempty\""
 }] struct{}
 
 var _ __is_UpdateRequest[UpdateRequest]
@@ -1015,6 +1130,7 @@ func (x *UpdateRequest) WeaverMarshal(enc *codegen.Encoder) {
 	servicetwill_enc_ptr_string_3e89801b(enc, x.Name)
 	servicetwill_enc_ptr_string_3e89801b(enc, x.Currency)
 	servicetwill_enc_ptr_string_3e89801b(enc, x.Timezone)
+	servicetwill_enc_ptr_float64_a272bb92(enc, x.FeeRate)
 }
 
 func (x *UpdateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
@@ -1024,6 +1140,25 @@ func (x *UpdateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.Name = servicetwill_dec_ptr_string_3e89801b(dec)
 	x.Currency = servicetwill_dec_ptr_string_3e89801b(dec)
 	x.Timezone = servicetwill_dec_ptr_string_3e89801b(dec)
+	x.FeeRate = servicetwill_dec_ptr_float64_a272bb92(dec)
+}
+
+func servicetwill_enc_ptr_float64_a272bb92(enc *codegen.Encoder, arg *float64) {
+	if arg == nil {
+		enc.Bool(false)
+	} else {
+		enc.Bool(true)
+		enc.Float64(*arg)
+	}
+}
+
+func servicetwill_dec_ptr_float64_a272bb92(dec *codegen.Decoder) *float64 {
+	if !dec.Bool() {
+		return nil
+	}
+	var res float64
+	res = dec.Float64()
+	return &res
 }
 
 // Encoding/decoding implementations.
@@ -1125,6 +1260,16 @@ func servicetwill_dec_ptr_UpdateRequest_408b99ac(dec *codegen.Decoder) *UpdateRe
 
 // Size implementations.
 
+// servicetwill_size_ptr_float64_a272bb92 returns the size (in bytes) of the serialization
+// of the provided type.
+func servicetwill_size_ptr_float64_a272bb92(x *float64) int {
+	if x == nil {
+		return 1
+	} else {
+		return 1 + 8
+	}
+}
+
 // servicetwill_size_ptr_RegisterRequest_05b44956 returns the size (in bytes) of the serialization
 // of the provided type.
 func servicetwill_size_ptr_RegisterRequest_05b44956(x *RegisterRequest) int {
@@ -1175,5 +1320,6 @@ func servicetwill_size_UpdateRequest_c13a9b45(x *UpdateRequest) int {
 	size += servicetwill_size_ptr_string_3e89801b(x.Name)
 	size += servicetwill_size_ptr_string_3e89801b(x.Currency)
 	size += servicetwill_size_ptr_string_3e89801b(x.Timezone)
+	size += servicetwill_size_ptr_float64_a272bb92(x.FeeRate)
 	return size
 }

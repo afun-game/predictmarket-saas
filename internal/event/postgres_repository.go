@@ -232,6 +232,26 @@ WHERE id = $1 AND status = $2`
 	return requireUpdatedRow(result)
 }
 
+// Update persists editable event fields.
+func (r *postgresRepository) Update(ctx context.Context, value *types.Event) error {
+	const query = `
+UPDATE events
+SET title = $2, description = $3, resolution_time = $4, updated_at = NOW()
+WHERE id = $1`
+	result, err := r.database.ExecContext(
+		ctx,
+		query,
+		value.ID,
+		value.Title,
+		value.Description,
+		value.ResolutionTime,
+	)
+	if err != nil {
+		return fmt.Errorf("update event row: %w", err)
+	}
+	return requireUpdatedRow(result)
+}
+
 func (r *postgresRepository) Resolve(
 	ctx context.Context,
 	eventID string,

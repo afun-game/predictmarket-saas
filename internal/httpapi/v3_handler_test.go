@@ -26,6 +26,40 @@ type signedMerchantStub struct {
 	merchant *types.Merchant
 }
 
+// TestRequireActivePlatformUserBlocksBlockedUsers pins the blocked-user
+// enforcement at session and order boundaries.
+func TestRequireActivePlatformUserBlocksBlockedUsers(t *testing.T) {
+	t.Parallel()
+	repo := platformuser.NewMemoryRepository()
+	if err := repo.Upsert(context.Background(), platformuser.User{MerchantID: "m1", ExternalUserID: "u1", Locale: "en-US", Status: "active"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Upsert(context.Background(), platformuser.User{MerchantID: "m1", ExternalUserID: "u2", Locale: "en-US", Status: "blocked"}); err != nil {
+		t.Fatal(err)
+	}
+	handler := &v3Handler{platformUsers: repo}
+
+	activeRec := httptest.NewRecorder()
+	if !handler.requireActivePlatformUser(activeRec, httptest.NewRequest(http.MethodGet, "/", nil), "m1", "u1") {
+		t.Fatalf("active user was rejected: %s", activeRec.Body.String())
+	}
+
+	blockedRec := httptest.NewRecorder()
+	if handler.requireActivePlatformUser(blockedRec, httptest.NewRequest(http.MethodGet, "/", nil), "m1", "u2") {
+		t.Fatal("blocked user was accepted")
+	}
+	if blockedRec.Code != http.StatusForbidden {
+		t.Fatalf("blocked user status = %d, want 403", blockedRec.Code)
+	}
+
+	// Unknown users are treated as active: they are provisioned at session
+	// creation, and a lookup miss must not break existing flows.
+	unknownRec := httptest.NewRecorder()
+	if !handler.requireActivePlatformUser(unknownRec, httptest.NewRequest(http.MethodGet, "/", nil), "m1", "nobody") {
+		t.Fatalf("unknown user was rejected: %s", unknownRec.Body.String())
+	}
+}
+
 func (s *signedMerchantStub) ValidateSignedRequest(
 	_ context.Context,
 	_ string,

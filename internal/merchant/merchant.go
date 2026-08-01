@@ -42,6 +42,7 @@ type Service interface {
 	Register(ctx context.Context, req *RegisterRequest) (*types.Merchant, error)
 	Get(ctx context.Context, merchantID string) (*types.Merchant, error)
 	Update(ctx context.Context, merchantID string, req *UpdateRequest) (*types.Merchant, error)
+	UpdateStatus(ctx context.Context, merchantID, status string) (*types.Merchant, error)
 	ConfigureIntegration(ctx context.Context, merchantID string, req *IntegrationRequest) (*types.Merchant, error)
 	ReissueV3Secret(ctx context.Context, merchantID string) (*types.Merchant, error)
 	ValidateAPIKey(ctx context.Context, apiKey string) (*types.Merchant, error)
@@ -60,9 +61,10 @@ type RegisterRequest struct {
 type UpdateRequest struct {
 	twill.AutoMarshal
 
-	Name     *string `json:"name,omitempty"`
-	Currency *string `json:"currency,omitempty"`
-	Timezone *string `json:"timezone,omitempty"`
+	Name     *string  `json:"name,omitempty"`
+	Currency *string  `json:"currency,omitempty"`
+	Timezone *string  `json:"timezone,omitempty"`
+	FeeRate  *float64 `json:"fee_rate,omitempty"`
 }
 
 // IntegrationRequest configures V3 wallet mode and merchant callback endpoints.
@@ -227,6 +229,37 @@ func (s *implementation) Update(
 	merchant.UpdatedAt = s.now().UTC()
 	if err := s.repository.Update(ctx, merchant); err != nil {
 		return nil, fmt.Errorf("update merchant: %w", err)
+	}
+	merchant.APISecret = ""
+	merchant.APIKey = ""
+	return merchant, nil
+}
+
+// UpdateStatus changes a merchant's lifecycle status (active, suspended,
+// inactive). Suspended merchants are refused at every API authentication
+// boundary (see ValidateAPIKey).
+func (s *implementation) UpdateStatus(ctx context.Context, merchantID, status string) (*types.Merchant, error) {
+	merchantID = strings.TrimSpace(merchantID)
+	status = strings.ToLower(strings.TrimSpace(status))
+	if merchantID == "" {
+		return nil, &ValidationError{Field: "merchant_id", Message: "is required"}
+	}
+	if status != "active" && status != "suspended" && status != "inactive" {
+		return nil, &ValidationError{Field: "status", Message: "must be active, suspended or inactive"}
+	}
+	merchant, err := s.repository.GetByID(ctx, merchantID)
+	if err != nil {
+		return nil, fmt.Errorf("get merchant for status update: %w", err)
+	}
+	if merchant.Status == status {
+		merchant.APISecret = ""
+		merchant.APIKey = ""
+		return merchant, nil
+	}
+	merchant.Status = status
+	merchant.UpdatedAt = s.now().UTC()
+	if err := s.repository.Update(ctx, merchant); err != nil {
+		return nil, fmt.Errorf("update merchant status: %w", err)
 	}
 	merchant.APISecret = ""
 	merchant.APIKey = ""
@@ -437,6 +470,13 @@ func applyUpdate(merchant *types.Merchant, req *UpdateRequest) error {
 			return &ValidationError{Field: "timezone", Message: "must be an IANA timezone"}
 		}
 		merchant.Timezone = timezone
+	}
+	if req.FeeRate != nil {
+		rate := *req.FeeRate
+		if rate < 0 || rate > 1 {
+			return &ValidationError{Field: "fee_rate", Message: "must be between 0 and 1"}
+		}
+		merchant.FeeRate = rate
 	}
 	return nil
 }

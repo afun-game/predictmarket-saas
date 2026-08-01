@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/afun-game/predictmarket-saas/internal/adminauth"
+	"github.com/afun-game/predictmarket-saas/internal/adminquery"
 	"github.com/afun-game/predictmarket-saas/internal/analytics"
 	"github.com/afun-game/predictmarket-saas/internal/audit"
 	"github.com/afun-game/predictmarket-saas/internal/callback"
@@ -41,6 +43,7 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/v2query"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/web/hosted"
+	"github.com/afun-game/predictmarket-saas/web/admin"
 	"github.com/nxsky/twill"
 	"github.com/nxsky/twill/runtime/middleware"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -167,6 +170,20 @@ func run(
 		mux.Handle("GET /launch/", hostedui.Handler())
 		mux.Handle("GET /app.js", hostedui.Handler())
 		mux.Handle("GET /styles.css", hostedui.Handler())
+		// Serve the embedded admin console at /admin. It shares the
+		// SESSION_JWT_SECRET so it is enabled together with the V3 stack.
+		adminConfig, closeAdmin, err := configuredAdmin(resources, app.settlement.Get())
+		if err != nil {
+			slog.Warn("Admin console is disabled", "error", err)
+		} else {
+			defer closeAdmin()
+			optionalServices = append(optionalServices, adminConfig)
+			mux.Handle("GET /admin", adminui.Handler())
+			mux.Handle("GET /admin/", adminui.Handler())
+			mux.Handle("GET /admin/app.js", adminui.Handler())
+			mux.Handle("GET /admin/styles.css", adminui.Handler())
+			slog.Info("Admin console is enabled at /admin")
+		}
 		slog.Info("V3 hosted API is enabled")
 	}
 	api := httpapi.NewHandler(
@@ -186,6 +203,42 @@ func run(
 	api = middleware.RequestID()(api)
 	mux.Handle("/", api)
 	return serveHTTP(ctx, app.public, mux)
+}
+
+// configuredAdmin builds the admin console backend over the session JWT
+// secret. It shares SESSION_JWT_SECRET with the V3 stack, so the console is
+// enabled together with V3. ADMIN_USERNAME/ADMIN_PASSWORD bootstrap the first
+// super-admin account when no admin account exists yet.
+func configuredAdmin(resources resourceEndpoints, settlementService settlement.Service) (httpapi.AdminConfig, func(), error) {
+	sessionSecret := strings.TrimSpace(os.Getenv("SESSION_JWT_SECRET"))
+	if sessionSecret == "" {
+		return httpapi.AdminConfig{}, func() {}, errors.New("SESSION_JWT_SECRET is required for the admin console")
+	}
+	database, err := sql.Open("pgx", resources.databaseURL)
+	if err != nil {
+		return httpapi.AdminConfig{}, func() {}, fmt.Errorf("open admin database: %w", err)
+	}
+	manager, err := adminauth.NewManagerFromEncodedSecret(
+		adminauth.NewPostgresRepository(database),
+		adminauth.NewPostgresActionLog(database),
+		sessionSecret,
+	)
+	if err != nil {
+		_ = database.Close()
+		return httpapi.AdminConfig{}, func() {}, err
+	}
+	if username := strings.TrimSpace(os.Getenv("ADMIN_USERNAME")); username != "" {
+		if err := manager.EnsureBootstrap(context.Background(), username, os.Getenv("ADMIN_PASSWORD")); err != nil {
+			slog.Warn("admin bootstrap account was not created", "error", err)
+		}
+	}
+	config := httpapi.AdminConfig{
+		Accounts:      manager,
+		Queries:       adminquery.New(database),
+		PlatformUsers: platformuser.NewPostgresRepository(database),
+		Settlement:    settlementService,
+	}
+	return config, func() { _ = database.Close() }, nil
 }
 
 func configuredV3(resources resourceEndpoints) (httpapi.V3Config, func(), bool, error) {

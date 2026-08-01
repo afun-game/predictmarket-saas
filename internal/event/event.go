@@ -24,6 +24,8 @@ var (
 	ErrNotFound          = errors.New("event not found")
 	ErrAlreadyExists     = errors.New("event already exists")
 	ErrInvalidTransition = errors.New("invalid event status transition")
+	// ErrResolved prevents edits to events that have been resolved.
+	ErrResolved = errors.New("event has been resolved")
 )
 
 // Service manages prediction events and their lifecycle.
@@ -32,6 +34,7 @@ type Service interface {
 	SyncSource(ctx context.Context, req *SyncRequest) error
 	Get(ctx context.Context, eventID string) (*types.Event, error)
 	List(ctx context.Context, filters *ListFilters) ([]*types.Event, int, error)
+	Update(ctx context.Context, eventID string, req *UpdateRequest) (*types.Event, error)
 	UpdateStatus(ctx context.Context, eventID string, status string) error
 	Resolve(ctx context.Context, eventID string, outcome string) error
 	ResolveSource(ctx context.Context, sourceID string, outcome string) error
@@ -69,6 +72,16 @@ type ListFilters struct {
 	Status   string `json:"status,omitempty"`
 	Page     int    `json:"page,omitempty"`
 	Limit    int    `json:"limit,omitempty"`
+}
+
+// UpdateRequest carries editable event fields. Resolution is not editable;
+// use UpdateStatus/Resolve for lifecycle changes.
+type UpdateRequest struct {
+	twill.AutoMarshal
+
+	Title          *string `json:"title,omitempty"`
+	Description    *string `json:"description,omitempty"`
+	ResolutionTime *string `json:"resolution_time,omitempty"` // RFC3339
 }
 
 // ValidationError identifies an invalid event request field.
@@ -226,6 +239,52 @@ func (s *implementation) List(
 	}
 	s.putCachedEventList(ctx, normalized, cacheVersion, values, total)
 	return values, total, nil
+}
+
+// Update edits editable event fields. Resolved events are immutable.
+func (s *implementation) Update(
+	ctx context.Context,
+	eventID string,
+	req *UpdateRequest,
+) (*types.Event, error) {
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" {
+		return nil, &ValidationError{Field: "event_id", Message: "is required"}
+	}
+	if req == nil {
+		return nil, &ValidationError{Field: "request", Message: "is required"}
+	}
+	value, err := s.repository.GetByID(ctx, eventID)
+	if err != nil {
+		return nil, fmt.Errorf("get event for update: %w", err)
+	}
+	if value.Status == "resolved" {
+		return nil, ErrResolved
+	}
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if title == "" {
+			return nil, &ValidationError{Field: "title", Message: "cannot be empty"}
+		}
+		value.Title = title
+	}
+	if req.Description != nil {
+		value.Description = strings.TrimSpace(*req.Description)
+	}
+	if req.ResolutionTime != nil {
+		resolutionTime, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(*req.ResolutionTime))
+		if parseErr != nil {
+			return nil, &ValidationError{Field: "resolution_time", Message: "must be an RFC3339 timestamp"}
+		}
+		value.ResolutionTime = resolutionTime
+	}
+	value.UpdatedAt = s.now().UTC()
+	if err := s.repository.Update(ctx, value); err != nil {
+		return nil, fmt.Errorf("update event: %w", err)
+	}
+	s.deleteCachedEvent(ctx, eventID)
+	s.invalidateEventLists(ctx)
+	return value, nil
 }
 
 func (s *implementation) UpdateStatus(ctx context.Context, eventID string, status string) error {

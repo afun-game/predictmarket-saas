@@ -200,7 +200,7 @@ func (s service_client_stub) VoidMarket(ctx context.Context, a0 string) (err err
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 0, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 1, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)

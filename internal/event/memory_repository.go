@@ -165,6 +165,25 @@ func (r *memoryRepository) UpdateStatus(
 	return nil
 }
 
+// Update persists editable event fields.
+func (r *memoryRepository) Update(ctx context.Context, value *types.Event) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	existing, exists := r.byID[value.ID]
+	if !exists {
+		return ErrNotFound
+	}
+	clone := *value
+	clone.CreatedAt = existing.CreatedAt
+	clone.Status = existing.Status
+	clone.Outcome = existing.Outcome
+	r.byID[value.ID] = &clone
+	return nil
+}
+
 func (r *memoryRepository) Resolve(
 	ctx context.Context,
 	eventID string,

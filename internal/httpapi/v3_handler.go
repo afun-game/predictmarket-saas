@@ -251,6 +251,9 @@ func (h *v3Handler) createV2Order(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	if !h.requireActivePlatformUser(w, r, merchantValue.ID, request.UserID) {
+		return
+	}
 	h.createOrderForMode(w, r, merchantValue, request, "api")
 }
 
@@ -458,6 +461,9 @@ func (h *v3Handler) createUserOrder(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !h.requireActivePlatformUser(w, r, browserSession.MerchantID, browserSession.UserID) {
+		return
+	}
 	request := userOrderCreateRequest{}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -519,6 +525,9 @@ func (h *v3Handler) listUserOrderTrades(w http.ResponseWriter, r *http.Request) 
 func (h *v3Handler) cancelUserOrder(w http.ResponseWriter, r *http.Request) {
 	browserSession, ok := authenticatedUserSession(w, r)
 	if !ok {
+		return
+	}
+	if !h.requireActivePlatformUser(w, r, browserSession.MerchantID, browserSession.UserID) {
 		return
 	}
 	value, ok := h.userOrder(w, r, browserSession)
@@ -921,6 +930,11 @@ func (h *v3Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not provision platform user")
 		return
 	}
+	// Blocked users must not receive launch tokens. The upsert preserves an
+	// existing blocked status, so a fresh read reflects the current policy.
+	if !h.requireActivePlatformUser(w, r, merchantValue.ID, request.UserID) {
+		return
+	}
 	launchToken, launch, err := h.sessions.CreateLaunch(
 		r.Context(),
 		merchantValue.ID,
@@ -977,6 +991,9 @@ func (h *v3Handler) exchangeSession(w http.ResponseWriter, r *http.Request) {
 	accessToken, value, err := h.sessions.Exchange(r.Context(), request.Token)
 	if err != nil {
 		writeSessionError(w, err)
+		return
+	}
+	if !h.requireActivePlatformUser(w, r, value.MerchantID, value.UserID) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -1317,6 +1334,25 @@ func authenticatedUserSession(w http.ResponseWriter, r *http.Request) (*auth.Use
 		return nil, false
 	}
 	return value, true
+}
+
+// requireActivePlatformUser rejects blocked merchant users at session and
+// order boundaries. Unknown users are treated as active: they are provisioned
+// at session creation and a lookup miss must not break existing flows.
+func (h *v3Handler) requireActivePlatformUser(w http.ResponseWriter, r *http.Request, merchantID, userID string) bool {
+	user, err := h.platformUsers.Get(r.Context(), merchantID, userID)
+	if err != nil {
+		if errors.Is(err, platformuser.ErrUserNotFound) {
+			return true
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "could not verify user status")
+		return false
+	}
+	if user.Status == "blocked" {
+		writeError(w, http.StatusForbidden, "user_blocked", "user is blocked")
+		return false
+	}
+	return true
 }
 
 func sessionResponse(value session.BrowserSession) map[string]any {

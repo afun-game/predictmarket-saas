@@ -21,6 +21,9 @@ type Repository interface {
 		status string,
 		updatedAt time.Time,
 	) error
+	// Update persists editable event fields (title, description,
+	// resolution_time). Callers must already hold the current event.
+	Update(ctx context.Context, event *types.Event) error
 	Resolve(
 		ctx context.Context,
 		eventID string,

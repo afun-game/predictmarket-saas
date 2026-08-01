@@ -19,7 +19,6 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/order"
-	"github.com/afun-game/predictmarket-saas/internal/settlement"
 	"github.com/afun-game/predictmarket-saas/internal/sports"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
@@ -161,30 +160,6 @@ func NewHandler(
 					})),
 				)
 			}
-		case settlement.Service:
-			mux.Handle(
-				"POST /api/v1/admin/markets/{marketID}/void",
-				auth.RequireAdmin(adminAPIKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					if err := service.VoidMarket(r.Context(), r.PathValue("marketID")); err != nil {
-						switch {
-						case errors.Is(err, settlement.ErrMarketNotFound):
-							writeError(w, http.StatusNotFound, "not_found", "market was not found")
-							return
-						case errors.Is(err, settlement.ErrMarketAlreadySettled):
-							writeError(w, http.StatusConflict, "already_settled", "market has already been settled or voided")
-							return
-						default:
-							writeError(w, http.StatusInternalServerError, "internal_error", "could not void market")
-							return
-						}
-					}
-					writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
-						"market_id": r.PathValue("marketID"),
-						"status":    "voided",
-					}})
-				})),
-			)
-
 		case sports.Service:
 			registerSportsRoutes(mux, merchantService, service, adminAPIKey)
 		case analytics.Service:
@@ -194,6 +169,16 @@ func NewHandler(
 				marketService,
 				service,
 				adminAPIKey,
+			)
+		case AdminConfig:
+			registerAdminRoutes(
+				mux,
+				service,
+				merchantService,
+				eventService,
+				marketService,
+				orderService,
+				walletService,
 			)
 		}
 	}
@@ -236,6 +221,9 @@ func (h *merchantHandler) getConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": configFromMerchant(result)})
 }
 
+// updateConfig serves the merchant-facing v1 configuration endpoint. Fee
+// rate changes are reserved for the admin console; a merchant must never
+// set its own fee.
 func (h *merchantHandler) updateConfig(w http.ResponseWriter, r *http.Request) {
 	merchantID := r.PathValue("merchantID")
 	if !authorizedForMerchant(r, merchantID) {
@@ -246,6 +234,10 @@ func (h *merchantHandler) updateConfig(w http.ResponseWriter, r *http.Request) {
 	var request merchant.UpdateRequest
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	if request.FeeRate != nil {
+		writeError(w, http.StatusBadRequest, "validation_error", "fee_rate is reserved for the admin console")
 		return
 	}
 	result, err := h.service.Update(r.Context(), merchantID, &request)

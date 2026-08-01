@@ -21,10 +21,10 @@ func init() {
 		Iface: reflect.TypeOf((*Service)(nil)).Elem(),
 		Impl:  reflect.TypeOf(implementation{}),
 		LocalStubFn: func(impl any, caller string, tracer trace.Tracer) any {
-			return service_local_stub{impl: impl.(Service), tracer: tracer, createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Create", Remote: false, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Get", Remote: false, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "List", Remote: false, Generated: true}), resolveMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Resolve", Remote: false, Generated: true}), resolveSourceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "ResolveSource", Remote: false, Generated: true}), syncSourceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "SyncSource", Remote: false, Generated: true}), updateStatusMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "UpdateStatus", Remote: false, Generated: true})}
+			return service_local_stub{impl: impl.(Service), tracer: tracer, createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Create", Remote: false, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Get", Remote: false, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "List", Remote: false, Generated: true}), resolveMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Resolve", Remote: false, Generated: true}), resolveSourceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "ResolveSource", Remote: false, Generated: true}), syncSourceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "SyncSource", Remote: false, Generated: true}), updateMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Update", Remote: false, Generated: true}), updateStatusMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "UpdateStatus", Remote: false, Generated: true})}
 		},
 		ClientStubFn: func(stub codegen.Stub, caller string) any {
-			return service_client_stub{stub: stub, createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Create", Remote: true, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Get", Remote: true, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "List", Remote: true, Generated: true}), resolveMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Resolve", Remote: true, Generated: true}), resolveSourceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "ResolveSource", Remote: true, Generated: true}), syncSourceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "SyncSource", Remote: true, Generated: true}), updateStatusMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "UpdateStatus", Remote: true, Generated: true})}
+			return service_client_stub{stub: stub, createMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Create", Remote: true, Generated: true}), getMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Get", Remote: true, Generated: true}), listMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "List", Remote: true, Generated: true}), resolveMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Resolve", Remote: true, Generated: true}), resolveSourceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "ResolveSource", Remote: true, Generated: true}), syncSourceMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "SyncSource", Remote: true, Generated: true}), updateMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "Update", Remote: true, Generated: true}), updateStatusMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/afun-game/predictmarket-saas/internal/event/Service", Method: "UpdateStatus", Remote: true, Generated: true})}
 		},
 		ServerStubFn: func(impl any, addLoad func(uint64, float64)) codegen.Server {
 			return service_server_stub{impl: impl.(Service), addLoad: addLoad}
@@ -53,6 +53,7 @@ type service_local_stub struct {
 	resolveMetrics       *codegen.MethodMetrics
 	resolveSourceMetrics *codegen.MethodMetrics
 	syncSourceMetrics    *codegen.MethodMetrics
+	updateMetrics        *codegen.MethodMetrics
 	updateStatusMetrics  *codegen.MethodMetrics
 }
 
@@ -179,6 +180,26 @@ func (s service_local_stub) SyncSource(ctx context.Context, a0 *SyncRequest) (er
 	return s.impl.SyncSource(ctx, a0)
 }
 
+func (s service_local_stub) Update(ctx context.Context, a0 string, a1 *UpdateRequest) (r0 *types.Event, err error) {
+	// Update metrics.
+	begin := s.updateMetrics.Begin()
+	defer func() { s.updateMetrics.End(begin, err != nil, 0, 0) }()
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.tracer.Start(ctx, "event.Service.Update", trace.WithSpanKind(trace.SpanKindInternal))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
+			span.End()
+		}()
+	}
+
+	return s.impl.Update(ctx, a0, a1)
+}
+
 func (s service_local_stub) UpdateStatus(ctx context.Context, a0 string, a1 string) (err error) {
 	// Update metrics.
 	begin := s.updateStatusMetrics.Begin()
@@ -209,6 +230,7 @@ type service_client_stub struct {
 	resolveMetrics       *codegen.MethodMetrics
 	resolveSourceMetrics *codegen.MethodMetrics
 	syncSourceMetrics    *codegen.MethodMetrics
+	updateMetrics        *codegen.MethodMetrics
 	updateStatusMetrics  *codegen.MethodMetrics
 }
 
@@ -553,6 +575,64 @@ func (s service_client_stub) SyncSource(ctx context.Context, a0 *SyncRequest) (e
 	return
 }
 
+func (s service_client_stub) Update(ctx context.Context, a0 string, a1 *UpdateRequest) (r0 *types.Event, err error) {
+	// Update metrics.
+	var requestBytes, replyBytes int
+	begin := s.updateMetrics.Begin()
+	defer func() { s.updateMetrics.End(begin, err != nil, requestBytes, replyBytes) }()
+
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.stub.Tracer().Start(ctx, "event.Service.Update", trace.WithSpanKind(trace.SpanKindClient))
+	}
+
+	defer func() {
+		// Catch and return any panics detected during encoding/decoding/rpc.
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+			if err != nil {
+				err = errors.Join(twill.RemoteCallError, err)
+			}
+		}
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+
+	}()
+
+	// Preallocate a buffer of the right size.
+	size := 0
+	size += (4 + len(a0))
+	size += servicetwill_size_ptr_UpdateRequest_70ee0773(a1)
+	enc := codegen.NewEncoder()
+	enc.Reset(size)
+
+	// Encode arguments.
+	enc.String(a0)
+	servicetwill_enc_ptr_UpdateRequest_70ee0773(enc, a1)
+	var shardKey uint64
+
+	// Call the remote method.
+	requestBytes = len(enc.Data())
+	var results []byte
+	results, err = s.stub.Run(ctx, 6, enc.Data(), shardKey)
+	replyBytes = len(results)
+	if err != nil {
+		err = errors.Join(twill.RemoteCallError, err)
+		return
+	}
+
+	// Decode the results.
+	dec := codegen.NewDecoder(results)
+	r0 = servicetwill_dec_ptr_Event_e8a4a956(dec)
+	err = dec.Error()
+	return
+}
+
 func (s service_client_stub) UpdateStatus(ctx context.Context, a0 string, a1 string) (err error) {
 	// Update metrics.
 	var requestBytes, replyBytes int
@@ -597,7 +677,7 @@ func (s service_client_stub) UpdateStatus(ctx context.Context, a0 string, a1 str
 	// Call the remote method.
 	requestBytes = len(enc.Data())
 	var results []byte
-	results, err = s.stub.Run(ctx, 6, enc.Data(), shardKey)
+	results, err = s.stub.Run(ctx, 7, enc.Data(), shardKey)
 	replyBytes = len(results)
 	if err != nil {
 		err = errors.Join(twill.RemoteCallError, err)
@@ -658,6 +738,8 @@ func (s service_server_stub) GetStubFn(method string) func(ctx context.Context, 
 		return s.resolveSource
 	case "SyncSource":
 		return s.syncSource
+	case "Update":
+		return s.update
 	case "UpdateStatus":
 		return s.updateStatus
 	default:
@@ -817,6 +899,33 @@ func (s service_server_stub) syncSource(ctx context.Context, args []byte) (res [
 	return enc.Data(), nil
 }
 
+func (s service_server_stub) update(ctx context.Context, args []byte) (res []byte, err error) {
+	// Catch and return any panics detected during encoding/decoding/rpc.
+	defer func() {
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+		}
+	}()
+
+	// Decode arguments.
+	dec := codegen.NewDecoder(args)
+	var a0 string
+	a0 = dec.String()
+	var a1 *UpdateRequest
+	a1 = servicetwill_dec_ptr_UpdateRequest_70ee0773(dec)
+
+	// TODO(rgrandl): The deferred function above will recover from panics in the
+	// user code: fix this.
+	// Call the local method.
+	r0, appErr := s.impl.Update(ctx, a0, a1)
+
+	// Encode the results.
+	enc := codegen.NewEncoder()
+	servicetwill_enc_ptr_Event_e8a4a956(enc, r0)
+	enc.Error(appErr)
+	return enc.Data(), nil
+}
+
 func (s service_server_stub) updateStatus(ctx context.Context, args []byte) (res []byte, err error) {
 	// Catch and return any panics detected during encoding/decoding/rpc.
 	defer func() {
@@ -879,6 +988,11 @@ func (s service_reflect_stub) ResolveSource(ctx context.Context, a0 string, a1 s
 
 func (s service_reflect_stub) SyncSource(ctx context.Context, a0 *SyncRequest) (err error) {
 	err = s.caller("SyncSource", ctx, []any{a0}, []any{})
+	return
+}
+
+func (s service_reflect_stub) Update(ctx context.Context, a0 string, a1 *UpdateRequest) (r0 *types.Event, err error) {
+	err = s.caller("Update", ctx, []any{a0, a1}, []any{&r0})
 	return
 }
 
@@ -1003,6 +1117,53 @@ func (x *SyncRequest) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.Status = dec.String()
 }
 
+var _ codegen.AutoMarshal = (*UpdateRequest)(nil)
+
+type __is_UpdateRequest[T ~struct {
+	twill.AutoMarshal
+	Title          *string "json:\"title,omitempty\""
+	Description    *string "json:\"description,omitempty\""
+	ResolutionTime *string "json:\"resolution_time,omitempty\""
+}] struct{}
+
+var _ __is_UpdateRequest[UpdateRequest]
+
+func (x *UpdateRequest) WeaverMarshal(enc *codegen.Encoder) {
+	if x == nil {
+		panic(fmt.Errorf("UpdateRequest.WeaverMarshal: nil receiver"))
+	}
+	servicetwill_enc_ptr_string_3e89801b(enc, x.Title)
+	servicetwill_enc_ptr_string_3e89801b(enc, x.Description)
+	servicetwill_enc_ptr_string_3e89801b(enc, x.ResolutionTime)
+}
+
+func (x *UpdateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
+	if x == nil {
+		panic(fmt.Errorf("UpdateRequest.WeaverUnmarshal: nil receiver"))
+	}
+	x.Title = servicetwill_dec_ptr_string_3e89801b(dec)
+	x.Description = servicetwill_dec_ptr_string_3e89801b(dec)
+	x.ResolutionTime = servicetwill_dec_ptr_string_3e89801b(dec)
+}
+
+func servicetwill_enc_ptr_string_3e89801b(enc *codegen.Encoder, arg *string) {
+	if arg == nil {
+		enc.Bool(false)
+	} else {
+		enc.Bool(true)
+		enc.String(*arg)
+	}
+}
+
+func servicetwill_dec_ptr_string_3e89801b(dec *codegen.Decoder) *string {
+	if !dec.Bool() {
+		return nil
+	}
+	var res string
+	res = dec.String()
+	return &res
+}
+
 // Encoding/decoding implementations.
 
 func servicetwill_enc_ptr_CreateRequest_05de99cc(enc *codegen.Encoder, arg *CreateRequest) {
@@ -1100,6 +1261,24 @@ func servicetwill_dec_ptr_SyncRequest_d6a6bd1d(dec *codegen.Decoder) *SyncReques
 	return &res
 }
 
+func servicetwill_enc_ptr_UpdateRequest_70ee0773(enc *codegen.Encoder, arg *UpdateRequest) {
+	if arg == nil {
+		enc.Bool(false)
+	} else {
+		enc.Bool(true)
+		(*arg).WeaverMarshal(enc)
+	}
+}
+
+func servicetwill_dec_ptr_UpdateRequest_70ee0773(dec *codegen.Decoder) *UpdateRequest {
+	if !dec.Bool() {
+		return nil
+	}
+	var res UpdateRequest
+	(&res).WeaverUnmarshal(dec)
+	return &res
+}
+
 // Size implementations.
 
 // servicetwill_size_ptr_CreateRequest_05de99cc returns the size (in bytes) of the serialization
@@ -1129,6 +1308,26 @@ func servicetwill_size_ptr_SyncRequest_d6a6bd1d(x *SyncRequest) int {
 		return 1
 	} else {
 		return 1 + servicetwill_size_SyncRequest_61147890(&*x)
+	}
+}
+
+// servicetwill_size_ptr_UpdateRequest_70ee0773 returns the size (in bytes) of the serialization
+// of the provided type.
+func servicetwill_size_ptr_UpdateRequest_70ee0773(x *UpdateRequest) int {
+	if x == nil {
+		return 1
+	} else {
+		return 1 + servicetwill_size_UpdateRequest_d38b9db0(&*x)
+	}
+}
+
+// servicetwill_size_ptr_string_3e89801b returns the size (in bytes) of the serialization
+// of the provided type.
+func servicetwill_size_ptr_string_3e89801b(x *string) int {
+	if x == nil {
+		return 1
+	} else {
+		return 1 + (4 + len(*x))
 	}
 }
 
@@ -1171,5 +1370,16 @@ func servicetwill_size_SyncRequest_61147890(x *SyncRequest) int {
 	size += (4 + len(x.EndTime))
 	size += (4 + len(x.ResolutionTime))
 	size += (4 + len(x.Status))
+	return size
+}
+
+// servicetwill_size_UpdateRequest_d38b9db0 returns the size (in bytes) of the serialization
+// of the provided type.
+func servicetwill_size_UpdateRequest_d38b9db0(x *UpdateRequest) int {
+	size := 0
+	size += 0
+	size += servicetwill_size_ptr_string_3e89801b(x.Title)
+	size += servicetwill_size_ptr_string_3e89801b(x.Description)
+	size += servicetwill_size_ptr_string_3e89801b(x.ResolutionTime)
 	return size
 }

@@ -127,6 +127,7 @@ func TestAdminVoidMarketEndpoint(t *testing.T) {
 	marketService := market.NewService()
 	walletService := wallet.NewService()
 	orderService := order.NewServiceWithDependencies(marketService, walletService)
+	manager, token, _ := newAdminSession(t)
 	handler := NewHandler(
 		merchantService,
 		eventService,
@@ -135,12 +136,16 @@ func TestAdminVoidMarketEndpoint(t *testing.T) {
 		orderService,
 		currency.NewService(),
 		"admin-secret",
-		settler,
+		AdminConfig{Accounts: manager, Settlement: settler},
 	)
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/markets/00000000-0000-0000-0000-000000000000/void", nil)
-	request.Header.Set("Authorization", "Bearer admin-secret")
-	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
+	recorder := adminRequest(
+		t,
+		handler,
+		http.MethodPost,
+		"/api/v1/admin/markets/00000000-0000-0000-0000-000000000000/void",
+		[]byte(`{"confirm":"void"}`),
+		token,
+	)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("void market status = %d, want 200; body = %s", recorder.Code, recorder.Body.String())
 	}
