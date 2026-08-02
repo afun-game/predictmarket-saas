@@ -19,14 +19,14 @@ ALTER TABLE market_settlements
 -- worker credits the difference whenever liquidity_pool exceeds the committed
 -- amount, so top-ups (admin add-liquidity) fund the maker wallet exactly once.
 CREATE TABLE IF NOT EXISTS marketmaker_funds (
-    market_id UUID PRIMARY KEY REFERENCES markets(id),
+    market_id UUID PRIMARY KEY REFERENCES markets(id) ON DELETE CASCADE,
     committed DECIMAL(20,2) NOT NULL DEFAULT 0.00,
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- Parimutuel markets (markets.type = 'parimutuel') pool stakes per option.
 CREATE TABLE IF NOT EXISTS parimutuel_pools (
-    market_id UUID PRIMARY KEY REFERENCES markets(id),
+    market_id UUID PRIMARY KEY REFERENCES markets(id) ON DELETE CASCADE,
     currency VARCHAR(10) NOT NULL,
     total_stake DECIMAL(20,2) NOT NULL DEFAULT 0.00,
     total_fees DECIMAL(20,2) NOT NULL DEFAULT 0.00,
@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS parimutuel_pools (
 -- 'bet_refund' for voids/refunds).
 CREATE TABLE IF NOT EXISTS parimutuel_bets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    market_id UUID NOT NULL REFERENCES markets(id),
-    merchant_id UUID NOT NULL REFERENCES merchants(id),
+    market_id UUID NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
+    merchant_id UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
     user_id VARCHAR(255) NOT NULL,
     option VARCHAR(255) NOT NULL,
     stake DECIMAL(20,2) NOT NULL,

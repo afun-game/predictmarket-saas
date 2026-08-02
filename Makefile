@@ -106,6 +106,7 @@ test-e2e-ci: build ## Run the full HTTP E2E flow against already-running depende
 	@set -eu; \
 		E2E_LOG="$$(mktemp)"; \
 		SERVICETWILL_CONFIG="$(PROJECT_ROOT)twill.toml" ADMIN_API_KEY=e2e-admin-secret \
+			ADMIN_USERNAME=e2e-admin ADMIN_PASSWORD=e2e-admin-password \
 			MERCHANT_SECRET_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY \
 			SESSION_JWT_SECRET=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY \
 			HOSTED_UI_URL=https://play.e2e.test/launch \

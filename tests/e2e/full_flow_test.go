@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/afun-game/predictmarket-saas/internal/auth"
 	"time"
 
 	"github.com/google/uuid"
@@ -236,12 +238,12 @@ func TestVoidMarketRefundsAndWebhooks(t *testing.T) {
 
 	doJSON(t, requestSpec{
 		Method: http.MethodPost, URL: baseURL + "/api/v1/admin/markets/" + marketID + "/void",
-		Token: adminKey, WantStatus: http.StatusOK,
+		Cookie: adminSession(t, baseURL), Body: map[string]any{"confirm": "void"}, WantStatus: http.StatusOK,
 	})
 	// Voiding twice must be idempotently rejected.
 	doJSON(t, requestSpec{
 		Method: http.MethodPost, URL: baseURL + "/api/v1/admin/markets/" + marketID + "/void",
-		Token: adminKey, WantStatus: http.StatusConflict,
+		Cookie: adminSession(t, baseURL), Body: map[string]any{"confirm": "void"}, WantStatus: http.StatusConflict,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -1042,6 +1044,7 @@ type requestSpec struct {
 	Method         string
 	URL            string
 	Token          string
+	Cookie         string
 	IdempotencyKey string
 	Body           any
 	WantStatus     int
@@ -1076,6 +1079,9 @@ func doJSONStatus(t *testing.T, spec requestSpec) int {
 	if spec.Token != "" {
 		request.Header.Set("Authorization", "Bearer "+spec.Token)
 	}
+	if spec.Cookie != "" {
+		request.Header.Set("Cookie", spec.Cookie)
+	}
 	if spec.IdempotencyKey != "" {
 		request.Header.Set("Idempotency-Key", spec.IdempotencyKey)
 	}
@@ -1105,6 +1111,38 @@ func doJSONStatus(t *testing.T, spec requestSpec) int {
 		}
 	}
 	return response.StatusCode
+}
+
+// adminSession logs into the admin console and returns the session cookie.
+// The e2e API process must run with ADMIN_USERNAME/ADMIN_PASSWORD set.
+func adminSession(t *testing.T, baseURL string) string {
+	t.Helper()
+	username := environmentOrDefault("ADMIN_USERNAME", "e2e-admin")
+	password := environmentOrDefault("ADMIN_PASSWORD", "e2e-admin-password")
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/api/v1/admin/login",
+		bytes.NewReader([]byte(fmt.Sprintf(`{"username":%q,"password":%q}`, username, password))))
+	if err != nil {
+		t.Fatalf("create admin login: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := (&http.Client{Timeout: 3 * time.Second}).Do(request)
+	if err != nil {
+		t.Fatalf("admin login: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("admin login status = %d", response.StatusCode)
+	}
+	cookie := ""
+	for _, candidate := range response.Cookies() {
+		if candidate.Name == auth.AdminSessionCookie {
+			cookie = candidate.Name + "=" + candidate.Value
+		}
+	}
+	if cookie == "" {
+		t.Fatalf("admin login returned no session cookie")
+	}
+	return cookie
 }
 
 func currencyUser(currency, result string) string {
