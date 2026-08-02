@@ -8,11 +8,11 @@ import (
 
 // MemoryRepository is an in-memory Repository for unit tests.
 type MemoryRepository struct {
-	mu       sync.Mutex
-	pools    map[string]Pool
-	bets     map[string]Bet
-	markets  map[string]memoryMarket
-	nextID   int
+	mu      sync.Mutex
+	pools   map[string]Pool
+	bets    map[string]Bet
+	markets map[string]memoryMarket
+	nextID  int
 }
 
 type memoryMarket struct {

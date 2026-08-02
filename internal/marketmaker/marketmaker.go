@@ -30,15 +30,15 @@ const (
 	// MakerUserID is the reserved platform identity for market-making orders.
 	MakerUserID = "__liquidity__"
 
-	defaultSchedule         = "@every 10s"
-	defaultHalfSpread       = 0.05
-	defaultLevelFraction    = 0.25
-	defaultMinFunds         = 100.0
-	defaultStopBefore       = 5 * time.Minute
-	defaultFundingTxType    = "liquidity"
-	minimumLevelSize        = 1.0
-	maximumLevelSize        = 100000.0
-	jobName                 = "market-maker"
+	defaultSchedule      = "@every 10s"
+	defaultHalfSpread    = 0.05
+	defaultLevelFraction = 0.25
+	defaultMinFunds      = 100.0
+	defaultStopBefore    = 5 * time.Minute
+	defaultFundingTxType = "liquidity"
+	minimumLevelSize     = 1.0
+	maximumLevelSize     = 100000.0
+	jobName              = "market-maker"
 )
 
 // Service executes one market-making pass over active binary markets.

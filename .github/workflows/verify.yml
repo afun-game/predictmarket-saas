@@ -172,6 +172,25 @@ jobs:
             --from-literal=ADMIN_API_KEY="$TASK_ADMIN_API_KEY"
           )
 
+          # Admin console bootstrap credentials (optional; without them the
+          # console stays disabled).
+          TASK_ADMIN_USERNAME="$(aws secretsmanager get-secret-value \
+            --region "$AWS_REGION" \
+            --secret-id "$APPLICATION_SECRET_ID" \
+            --query SecretString \
+            --output text | jq -er '.admin_username // empty' 2>/dev/null || true)"
+          TASK_ADMIN_PASSWORD="$(aws secretsmanager get-secret-value \
+            --region "$AWS_REGION" \
+            --secret-id "$APPLICATION_SECRET_ID" \
+            --query SecretString \
+            --output text | jq -er '.admin_password // empty' 2>/dev/null || true)"
+          if [ -n "$TASK_ADMIN_USERNAME" ] && [ -n "$TASK_ADMIN_PASSWORD" ]; then
+            SECRET_ARGS+=(--from-literal=ADMIN_USERNAME="$TASK_ADMIN_USERNAME")
+            SECRET_ARGS+=(--from-literal=ADMIN_PASSWORD="$TASK_ADMIN_PASSWORD")
+          else
+            echo "::warning::predictmarket/dev/application is missing admin_username/admin_password; the admin console stays disabled"
+          fi
+
           # V3 hosted routes are enabled only when all three values are
           # present; warn instead of failing so the deployment still proceeds.
           TASK_MERCHANT_SECRET_ENCRYPTION_KEY="$(aws secretsmanager get-secret-value \

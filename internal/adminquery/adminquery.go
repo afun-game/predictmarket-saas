@@ -531,16 +531,16 @@ GROUP BY 1`)
 
 // EventRow is one event in the console list.
 type EventRow struct {
-	ID             string     `json:"id"`
-	Title          string     `json:"title"`
-	Description    string     `json:"description"`
-	Category       string     `json:"category"`
-	EndTime        time.Time  `json:"end_time"`
-	ResolutionTime time.Time  `json:"resolution_time"`
-	Status         string     `json:"status"`
-	Outcome        *string    `json:"outcome,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	MarketCount    int        `json:"market_count"`
+	ID             string    `json:"id"`
+	Title          string    `json:"title"`
+	Description    string    `json:"description"`
+	Category       string    `json:"category"`
+	EndTime        time.Time `json:"end_time"`
+	ResolutionTime time.Time `json:"resolution_time"`
+	Status         string    `json:"status"`
+	Outcome        *string   `json:"outcome,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	MarketCount    int       `json:"market_count"`
 }
 
 // ListEvents returns paginated events, optionally filtered by keyword,

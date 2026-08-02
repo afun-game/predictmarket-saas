@@ -32,15 +32,15 @@ var (
 
 // Bet is one stake in a parimutuel pool.
 type Bet struct {
-	ID         string    `json:"id"`
-	MarketID   string    `json:"market_id"`
-	MerchantID string    `json:"merchant_id"`
-	UserID     string    `json:"user_id"`
-	Option     string    `json:"option"`
-	Stake      float64   `json:"stake"`
-	Currency   string    `json:"currency"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         string     `json:"id"`
+	MarketID   string     `json:"market_id"`
+	MerchantID string     `json:"merchant_id"`
+	UserID     string     `json:"user_id"`
+	Option     string     `json:"option"`
+	Stake      float64    `json:"stake"`
+	Currency   string     `json:"currency"`
+	Status     string     `json:"status"`
+	CreatedAt  time.Time  `json:"created_at"`
 	SettledAt  *time.Time `json:"settled_at,omitempty"`
 }
 

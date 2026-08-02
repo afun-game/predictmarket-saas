@@ -26,9 +26,9 @@ func marketSettlementContext(
 }
 
 type parimutuelBetRow struct {
-	id        string
-	userID    string
-	option    string
+	id         string
+	userID     string
+	option     string
 	stakeCents *big.Int
 }
 

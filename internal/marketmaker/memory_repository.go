@@ -7,8 +7,8 @@ import (
 
 // MemoryRepository is an in-memory Repository for unit tests.
 type MemoryRepository struct {
-	mu         sync.Mutex
-	committed  map[string]float64
+	mu        sync.Mutex
+	committed map[string]float64
 }
 
 // NewMemoryRepository constructs an empty in-memory repository.

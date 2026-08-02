@@ -14,17 +14,17 @@ import (
 )
 
 type makerFixture struct {
-	ctx       context.Context
-	maker     Service
-	orders    order.Service
-	wallets   wallet.Service
-	markets   market.Service
-	events    event.Service
-	merchants merchant.Service
-	funds     *MemoryRepository
+	ctx        context.Context
+	maker      Service
+	orders     order.Service
+	wallets    wallet.Service
+	markets    market.Service
+	events     event.Service
+	merchants  merchant.Service
+	funds      *MemoryRepository
 	merchantID string
-	eventID   string
-	marketID  string
+	eventID    string
+	marketID   string
 }
 
 func newMakerFixture(t *testing.T) *makerFixture {
