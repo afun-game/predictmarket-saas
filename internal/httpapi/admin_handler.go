@@ -16,6 +16,7 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/order"
+	"github.com/afun-game/predictmarket-saas/internal/parimutuel"
 	"github.com/afun-game/predictmarket-saas/internal/platformuser"
 	"github.com/afun-game/predictmarket-saas/internal/settlement"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
@@ -36,6 +37,7 @@ type AdminConfig struct {
 	Queries       *adminquery.Service
 	PlatformUsers platformuser.Repository
 	Settlement    settlement.Service
+	Parimutuel    parimutuel.Service
 }
 
 type adminHandler struct {
@@ -106,6 +108,10 @@ func registerAdminRoutes(
 	mux.Handle("GET /api/v1/admin/transactions", session(http.HandlerFunc(handler.listTransactions)))
 	mux.Handle("GET /api/v1/admin/audit-logs", session(http.HandlerFunc(handler.listAuditLogs)))
 	mux.Handle("GET /api/v1/admin/overview", session(http.HandlerFunc(handler.overview)))
+
+	if config.Parimutuel != nil {
+		registerParimutuelRoutes(mux, merchantService, marketService, walletService, config.Parimutuel)
+	}
 }
 
 // login issues a session cookie after credential verification. The account

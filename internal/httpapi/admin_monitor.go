@@ -58,6 +58,14 @@ func (h *adminHandler) getMarket(w http.ResponseWriter, r *http.Request) {
 	}
 	payload["event_title"] = title
 	payload["orderbook"] = orderbook
+	if value.Type == "parimutuel" && h.config.Parimutuel != nil {
+		pools, poolErr := h.config.Parimutuel.GetPools(r.Context(), value.ID)
+		if poolErr != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "could not load parimutuel pools")
+			return
+		}
+		payload["pools"] = pools
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": payload})
 }
 
@@ -72,6 +80,17 @@ func (h *adminHandler) createMarket(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeMarketServiceError(w, err)
 		return
+	}
+	// Parimutuel markets need their pool row before any bet can join.
+	if created.Type == "parimutuel" && h.config.Parimutuel != nil {
+		currency := "USD"
+		if merchantValue, merchantErr := h.merchants.Get(r.Context(), created.MerchantID); merchantErr == nil && merchantValue.Currency != "" {
+			currency = merchantValue.Currency
+		}
+		if err := h.config.Parimutuel.CreatePools(r.Context(), created.ID, currency); err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "could not initialize the parimutuel pool")
+			return
+		}
 	}
 	if principal, ok := auth.AdminPrincipalFromContext(r.Context()); ok {
 		h.adminAudit(principal, "create.market", "market", created.ID, nil, created, r)

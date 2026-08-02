@@ -34,6 +34,16 @@ func (r *postgresRepository) VoidMarket(
 	if err != nil {
 		return err
 	}
+	marketType, merchantID, err := marketSettlementContext(ctx, databaseTx, marketID)
+	if err != nil {
+		return err
+	}
+	if marketType == "parimutuel" {
+		if err := voidParimutuelMarket(ctx, databaseTx, marketID, merchantID, eventID, voidedAt); err != nil {
+			return err
+		}
+		return databaseTx.Commit()
+	}
 	orders, err := lockVoidOrders(ctx, databaseTx, marketID)
 	if err != nil {
 		return err
@@ -440,6 +450,13 @@ func settleMarket(
 	winningOption string,
 	settledAt time.Time,
 ) error {
+	marketType, merchantID, err := marketSettlementContext(ctx, databaseTx, marketID)
+	if err != nil {
+		return err
+	}
+	if marketType == "parimutuel" {
+		return settleParimutuelMarket(ctx, databaseTx, marketID, merchantID, eventID, winningOption, settledAt)
+	}
 	orders, err := lockSettlementOrders(ctx, databaseTx, marketID)
 	if err != nil {
 		return err
@@ -990,7 +1007,7 @@ func insertSettlementTransaction(
 	const query = `
 INSERT INTO transactions (
     id, wallet_id, type, amount, currency, related_order_id, status, created_at
-) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'completed', $6)`
+) VALUES (gen_random_uuid(), $1, $2, $3, $4, NULLIF($5, '')::uuid, 'completed', $6)`
 	if _, err := databaseTx.ExecContext(
 		ctx, query, walletID, typeName, formatCents(amount), currency, orderID, createdAt,
 	); err != nil {

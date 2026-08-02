@@ -51,3 +51,6 @@ kind = "cron"
 
 ["twill.resources.settlement-alerts"]
 kind = "cron"
+
+["twill.resources.market-maker"]
+kind = "cron"

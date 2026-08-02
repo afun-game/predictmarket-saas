@@ -351,7 +351,11 @@ tr.clickable:hover { background: #f8faff; }
 .field--span2 { grid-column: span 2; }
 .form-field--actions { flex-direction: row; align-items: center; gap: 8px; padding-bottom: 1px; }
 
+.field[hidden] { display: none; }
+
 .field label { color: var(--muted); font-size: 12px; font-weight: 700; }
+
+.field-hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 
 .input {
   width: 100%;

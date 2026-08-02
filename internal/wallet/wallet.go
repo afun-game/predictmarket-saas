@@ -567,7 +567,9 @@ func normalizeAmount(amount float64) (float64, error) {
 
 func validateTransactionType(txType string, credit bool) (string, error) {
 	txType = strings.ToLower(strings.TrimSpace(txType))
-	valid := txType == "credit" || txType == "win"
+	// "liquidity" funds the platform market maker; "bet_refund" returns a
+	// stake after a failed or voided parimutuel bet.
+	valid := txType == "credit" || txType == "win" || txType == "liquidity" || txType == "bet_refund"
 	if !credit {
 		valid = txType == "debit" || txType == "bet" || txType == "fee"
 	}

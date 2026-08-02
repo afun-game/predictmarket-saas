@@ -503,7 +503,7 @@ func validateCreateRequest(req *CreateRequest) (*CreateRequest, error) {
 	if input.WalletKind != "user" && input.WalletKind != "shadow" {
 		return nil, &ValidationError{Field: "wallet_kind", Message: "is not supported"}
 	}
-	if input.Channel != "api" && input.Channel != "hosted" {
+	if input.Channel != "api" && input.Channel != "hosted" && input.Channel != "mm" {
 		return nil, &ValidationError{Field: "channel", Message: "is not supported"}
 	}
 	if len(input.IdempotencyKey) > maxIdempotencyKeyLen {

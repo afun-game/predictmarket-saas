@@ -264,8 +264,8 @@ func validateCreateRequest(req *CreateRequest) (*CreateRequest, error) {
 	if !isUUID(input.EventID) {
 		return nil, &ValidationError{Field: "event_id", Message: "must be a UUID"}
 	}
-	if input.Type != "binary" {
-		return nil, &ValidationError{Field: "type", Message: "only binary markets are supported"}
+	if input.Type != "binary" && input.Type != "parimutuel" {
+		return nil, &ValidationError{Field: "type", Message: "must be binary or parimutuel"}
 	}
 	if input.Question == "" {
 		return nil, &ValidationError{Field: "question", Message: "is required"}

@@ -78,6 +78,11 @@ const CATEGORY_LABELS = {
   technology: "科技",
 };
 
+const MARKET_TYPE_LABELS = {
+  binary: "订单簿",
+  parimutuel: "奖池",
+};
+
 const ORDER_TYPE_LABELS = { buy: "买入", sell: "卖出" };
 
 const ACTION_LABELS = {
@@ -196,6 +201,12 @@ function toDateTimeLocal(value) {
 function statusBadge(status) {
   const label = STATUS_LABELS[status] ?? status ?? "—";
   const kind = STATUS_KIND[status] ?? "neutral";
+  return `<span class="badge badge--${kind}">${escapeHTML(label)}</span>`;
+}
+
+function marketTypeBadge(type) {
+  const label = MARKET_TYPE_LABELS[type] ?? type ?? "—";
+  const kind = type === "parimutuel" ? "info" : "neutral";
   return `<span class="badge badge--${kind}">${escapeHTML(label)}</span>`;
 }
 
@@ -693,11 +704,25 @@ async function marketsPage() {
   const data = await apiFetch(
     `/api/v1/admin/markets${qs({ q: view.q, status: view.status, merchant_id: view.merchantId, event_id: view.eventId, page: view.page, limit: view.limit })}`
   );
+  let merchantOptions = "";
+  if (view.showCreateMarket) {
+    try {
+      const merchants = await apiFetch("/api/v1/admin/merchants?limit=100");
+      merchantOptions = (merchants.items ?? [])
+        .map(
+          (m) => `<option value="${escapeHTML(m.id)}">${escapeHTML(m.name ?? "")}${m.email ? `（${escapeHTML(m.email)}）` : ""}</option>`
+        )
+        .join("");
+    } catch {
+      merchantOptions = "";
+    }
+  }
   const rows = (data.items ?? [])
     .map(
       (item) => `
     <tr class="clickable" data-nav="#/markets/${escapeHTML(item.id)}">
       <td class="td-strong">${escapeHTML(item.question)}</td>
+      <td>${marketTypeBadge(item.type)}</td>
       <td class="td-mono">${escapeHTML(item.merchant_id)}</td>
       <td class="td-mono">${escapeHTML(item.event_id)}</td>
       <td>${statusBadge(item.status)}</td>
@@ -710,8 +735,11 @@ async function marketsPage() {
     ? `
     <form class="create-form" data-action="create-market">
       <div class="form-grid">
-        <div class="field"><label>事件 ID *</label><input class="input" name="event_id" type="number" min="1" required></div>
-        <div class="field"><label>初始流动性</label><input class="input" name="liquidity_pool" type="number" min="0" step="any"></div>
+        <div class="field"><label>商户 *</label><select class="input" name="merchant_id" required><option value="">请选择商户</option>${merchantOptions}</select></div>
+        <div class="field"><label>事件 ID *</label><input class="input" name="event_id" required></div>
+        <div class="field"><label>类型 *</label><select class="input" name="type"><option value="binary" selected>订单簿</option><option value="parimutuel">奖池</option></select></div>
+        <div class="field" data-liquidity-field><label>初始流动性</label><input class="input" name="liquidity_pool" type="number" min="0" step="any"></div>
+        <div class="field" data-liquidity-hint hidden><label>初始流动性</label><p class="field-hint">奖池市场无需初始流动性</p></div>
         <div class="field field--span2"><label>问题 *</label><input class="input" name="question" placeholder="例如：BTC 将在 7 月收于 6 万美元以上吗？" required></div>
         <div class="field field--span2"><label>选项 *（逗号分隔）</label><input class="input" name="options" placeholder="是, 否" required></div>
         <div class="field form-field--actions"><button class="btn btn--primary" type="submit">创建市场</button><button class="btn btn--ghost" type="button" data-action="toggle-create-market">取消</button></div>
@@ -729,7 +757,7 @@ async function marketsPage() {
       </form>
       <div class="section-heading list-heading"><h2>市场列表</h2><button class="btn btn--primary" type="button" data-action="toggle-create-market">${view.showCreateMarket ? "收起表单" : "新建市场"}</button></div>
       ${createForm}
-      ${tableCard(["问题", "商户", "事件", "状态", "交易量", "流动性"], rows, "暂无市场", 6)}
+      ${tableCard(["问题", "类型", "商户", "事件", "状态", "交易量", "流动性"], rows, "暂无市场", 7)}
       ${paginationBar(data.total, view.page)}
     </section>`;
 }
@@ -745,7 +773,9 @@ async function marketDetailPage(id) {
     actions.push(`<button class="btn btn--warning" type="button" data-action="market-status" data-id="${escapeHTML(id)}" data-status="closed">关闭市场</button>`);
   }
   if (market.status !== "settled" && market.status !== "voided") {
-    actions.push(`<button class="btn btn--primary" type="button" data-action="market-liquidity" data-id="${escapeHTML(id)}">注入流动性</button>`);
+    if (market.type !== "parimutuel") {
+      actions.push(`<button class="btn btn--primary" type="button" data-action="market-liquidity" data-id="${escapeHTML(id)}">注入流动性</button>`);
+    }
     actions.push(`<button class="btn btn--danger" type="button" data-action="market-void" data-id="${escapeHTML(id)}">作废市场</button>`);
   }
   const options = Array.isArray(market.options) ? market.options.join(" / ") : market.options ?? "—";
@@ -754,32 +784,43 @@ async function marketDetailPage(id) {
     ["所属事件", escapeHTML(market.event_title ?? market.event_id ?? "—")],
     ["商户 ID", escapeHTML(market.merchant_id ?? "—")],
     ["事件 ID", escapeHTML(market.event_id ?? "—")],
-    ["类型", escapeHTML(market.type ?? "—")],
+    ["类型", marketTypeBadge(market.type)],
     ["选项", escapeHTML(options)],
     ["状态", statusBadge(market.status)],
     ["交易量", formatMoney(market.total_volume)],
-    ["流动性", formatMoney(market.liquidity_pool)],
+    ...(market.type !== "parimutuel" ? [["流动性", formatMoney(market.liquidity_pool)]] : []),
     ["创建时间", formatTime(market.created_at)],
     ["结算时间", formatTime(market.settled_at)],
   ]);
-  const book = market.orderbook ?? {};
-  const bookRows = [
-    ...(book.bids ?? []).map(
-      (row) => `<tr><td><span class="badge badge--positive">买入</span></td><td>${escapeHTML(row.option ?? "—")}</td><td class="td-num">${escapeHTML(row.price)}</td><td class="td-num">${escapeHTML(row.amount)}</td></tr>`
-    ),
-    ...(book.asks ?? []).map(
-      (row) => `<tr><td><span class="badge badge--danger">卖出</span></td><td>${escapeHTML(row.option ?? "—")}</td><td class="td-num">${escapeHTML(row.price)}</td><td class="td-num">${escapeHTML(row.amount)}</td></tr>`
-    ),
-  ].join("");
+  let bookCard;
+  if (market.type === "parimutuel") {
+    const poolRows = (market.pools ?? [])
+      .map(
+        (row) => `<tr><td>${escapeHTML(row.currency ?? "—")}</td><td class="td-num">${formatMoney(row.total_stake)}</td></tr>`
+      )
+      .join("");
+    bookCard = `<div class="card"><div class="section-heading"><h2>奖池</h2></div>${tableCard(["币种", "累计投注"], poolRows, "暂无奖池数据", 2)}</div>`;
+  } else {
+    const book = market.orderbook ?? {};
+    const bookRows = [
+      ...(book.bids ?? []).map(
+        (row) => `<tr><td><span class="badge badge--positive">买入</span></td><td>${escapeHTML(row.option ?? "—")}</td><td class="td-num">${escapeHTML(row.price)}</td><td class="td-num">${escapeHTML(row.amount)}</td></tr>`
+      ),
+      ...(book.asks ?? []).map(
+        (row) => `<tr><td><span class="badge badge--danger">卖出</span></td><td>${escapeHTML(row.option ?? "—")}</td><td class="td-num">${escapeHTML(row.price)}</td><td class="td-num">${escapeHTML(row.amount)}</td></tr>`
+      ),
+    ].join("");
+    bookCard = `<div class="card"><div class="section-heading"><h2>订单簿</h2></div>${tableCard(["方向", "选项", "价格", "数量"], bookRows, "暂无挂单", 4)}</div>`;
+  }
   return `
     <section class="page">
       <div class="breadcrumb"><a href="#/markets">市场管理</a><span>/</span><span>${escapeHTML(market.question ?? id)}</span></div>
       <div class="detail-head">
-        <div><h2>市场详情</h2><p class="detail-head__id">ID：${escapeHTML(id)}</p></div>
+        <div><h2>市场详情 ${marketTypeBadge(market.type)}</h2><p class="detail-head__id">ID：${escapeHTML(id)}</p></div>
         <div class="detail-head__actions">${actions.join("")}</div>
       </div>
       <div class="card"><div class="section-heading"><h2>基本信息</h2></div><div class="kv">${kv}</div></div>
-      <div class="card"><div class="section-heading"><h2>订单簿</h2></div>${tableCard(["方向", "选项", "价格", "数量"], bookRows, "暂无挂单", 4)}</div>
+      ${bookCard}
     </section>`;
 }
 
@@ -1004,6 +1045,19 @@ async function handleAction(action, target) {
   }
 }
 
+document.addEventListener("change", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLSelectElement) || target.name !== "type") return;
+  const form = target.closest('form[data-action="create-market"]');
+  if (!form) return;
+  const liquidityField = form.querySelector("[data-liquidity-field]");
+  const liquidityHint = form.querySelector("[data-liquidity-hint]");
+  if (!liquidityField || !liquidityHint) return;
+  const parimutuel = target.value === "parimutuel";
+  liquidityField.hidden = parimutuel;
+  liquidityHint.hidden = !parimutuel;
+});
+
 document.addEventListener("submit", (event) => {
   const form = event.target.closest("form[data-action]");
   if (!form) return;
@@ -1192,14 +1246,20 @@ async function createEvent(form) {
 
 async function createMarket(form) {
   const data = new FormData(form);
-  const eventId = Number(String(data.get("event_id") ?? "").trim());
+  const merchantId = String(data.get("merchant_id") ?? "").trim();
+  const eventId = String(data.get("event_id") ?? "").trim();
   const question = String(data.get("question") ?? "").trim();
   const options = String(data.get("options") ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  const type = String(data.get("type") ?? "binary").trim() || "binary";
   const pool = String(data.get("liquidity_pool") ?? "").trim();
-  if (!Number.isInteger(eventId) || eventId <= 0) {
+  if (!merchantId) {
+    toast("请选择有效的商户", "error");
+    return;
+  }
+  if (!eventId) {
     toast("请填写有效的事件 ID", "error");
     return;
   }
@@ -1211,8 +1271,10 @@ async function createMarket(form) {
     toast("请至少填写两个选项（逗号分隔）", "error");
     return;
   }
-  const body = { event_id: eventId, type: "binary", question, options };
-  if (pool) {
+  const body = { event_id: eventId, merchant_id: merchantId, type, question, options };
+  if (type === "parimutuel") {
+    body.liquidity_pool = 0;
+  } else if (pool) {
     const number = Number(pool);
     if (Number.isFinite(number) && number > 0) body.liquidity_pool = number;
   }

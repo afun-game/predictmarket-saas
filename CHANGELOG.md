@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Market maker + Parimutuel)
+- 流动性池做市（`internal/marketmaker`）：binary 市场的 `liquidity_pool`
+  变成真实做市资金——平台按市场一次性注入专用钱包（`__liquidity__`，
+  `marketmaker_funds` 记账，追加流动性只补差额），每 10s 在盘口维护双边
+  限价单（以盘口中间价 ±5% 报价，两侧各 25% 资金，价格-时间优先、不穿价），
+  临近结算 5 分钟停止报价；订单走 mm 通道，结算照常。
+- Pari-mutuel 奖池市场（`internal/parimutuel` + 迁移 017）：市场类型新增
+  `parimutuel`，管理员创建市场时选择；`POST /api/v1/bets` 下注（商户鉴权，
+  下注即扣减钱包入池），结算时总奖池按中奖方各注单占比分配，
+  无人中奖全部退还；作废全额退还。
+- 管理台：市场列表/详情展示市场类型，创建表单可选择订单簿/奖池并选择
+  归属商户，奖池市场显示累计投注；`GET /api/v1/bets` 商户侧注单查询。
+
 ### Added (Admin console)
 - SaaS 后台管理控制台（第一期）：零构建 SPA 嵌入 API 二进制，`/admin` 托管。
 - 管理员身份体系：`admin_accounts` + `admin_action_logs`（迁移 016），

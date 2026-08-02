@@ -28,9 +28,11 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/httpapi"
 	"github.com/afun-game/predictmarket-saas/internal/infra"
 	"github.com/afun-game/predictmarket-saas/internal/market"
+	"github.com/afun-game/predictmarket-saas/internal/marketmaker"
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/observability"
 	"github.com/afun-game/predictmarket-saas/internal/order"
+	"github.com/afun-game/predictmarket-saas/internal/parimutuel"
 	"github.com/afun-game/predictmarket-saas/internal/platformuser"
 	"github.com/afun-game/predictmarket-saas/internal/ratelimit"
 	"github.com/afun-game/predictmarket-saas/internal/reconciliation"
@@ -74,6 +76,7 @@ type application struct {
 	event             twill.Ref[event.Service]
 	eventsync         twill.Ref[eventsync.Service]
 	market            twill.Ref[market.Service]
+	marketMaker       twill.Ref[marketmaker.Service]
 	order             twill.Ref[order.Service]
 	reconciliation    twill.Ref[reconciliation.Service]
 	settlementMonitor twill.Ref[settlementmonitor.Service]
@@ -237,6 +240,7 @@ func configuredAdmin(resources resourceEndpoints, settlementService settlement.S
 		Queries:       adminquery.New(database),
 		PlatformUsers: platformuser.NewPostgresRepository(database),
 		Settlement:    settlementService,
+		Parimutuel:    parimutuel.NewServiceWithRepository(parimutuel.NewPostgresRepository(database)),
 	}
 	return config, func() { _ = database.Close() }, nil
 }
