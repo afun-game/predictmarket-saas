@@ -23,3 +23,13 @@ spec:
                 name: predictmarket-api
                 port:
                   number: 80
+    - host: admin.afx-game.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: predictmarket-api
+                port:
+                  number: 80
