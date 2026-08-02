@@ -42,7 +42,9 @@ func (h *adminHandler) getMarket(w http.ResponseWriter, r *http.Request) {
 		writeMarketServiceError(w, err)
 		return
 	}
-	orderbook, err := h.markets.GetOrderBook(r.Context(), value.ID)
+	// The real book lives in the order service; market.Service.GetOrderBook
+	// is a placeholder that always returns an empty book.
+	orderbook, err := h.orders.GetOrderBook(r.Context(), value.ID)
 	if err != nil {
 		writeMarketServiceError(w, err)
 		return
