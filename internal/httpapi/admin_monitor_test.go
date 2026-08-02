@@ -69,12 +69,15 @@ func newAdminTestHandler(
 	config AdminConfig,
 ) http.Handler {
 	t.Helper()
+	// The order service must share the market service so the admin order
+	// book (order.Service.GetOrderBook) sees the same market universe.
+	walletService := wallet.NewService()
 	return NewHandler(
 		merchant.NewService(),
 		eventService,
 		marketService,
-		wallet.NewService(),
-		order.NewService(),
+		walletService,
+		order.NewServiceWithDependencies(marketService, walletService),
 		nil, // currency service is unused by the admin console
 		"admin-secret",
 		config,
