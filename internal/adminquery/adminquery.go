@@ -400,12 +400,21 @@ LIMIT $1 OFFSET $2`
 	items := []AuditRow{}
 	for rows.Next() {
 		item := AuditRow{}
+		// JSONB columns are nullable (e.g. create actions carry no before
+		// state); NULL cannot be scanned into json.RawMessage directly.
+		var beforeState, afterState sql.NullString
 		if err := rows.Scan(
 			&item.ID, &item.AdminID, &item.AdminUsername, &item.Action, &item.Resource,
-			&item.ResourceID, &item.BeforeState, &item.AfterState, &item.ClientIP,
+			&item.ResourceID, &beforeState, &afterState, &item.ClientIP,
 			&item.CreatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan audit log: %w", err)
+		}
+		if beforeState.Valid {
+			item.BeforeState = json.RawMessage(beforeState.String)
+		}
+		if afterState.Valid {
+			item.AfterState = json.RawMessage(afterState.String)
 		}
 		items = append(items, item)
 	}
