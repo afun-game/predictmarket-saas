@@ -28,7 +28,7 @@ func TestCurrencyPostgresRedisIntegration(t *testing.T) {
 	if err := fixture.service.RefreshRates(ctx); err != nil {
 		t.Fatalf("RefreshRates() error = %v", err)
 	}
-	fixture.assertStoredRates(t, 25)
+	fixture.assertStoredRates(t, 36)
 
 	rate, err := fixture.service.GetRate(ctx, "EUR", "CNY")
 	if err != nil {
