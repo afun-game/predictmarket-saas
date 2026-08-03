@@ -574,3 +574,26 @@ textarea.input { resize: vertical; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* 一次性凭据面板（开户 / 重发 secret） */
+.cred-panel { border-color: #f0c96b; }
+.cred-alert {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--warning-tint);
+  color: var(--warning);
+  font-size: 13px;
+  font-weight: 700;
+}
+.cred-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cred-line code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+}
+.cred-line .btn--sm { flex: 0 0 auto; }
+.cred-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }

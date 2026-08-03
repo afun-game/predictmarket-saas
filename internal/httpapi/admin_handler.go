@@ -81,9 +81,11 @@ func registerAdminRoutes(
 	mux.Handle("GET /api/v1/admin/me", session(http.HandlerFunc(handler.me)))
 
 	mux.Handle("GET /api/v1/admin/merchants", session(http.HandlerFunc(handler.listMerchants)))
+	mux.Handle("POST /api/v1/admin/merchants", session(super(http.HandlerFunc(handler.createMerchant))))
 	mux.Handle("GET /api/v1/admin/merchants/{merchantID}", session(http.HandlerFunc(handler.getMerchant)))
 	mux.Handle("PATCH /api/v1/admin/merchants/{merchantID}", session(super(http.HandlerFunc(handler.updateMerchant))))
 	mux.Handle("PATCH /api/v1/admin/merchants/{merchantID}/status", session(super(http.HandlerFunc(handler.updateMerchantStatus))))
+	mux.Handle("POST /api/v1/admin/merchants/{merchantID}/api-secret/reissue", session(super(http.HandlerFunc(handler.reissueMerchantSecret))))
 
 	mux.Handle("GET /api/v1/admin/users", session(http.HandlerFunc(handler.listUsers)))
 	mux.Handle("GET /api/v1/admin/users/{merchantID}/{userID}", session(http.HandlerFunc(handler.getUser)))
@@ -202,15 +204,16 @@ func adminList(w http.ResponseWriter, items any, total int) {
 // merchantState renders the admin-facing merchant view (secrets never leave).
 func merchantState(merchant *types.Merchant) map[string]any {
 	return map[string]any{
-		"id":          merchant.ID,
-		"name":        merchant.Name,
-		"email":       merchant.Email,
-		"status":      merchant.Status,
-		"currency":    merchant.Currency,
-		"timezone":    merchant.Timezone,
-		"wallet_mode": merchant.WalletMode,
-		"fee_rate":    merchant.FeeRate,
-		"created_at":  merchant.CreatedAt,
+		"id":             merchant.ID,
+		"name":           merchant.Name,
+		"email":          merchant.Email,
+		"status":         merchant.Status,
+		"currency":       merchant.Currency,
+		"timezone":       merchant.Timezone,
+		"wallet_mode":    merchant.WalletMode,
+		"fee_rate":       merchant.FeeRate,
+		"api_key_prefix": merchant.APIKeyPrefix,
+		"created_at":     merchant.CreatedAt,
 	}
 }
 

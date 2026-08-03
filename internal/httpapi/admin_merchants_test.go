@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -841,5 +842,132 @@ func TestAdminMerchantsUpdateUserStatus(t *testing.T) {
 	)
 	if missing.Code != http.StatusNotFound || adminMerchantsTestErrorCode(t, missing) != "user_not_found" {
 		t.Errorf("missing user status = %d, body = %s", missing.Code, missing.Body.String())
+	}
+}
+
+func TestAdminMerchantsCreateIssuesCredentialsOnce(t *testing.T) {
+	t.Parallel()
+	env := newAdminMerchantsTestEnv(t, adminMerchantsTestAccount("boss", "pw", adminauth.RoleSuperAdmin))
+	cookie := adminMerchantsTestLogin(t, env, "boss", "pw")
+
+	response := adminMerchantsTestRequest(
+		t,
+		env.handler,
+		http.MethodPost,
+		"/api/v1/admin/merchants",
+		[]byte(`{"name":"开户商户","email":"open@test.dev","currency":"MXN","timezone":"America/Mexico_City"}`),
+		cookie,
+	)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create merchant status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var created struct {
+		Data struct {
+			ID           string `json:"id"`
+			Name         string `json:"name"`
+			Currency     string `json:"currency"`
+			APIKey       string `json:"api_key"`
+			APISecret    string `json:"api_secret"`
+			APIKeyPrefix string `json:"api_key_prefix"`
+		} `json:"data"`
+	}
+	adminMerchantsTestDecode(t, response, &created)
+	if created.Data.ID == "" || created.Data.Name != "开户商户" || created.Data.Currency != "MXN" {
+		t.Fatalf("created merchant = %+v", created.Data)
+	}
+	if created.Data.APIKey == "" || created.Data.APISecret == "" {
+		t.Fatalf("cleartext credentials missing: key=%q secret=%q", created.Data.APIKey, created.Data.APISecret)
+	}
+	if !strings.HasPrefix(created.Data.APIKey, created.Data.APIKeyPrefix) {
+		t.Errorf("api_key %q does not carry prefix %q", created.Data.APIKey, created.Data.APIKeyPrefix)
+	}
+	audited := false
+	for _, action := range env.logs.Actions() {
+		if action.Action == "create.merchant" && action.Resource == "merchant" && action.ResourceID == created.Data.ID {
+			audited = true
+		}
+	}
+	if !audited {
+		t.Errorf("create.merchant audit action missing; actions = %#v", env.logs.Actions())
+	}
+}
+
+func TestAdminMerchantsCreateRequiresSuperAdmin(t *testing.T) {
+	t.Parallel()
+	env := newAdminMerchantsTestEnv(t, adminMerchantsTestAccount("ops", "pw", adminauth.RoleOperator))
+	cookie := adminMerchantsTestLogin(t, env, "ops", "pw")
+	response := adminMerchantsTestRequest(
+		t,
+		env.handler,
+		http.MethodPost,
+		"/api/v1/admin/merchants",
+		[]byte(`{"name":"越权商户","email":"x@test.dev","currency":"USD","timezone":"UTC"}`),
+		cookie,
+	)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("operator create status = %d, want 403", response.Code)
+	}
+}
+
+func TestAdminMerchantsReissueSecret(t *testing.T) {
+	t.Setenv("MERCHANT_SECRET_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY")
+	env := newAdminMerchantsTestEnv(t, adminMerchantsTestAccount("boss", "pw", adminauth.RoleSuperAdmin))
+	cookie := adminMerchantsTestLogin(t, env, "boss", "pw")
+
+	created := adminMerchantsTestRequest(
+		t, env.handler, http.MethodPost, "/api/v1/admin/merchants",
+		[]byte(`{"name":"轮换商户","email":"rot@test.dev","currency":"USD","timezone":"UTC"}`),
+		cookie,
+	)
+	var decoded struct {
+		Data struct {
+			ID        string `json:"id"`
+			APISecret string `json:"api_secret"`
+		} `json:"data"`
+	}
+	adminMerchantsTestDecode(t, created, &decoded)
+	merchantID := decoded.Data.ID
+	if merchantID == "" || decoded.Data.APISecret == "" {
+		t.Fatalf("seed merchant = %+v", decoded.Data)
+	}
+	before := decoded.Data.APISecret
+
+	// The confirmation word is mandatory.
+	noConfirm := adminMerchantsTestRequest(
+		t, env.handler, http.MethodPost, "/api/v1/admin/merchants/"+merchantID+"/api-secret/reissue",
+		[]byte(`{"confirm":"nope"}`), cookie,
+	)
+	if noConfirm.Code != http.StatusBadRequest {
+		t.Fatalf("reissue without confirm status = %d, want 400", noConfirm.Code)
+	}
+
+	reissued := adminMerchantsTestRequest(
+		t, env.handler, http.MethodPost, "/api/v1/admin/merchants/"+merchantID+"/api-secret/reissue",
+		[]byte(`{"confirm":"reissue"}`), cookie,
+	)
+	if reissued.Code != http.StatusOK {
+		t.Fatalf("reissue status = %d, body = %s", reissued.Code, reissued.Body.String())
+	}
+	var result struct {
+		Data struct {
+			MerchantID string `json:"merchant_id"`
+			APISecret  string `json:"api_secret"`
+		} `json:"data"`
+	}
+	adminMerchantsTestDecode(t, reissued, &result)
+	if result.Data.MerchantID != merchantID || result.Data.APISecret == "" {
+		t.Fatalf("reissue result = %+v", result.Data)
+	}
+	if result.Data.APISecret == before {
+		t.Error("reissued secret equals the previous secret")
+	}
+	audited := false
+	for _, action := range env.logs.Actions() {
+		if action.Action == "reissue.merchant_secret" && action.ResourceID == merchantID {
+			audited = true
+		}
+	}
+	if !audited {
+		t.Errorf("reissue audit action missing; actions = %#v", env.logs.Actions())
 	}
 }

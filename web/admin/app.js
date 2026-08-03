@@ -24,6 +24,9 @@ const view = {
   userTxPage: 1,
   showCreateEvent: false,
   showCreateMarket: false,
+  showCreateMerchant: false,
+  merchantCredentials: null, // 开户成功的一次性凭据 { id, api_key, api_secret, ... }
+  reissuedSecret: null, // 重发后的 { id, secret }
 };
 
 let renderSeq = 0;
@@ -338,6 +341,37 @@ function kvList(entries) {
     .join("");
 }
 
+function credentialRow(label, value, sourceKey) {
+  const safe = escapeHTML(value);
+  const copyBtn =
+    value && value !== "—"
+      ? `<button class="btn btn--ghost btn--sm" type="button" data-action="copy" data-copy-value="${safe}" data-copy-source="${escapeHTML(sourceKey)}">复制</button>`
+      : "";
+  return `<div class="kv__item">
+    <div class="kv__label">${escapeHTML(label)}</div>
+    <div class="kv__value"><div class="cred-line">
+      <code class="td-mono" data-copy-source="${escapeHTML(sourceKey)}">${safe}</code>
+      ${copyBtn}
+    </div></div>
+  </div>`;
+}
+
+function credentialsPanel(cred) {
+  return `
+  <div class="card cred-panel">
+    <div class="section-heading"><h2>开户凭据</h2></div>
+    <div class="cred-alert">凭据仅显示一次，请立即保存</div>
+    <div class="kv">
+      ${credentialRow("商户 ID", cred.id ?? "", "merchantId")}
+      ${credentialRow("API Key", cred.api_key ?? "", "apiKey")}
+      ${credentialRow("API Secret", cred.api_secret ?? "", "apiSecret")}
+    </div>
+    <div class="cred-actions">
+      <button class="btn btn--primary" type="button" data-action="dismiss-credentials" data-id="${escapeHTML(cred.id ?? "")}">我已保存</button>
+    </div>
+  </div>`;
+}
+
 function tableCard(headers, rows, emptyText, colspan) {
   const head = headers.map((h) => `<th>${escapeHTML(h)}</th>`).join("");
   const body = rows || `<tr><td colspan="${colspan}"><div class="empty">${escapeHTML(emptyText)}</div></td></tr>`;
@@ -428,6 +462,7 @@ async function dashboardPage() {
 
 async function merchantsPage() {
   const data = await apiFetch(`/api/v1/admin/merchants${qs({ q: view.q, page: view.page, limit: view.limit })}`);
+  const isSuper = me.role === "super_admin";
   const rows = (data.items ?? [])
     .map(
       (item) => `
@@ -441,12 +476,29 @@ async function merchantsPage() {
     </tr>`
     )
     .join("");
+  const createForm =
+    isSuper && !view.merchantCredentials && view.showCreateMerchant
+      ? `
+    <form class="create-form" data-action="create-merchant">
+      <div class="form-grid">
+        <div class="field"><label>名称 *</label><input class="input" name="name" required></div>
+        <div class="field"><label>邮箱 *</label><input class="input" name="email" type="email" required></div>
+        <div class="field"><label>币种</label><input class="input" name="currency" value="USD"></div>
+        <div class="field"><label>时区</label><input class="input" name="timezone" value="UTC"></div>
+        <div class="field form-field--actions"><button class="btn btn--primary" type="submit">创建商户</button><button class="btn btn--ghost" type="button" data-action="toggle-create-merchant">取消</button></div>
+      </div>
+    </form>`
+      : "";
+  const credArea = view.merchantCredentials ? credentialsPanel(view.merchantCredentials) : "";
   return `
     <section class="page">
       <form class="filter-bar" data-action="filter">
         <div class="field field--grow"><input class="input" name="q" value="${escapeHTML(view.q)}" placeholder="搜索商户名称 / 邮箱" autocomplete="off"></div>
         <div class="field form-field--actions"><button class="btn btn--primary" type="submit">搜索</button>${view.q ? `<button class="btn btn--ghost" type="button" data-action="reset-filters">重置</button>` : ""}</div>
       </form>
+      <div class="section-heading list-heading"><h2>商户列表</h2>${isSuper && !view.merchantCredentials ? `<button class="btn btn--primary" type="button" data-action="toggle-create-merchant">${view.showCreateMerchant ? "收起表单" : "新增商户"}</button>` : ""}</div>
+      ${createForm}
+      ${credArea}
       ${tableCard(["名称", "邮箱", "状态", "币种", "费率", "创建时间"], rows, "暂无商户", 6)}
       ${paginationBar(data.total, view.page)}
     </section>`;
@@ -497,6 +549,25 @@ async function merchantDetailPage(id) {
       </form>
     </div>`
     : "";
+  const reissuePanel = view.reissuedSecret && view.reissuedSecret.id === id
+    ? `
+    <div class="card cred-panel">
+      <div class="section-heading"><h2>重发的 API Secret</h2></div>
+      <div class="cred-alert">凭据仅显示一次，请立即保存</div>
+      <div class="kv">${credentialRow("API Secret", view.reissuedSecret.api_secret ?? "", "reissuedSecret")}</div>
+      <div class="cred-actions"><button class="btn btn--primary" type="button" data-action="dismiss-credentials">我已保存</button></div>
+    </div>`
+    : "";
+  const credentialsCard = `
+    <div class="card">
+      <div class="section-heading"><h2>API 凭据</h2>${isSuper ? `<button class="btn btn--ghost" type="button" data-action="merchant-reissue-secret" data-id="${escapeHTML(id)}">重发 API Secret</button>` : ""}</div>
+      <div class="kv">
+        ${credentialRow("商户 ID", id, "merchantId")}
+        ${credentialRow("API Key 前缀", merchant.api_key_prefix ?? "—", "apiKeyPrefix")}
+        ${credentialRow("Wallet 模式", merchant.wallet_mode ?? "—", "walletMode")}
+      </div>
+      <p class="field-hint">API Secret 出于安全不在此展示，重发后可查看一次。</p>
+    </div>`;
   return `
     <section class="page">
       <div class="breadcrumb"><a href="#/merchants">商户管理</a><span>/</span><span>${escapeHTML(merchant.name ?? id)}</span></div>
@@ -505,6 +576,8 @@ async function merchantDetailPage(id) {
         <div class="detail-head__actions">${actions.join("")}</div>
       </div>
       <div class="card"><div class="section-heading"><h2>基本信息</h2></div><div class="kv">${kv}</div></div>
+      ${credentialsCard}
+      ${reissuePanel}
       <div class="stat-grid">${statCards}</div>
       ${editForm}
     </section>`;
@@ -1021,6 +1094,18 @@ async function handleAction(action, target) {
       case "toggle-create-market":
         view.showCreateMarket = !view.showCreateMarket;
         return render();
+      case "toggle-create-merchant":
+        view.showCreateMerchant = !view.showCreateMerchant;
+        return render();
+      case "dismiss-credentials":
+        view.merchantCredentials = null;
+        view.reissuedSecret = null;
+        if (target.dataset.id) window.location.hash = `#/merchants/${encodeURIComponent(target.dataset.id)}`;
+        return render();
+      case "copy":
+        return copyText(target);
+      case "merchant-reissue-secret":
+        return reissueMerchantSecret(target);
       case "merchant-status":
         return merchantStatus(target);
       case "user-status":
@@ -1073,6 +1158,8 @@ async function handleFormSubmit(form) {
       return applyFilters(form);
     case "create-event":
       return createEvent(form);
+    case "create-merchant":
+      return createMerchant(form);
     case "create-market":
       return createMarket(form);
     case "edit-merchant":
@@ -1224,6 +1311,64 @@ function applyFilters(form) {
   render();
 }
 
+// createMerchant opens a merchant account from the console and stores the
+// one-time cleartext credentials for the save-now panel.
+async function createMerchant(form) {
+  const data = new FormData(form);
+  const body = {
+    name: String(data.get("name") ?? "").trim(),
+    email: String(data.get("email") ?? "").trim(),
+    currency: String(data.get("currency") ?? "USD").trim().toUpperCase() || "USD",
+    timezone: String(data.get("timezone") ?? "UTC").trim() || "UTC",
+  };
+  if (!body.name || !body.email) {
+    toast("请填写名称与邮箱", "error");
+    return;
+  }
+  const created = await apiFetch("/api/v1/admin/merchants", { method: "POST", body: JSON.stringify(body) });
+  view.merchantCredentials = created;
+  view.showCreateMerchant = false;
+  render();
+}
+
+// copyText copies a credential value with a clipboard fallback.
+async function copyText(target) {
+  const value = target.dataset.copyValue ?? "";
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    const source = target.dataset.copySource
+      ? document.querySelector(`[data-copy-source="${CSS.escape(target.dataset.copySource)}"]`)
+      : null;
+    if (source) {
+      const range = document.createRange();
+      range.selectNodeContents(source);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand("copy");
+      selection.removeAllRanges();
+    }
+  }
+  toast("已复制");
+}
+
+// reissueMerchantSecret rotates the V3 signing secret after the confirm word.
+async function reissueMerchantSecret(target) {
+  const id = target.dataset.id;
+  if (!id) return;
+  const word = window.prompt("输入确认词 reissue 以重发 API Secret（旧密钥将立即失效）");
+  if (word !== "reissue") return;
+  const result = await apiFetch(`/api/v1/admin/merchants/${encodeURIComponent(id)}/api-secret/reissue`, {
+    method: "POST",
+    body: JSON.stringify({ confirm: "reissue" }),
+  });
+  view.reissuedSecret = { id, api_secret: result.api_secret };
+  render();
+  toast("API Secret 已重发，请立即保存");
+}
+
 async function createEvent(form) {
   const data = new FormData(form);
   const title = String(data.get("title") ?? "").trim();
@@ -1342,6 +1487,9 @@ async function bootstrap() {
       userTxPage: 1,
       showCreateEvent: false,
       showCreateMarket: false,
+      showCreateMerchant: false,
+      merchantCredentials: null,
+      reissuedSecret: null,
     });
     render();
   });

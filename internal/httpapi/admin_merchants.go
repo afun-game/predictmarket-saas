@@ -13,6 +13,29 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/platformuser"
 )
 
+// createMerchant opens a new merchant account. The API key and secret are
+// returned in cleartext exactly once, mirroring the self-service register
+// endpoint; the console shows them in a save-once dialog.
+func (h *adminHandler) createMerchant(w http.ResponseWriter, r *http.Request) {
+	var request merchant.RegisterRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	registered, err := h.merchants.Register(r.Context(), &request)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	if principal, ok := auth.AdminPrincipalFromContext(r.Context()); ok {
+		h.adminAudit(principal, "create.merchant", "merchant", registered.ID, nil, merchantState(registered), r)
+	}
+	payload := merchantState(registered)
+	payload["api_key"] = registered.APIKey
+	payload["api_secret"] = registered.APISecret
+	writeJSON(w, http.StatusCreated, map[string]any{"data": payload})
+}
+
 // listMerchants serves GET /api/v1/admin/merchants.
 func (h *adminHandler) listMerchants(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -106,6 +129,38 @@ func (h *adminHandler) updateMerchantStatus(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]string{
 		"id":     updated.ID,
 		"status": updated.Status,
+	}})
+}
+
+// reissueMerchantSecret rotates the merchant's V3 signing secret and returns
+// the new cleartext exactly once. The merchant must pass the confirmation
+// word before the rotation happens.
+func (h *adminHandler) reissueMerchantSecret(w http.ResponseWriter, r *http.Request) {
+	merchantID := r.PathValue("merchantID")
+	if !readConfirm(w, r, "reissue") {
+		writeError(w, http.StatusBadRequest, "validation_error", "confirmation is required")
+		return
+	}
+	current, err := h.merchants.Get(r.Context(), merchantID)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	result, err := h.merchants.ReissueV3Secret(r.Context(), merchantID)
+	if err != nil {
+		if errors.Is(err, merchant.ErrV3Unavailable) {
+			writeError(w, http.StatusServiceUnavailable, "v3_not_configured", "V3 secret encryption is not configured")
+			return
+		}
+		writeServiceError(w, err)
+		return
+	}
+	if principal, ok := auth.AdminPrincipalFromContext(r.Context()); ok {
+		h.adminAudit(principal, "reissue.merchant_secret", "merchant", merchantID, merchantState(current), merchantState(result), r)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+		"merchant_id": result.ID,
+		"api_secret":  result.APISecret,
 	}})
 }
 
