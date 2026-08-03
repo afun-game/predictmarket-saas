@@ -118,8 +118,8 @@ func TestCrossRatesPreserveReciprocalPairs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("crossRates() error = %v", err)
 	}
-	if len(rates) != 25 {
-		t.Fatalf("crossRates() len = %d, want 25", len(rates))
+	if len(rates) != 36 {
+		t.Fatalf("crossRates() len = %d, want 36", len(rates))
 	}
 	values := map[string]string{}
 	for _, rate := range rates {
@@ -154,7 +154,7 @@ func testSnapshot() rateSnapshot {
 	return rateSnapshot{
 		Base: "USD",
 		Rates: map[string]string{
-			"USD": "1", "EUR": "0.8", "CNY": "7.2", "JPY": "150", "GBP": "0.7",
+			"USD": "1", "EUR": "0.8", "CNY": "7.2", "JPY": "150", "GBP": "0.7", "MXN": "17.5",
 		},
 		Provider:  "test-provider",
 		Timestamp: time.Date(2026, 7, 28, 10, 0, 0, 0, time.UTC),

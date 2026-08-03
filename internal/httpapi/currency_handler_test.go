@@ -101,7 +101,7 @@ func (*stubCurrencyService) Convert(context.Context, float64, string, string) (f
 }
 
 func (*stubCurrencyService) ListSupported(context.Context) ([]string, error) {
-	return []string{"USD", "EUR", "CNY", "JPY", "GBP"}, nil
+	return []string{"USD", "EUR", "CNY", "JPY", "GBP", "MXN"}, nil
 }
 
 func (s *stubCurrencyService) RefreshRates(context.Context) error {

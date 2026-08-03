@@ -729,7 +729,7 @@ func normalizeCursorLimit(limit int) (int, error) {
 
 func validCurrency(currency string) bool {
 	switch currency {
-	case "USD", "EUR", "CNY", "JPY", "GBP":
+	case "USD", "EUR", "CNY", "JPY", "GBP", "MXN":
 		return true
 	default:
 		return false

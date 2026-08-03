@@ -535,7 +535,7 @@ func validEmail(value string) bool {
 
 func validCurrency(value string) bool {
 	switch value {
-	case "USD", "EUR", "CNY", "JPY", "GBP":
+	case "USD", "EUR", "CNY", "JPY", "GBP", "MXN":
 		return true
 	default:
 		return false

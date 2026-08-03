@@ -624,7 +624,7 @@ components:
       required: [error]
       properties:
         error: {type: object, required: [code, message], properties: {code: {type: string}, message: {type: string}}}
-    Currency: {type: string, enum: [USD, EUR, CNY, JPY, GBP]}
+    Currency: {type: string, enum: [USD, EUR, CNY, JPY, GBP, MXN]}
     EventStatus: {type: string, enum: [pending, active, closed, resolved]}
     MarketStatus: {type: string, enum: [active, suspended, closed, settled]}
     OrderStatus: {type: string, enum: [pending, partial, filled, cancelled]}

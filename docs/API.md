@@ -242,7 +242,7 @@ Content-Type: application/json
 ```
 
 Converted amounts are rounded to the nearest minor unit using deterministic
-half-up rounding. Supported currencies are USD, EUR, CNY, JPY, and GBP.
+half-up rounding. Supported currencies are USD, EUR, CNY, JPY, GBP, and MXN.
 
 ```http
 POST /api/v1/currencies/time
@@ -893,6 +893,7 @@ Supported currencies:
 - CNY (Chinese Yuan)
 - JPY (Japanese Yen)
 - GBP (British Pound)
+- MXN (Mexican Peso)
 
 ## Settlement webhooks
 

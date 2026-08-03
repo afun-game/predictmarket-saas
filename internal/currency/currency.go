@@ -25,7 +25,7 @@ const (
 var (
 	ErrRateNotFound        = errors.New("exchange rate not found")
 	ErrProviderUnavailable = errors.New("exchange rate provider unavailable")
-	supportedCurrencies    = []string{"USD", "EUR", "CNY", "JPY", "GBP"}
+	supportedCurrencies    = []string{"USD", "EUR", "CNY", "JPY", "GBP", "MXN"}
 )
 
 // Service manages exchange rates and display conversions.

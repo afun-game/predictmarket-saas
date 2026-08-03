@@ -14,7 +14,7 @@ func TestHTTPRateProvider(t *testing.T) {
 		_, _ = w.Write([]byte(`{
             "base":"USD",
             "time_last_updated":1785232800,
-            "rates":{"EUR":0.8,"CNY":7.2,"JPY":150,"GBP":0.7}
+            "rates":{"EUR":0.8,"CNY":7.2,"JPY":150,"GBP":0.7,"MXN":17.5}
         }`))
 	}))
 	defer server.Close()

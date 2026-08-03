@@ -94,7 +94,7 @@ func newCurrencyIntegrationFixture(t *testing.T) *currencyIntegrationFixture {
 		_, _ = fmt.Fprintf(w, `{
             "base":"USD",
             "time_last_updated":%d,
-            "rates":{"EUR":0.8,"CNY":7.2,"JPY":150,"GBP":0.7}
+            "rates":{"EUR":0.8,"CNY":7.2,"JPY":150,"GBP":0.7,"MXN":17.5}
         }`, timestamp.Unix())
 	}))
 	providerName := "integration-" + fmt.Sprintf("%d", time.Now().UnixNano())
