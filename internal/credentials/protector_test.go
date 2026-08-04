@@ -41,10 +41,15 @@ func TestProtectorRejectsTamperedCiphertext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encrypt() error = %v", err)
 	}
-	// Flip a character inside the nonce region. The final base64 character
-	// can carry ignored low bits (payload length mod 3), so mutating it would
-	// pass roughly 25% of the time without changing the decoded tag.
-	tampered := ciphertext[:8] + "A" + ciphertext[9:]
+	// Flip a character inside the nonce region, guaranteeing a different
+	// ciphertext. The final base64 character can carry ignored low bits
+	// (payload length mod 3), and a fixed replacement could equal the
+	// original character, so choose a replacement that always differs.
+	replacement := byte('A')
+	if ciphertext[8] == 'A' {
+		replacement = 'B'
+	}
+	tampered := ciphertext[:8] + string(replacement) + ciphertext[9:]
 	if _, err := protector.Decrypt(tampered); err == nil {
 		t.Fatal("Decrypt() error = nil, want authenticated-ciphertext error")
 	}
