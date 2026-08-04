@@ -27,6 +27,7 @@ const view = {
   showCreateMerchant: false,
   merchantCredentials: null, // 开户成功的一次性凭据 { id, api_key, api_secret, ... }
   reissuedSecret: null, // 重发后的 { id, secret }
+  testToken: null, // 商户详情生成的测试链接 { launch_url, token, ... }
 };
 
 let renderSeq = 0;
@@ -520,6 +521,7 @@ async function merchantDetailPage(id) {
   const isSuper = me.role === "super_admin";
   const actions = [];
   if (isSuper) {
+    actions.push(`<button class="btn btn--ghost" type="button" data-action="merchant-test-token" data-id="${escapeHTML(id)}">测试链接</button>`);
     if (merchant.status === "active") {
       actions.push(`<button class="btn btn--danger" type="button" data-action="merchant-status" data-id="${escapeHTML(id)}" data-status="suspended">暂停商户</button>`);
     } else if (merchant.status === "suspended" || merchant.status === "inactive") {
@@ -573,6 +575,20 @@ async function merchantDetailPage(id) {
       <div class="cred-actions"><button class="btn btn--primary" type="button" data-action="dismiss-credentials">我已保存</button></div>
     </div>`
     : "";
+  const testTokenPanel = view.testToken && view.testToken.merchant_id === id
+    ? `
+    <div class="card cred-panel">
+      <div class="section-heading"><h2>测试链接</h2><span class="label">15 分钟有效 · 一次性</span></div>
+      <div class="cred-alert">把链接交给前端同事直接打开或嵌入 iframe 即可进入托管页</div>
+      <div class="kv">
+        ${credentialRow("Launch URL", view.testToken.launch_url ?? "", "testLaunchUrl")}
+        ${credentialRow("Token", view.testToken.token ?? "", "testTokenValue")}
+        ${credentialRow("用户 ID", view.testToken.user_id ?? "—", "testUserId")}
+        ${credentialRow("钱包模式", view.testToken.wallet_mode ?? "—", "testWalletMode")}
+      </div>
+      <div class="cred-actions"><button class="btn btn--primary" type="button" data-action="dismiss-credentials">关闭</button></div>
+    </div>`
+    : "";
   const credentialsCard = `
     <div class="card">
       <div class="section-heading"><h2>API 凭据</h2>${isSuper ? `<button class="btn btn--ghost" type="button" data-action="merchant-reissue-secret" data-id="${escapeHTML(id)}">重发 API Secret</button>` : ""}</div>
@@ -593,6 +609,7 @@ async function merchantDetailPage(id) {
       <div class="card"><div class="section-heading"><h2>基本信息</h2></div><div class="kv">${kv}</div></div>
       ${credentialsCard}
       ${reissuePanel}
+      ${testTokenPanel}
       <div class="stat-grid">${statCards}</div>
       ${editForm}
     </section>`;
@@ -1115,12 +1132,15 @@ async function handleAction(action, target) {
       case "dismiss-credentials":
         view.merchantCredentials = null;
         view.reissuedSecret = null;
+        view.testToken = null;
         if (target.dataset.id) window.location.hash = `#/merchants/${encodeURIComponent(target.dataset.id)}`;
         return render();
       case "copy":
         return copyText(target);
       case "merchant-reissue-secret":
         return reissueMerchantSecret(target);
+      case "merchant-test-token":
+        return merchantTestToken(target);
       case "merchant-status":
         return merchantStatus(target);
       case "user-status":
@@ -1407,6 +1427,21 @@ async function reissueMerchantSecret(target) {
   toast("API Secret 已重发，请立即保存");
 }
 
+// merchantTestToken generates a one-time launch link for the merchant's
+// hosted page, so frontend engineers can test without merchant credentials.
+async function merchantTestToken(target) {
+  const id = target.dataset.id;
+  if (!id) return;
+  const userID = window.prompt("生成测试链接的用户 ID（留空使用 test-user）", "test-user");
+  if (userID === null) return;
+  const body = { merchant_id: id };
+  if (String(userID).trim()) body.user_id = String(userID).trim();
+  const result = await apiFetch("/api/v1/admin/test-token", { method: "POST", body: JSON.stringify(body) });
+  view.testToken = result;
+  render();
+  toast("测试链接已生成（15 分钟有效）");
+}
+
 async function createEvent(form) {
   const data = new FormData(form);
   const title = String(data.get("title") ?? "").trim();
@@ -1544,6 +1579,7 @@ async function bootstrap() {
       showCreateMerchant: false,
       merchantCredentials: null,
       reissuedSecret: null,
+      testToken: null,
     });
     render();
   });
