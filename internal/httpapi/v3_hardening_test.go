@@ -85,6 +85,27 @@ func TestV3IPWhitelistAllowsMatchingIP(t *testing.T) {
 	}
 }
 
+func TestV3SeamlessLaunchRequiresBalance(t *testing.T) {
+	t.Parallel()
+	handler := newV3HardeningHandler(t, &types.Merchant{
+		ID:         "merchant-1",
+		Status:     "active",
+		Currency:   "USD",
+		WalletMode: "seamless",
+	}, nil)
+	recorder := signedV3Request(
+		t,
+		handler,
+		http.MethodPost,
+		"/api/v2/sessions",
+		[]byte(`{"user_id":"site-user-1","currency":"USD"}`),
+		"nonce-1",
+	)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("session status = %d, want 400; body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestWriteSeamlessOrderErrorMapsHardeningErrors(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -100,7 +121,7 @@ func TestWriteSeamlessOrderErrorMapsHardeningErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			recorder := httptest.NewRecorder()
-			writeSeamlessOrderError(recorder, tc.err)
+			writeSeamlessOrderError(recorder, tc.err, "USD")
 			if recorder.Code != tc.want {
 				t.Fatalf("writeSeamlessOrderError(%v) status = %d, want %d", tc.err, recorder.Code, tc.want)
 			}

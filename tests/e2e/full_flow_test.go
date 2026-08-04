@@ -794,7 +794,10 @@ func (s *seamlessLoadState) handleCallback(w http.ResponseWriter, r *http.Reques
 	switch request.Type {
 	case "debit":
 		if s.balanceCents < amountCents {
-			writeJSONResponse(w, http.StatusOK, map[string]string{"status": "insufficient_funds"})
+			writeJSONResponse(w, http.StatusOK, map[string]string{
+				"status":  "insufficient_funds",
+				"balance": fixed.FormatCents(s.balanceCents),
+			})
 			return
 		}
 		s.balanceCents -= amountCents

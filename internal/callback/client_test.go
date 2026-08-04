@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -77,14 +78,14 @@ func TestDeliverCallbackInsufficientFundsIsPermanent(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "insufficient_funds"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "insufficient_funds", "balance": "0.50"})
 	}))
 	defer server.Close()
 
 	client := NewClient(time.Second)
 	client.httpClient = server.Client()
 	client.allowPrivateURLs = true
-	_, err := client.DeliverCallback(context.Background(), server.URL, "merchant-1", "secret", CallbackRequest{
+	response, err := client.DeliverCallback(context.Background(), server.URL, "merchant-1", "secret", CallbackRequest{
 		CallbackID:    "cb-1",
 		Type:          "debit",
 		TransactionID: "tx-1",
@@ -96,6 +97,38 @@ func TestDeliverCallbackInsufficientFundsIsPermanent(t *testing.T) {
 	})
 	if !errors.Is(err, ErrPermanent) {
 		t.Fatalf("error = %v, want ErrPermanent", err)
+	}
+	if response == nil || response.Balance != "0.50" {
+		t.Fatalf("response = %#v, want balance 0.50", response)
+	}
+}
+
+func TestDeliverCallbackRequiresBalanceForTerminalWalletStatus(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}))
+	defer server.Close()
+
+	client := NewClient(time.Second)
+	client.httpClient = server.Client()
+	client.allowPrivateURLs = true
+	_, err := client.DeliverCallback(context.Background(), server.URL, "merchant-1", "secret", CallbackRequest{})
+	if err == nil || !strings.Contains(err.Error(), "missing balance") {
+		t.Fatalf("error = %v, want missing balance", err)
+	}
+}
+
+func TestBalanceErrorPreservesMerchantBalance(t *testing.T) {
+	t.Parallel()
+
+	err := withBalance(ErrInsufficientFunds, "3.25")
+	if !errors.Is(err, ErrInsufficientFunds) {
+		t.Fatalf("error = %v, want ErrInsufficientFunds", err)
+	}
+	if balance, ok := BalanceFromError(err); !ok || balance != "3.25" {
+		t.Fatalf("BalanceFromError() = (%q, %v), want (3.25, true)", balance, ok)
 	}
 }
 

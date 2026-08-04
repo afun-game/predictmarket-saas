@@ -91,6 +91,7 @@ Idempotency-Key: <uuid>
 {
   "user_id": "site-user-8801",        // 商户侧用户唯一 ID
   "currency": "USD",
+  "balance": "100.00",                // seamless 必填；进入游戏时的余额快照
   "locale": "zh-CN",
   "return_url": "https://site.com/lobby",   // 页面内「返回」跳转
   "ip": "1.2.3.4",                    // 终端用户 IP（风控用，可选）
@@ -119,6 +120,7 @@ Idempotency-Key: <uuid>
 `POST /api/user/session/exchange {token}` → 平台校验并**作废** token，
 签发会话 JWT（TTL 2h，滑动续期上限 12h），JWT claims：
 `merchant_id, user_id, currency, wallet_mode, locale`。
+兑换响应同时返回启动请求中的余额快照，托管页首屏无需再查询余额。
 
 ### 3.3 会话管理
 
@@ -199,7 +201,7 @@ Content-Type: application/json
 
 ```
 { "status": "ok", "balance": "70.00" }                 // 成功，回报最新余额
-{ "status": "insufficient_funds" }                      // 仅对 debit 合法
+{ "status": "insufficient_funds", "balance": "5.00" } // 仅对 debit 合法，也返回最新余额
 { "status": "duplicate", "balance": "70.00" }           // 幂等重放，等同成功
 { "status": "user_not_found" | "user_blocked" }         // permanent 失败
 ```
@@ -211,6 +213,8 @@ Content-Type: application/json
    对未见过的原事务先记账再冲正（体育博彩惯例：rollback-before-bet 也要能处理）。
 3. 超时（平台侧 3s）与 5xx 视为未知态 → 平台以**相同 transaction_id** 重试。
 4. 金额恒为正数，方向由 `type` 决定。
+5. `ok`、`duplicate`、`insufficient_funds` 必须返回定点字符串 `balance`；
+   平台把该余额透传给托管页，商户无需为每次下注额外处理余额查询。
 
 ### 4.3 无缝钱包的内部实现：影子账本，不绕过现有资金安全层
 
@@ -407,8 +411,8 @@ Go/Python/JavaScript 签名示例。
 ## 十一、待评审确认项
 
 1. `/api/user/*` 行情是否需要 WS/SSE 实时推送（orderbook 变动）？建议 Phase 4 后单独排期。
-2. 无缝模式下用户余额展示：托管页每次下单面板打开时实时回调商户 `balance` 查询，
-   还是仅用 debit/credit 应答里的余额镜像？（前者多一类回调、体验准；后者省调用、可能过期。
-   **建议前者**，balance 查询回调幂等无副作用，成本可控。）
+2. 无缝模式采用 slots 风格余额：启动请求传入余额，debit/credit/rollback
+   应答（包括余额不足）返回最新余额。`balance` 查询回调保留为兜底，仅在页面重新
+   获得焦点或 60 秒没有余额更新时调用。
 3. 日报表的 GGR 口径（含未结算敞口与否）需与商务对齐。
 4. 沙箱是否对外自助开通，还是商务开通制。

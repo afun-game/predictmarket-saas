@@ -74,15 +74,22 @@ endpoints already named in V3:
 
 | View | Endpoint | Required fields |
 |---|---|---|
-| Header | `GET /api/user/me` | `user_id`, `currency`, `available_balance`, `locale`, `wallet_mode`. |
+| Header | session exchange, then `GET /api/user/me` fallback | `user_id`, `currency`, `available_balance`, `locale`, `wallet_mode`. |
 | Event discovery | `GET /api/user/events` | `id`, `title`, `description`, `category`, `end_time`, `resolution_time`, `status`, `outcome`. |
 | Event detail | `GET /api/user/events/{id}` plus `GET /api/user/markets?event_id=` | event context and the current merchant's related markets. |
 | Market list/detail | `GET /api/user/markets`, `GET /api/user/markets/{id}` | `id`, `event_id`, `question`, binary `options`, `total_volume`, `status`, `settled_at`. |
-| Ticket and history | `POST /api/user/orders`, `GET /api/user/orders` | V3 fixed-point amount strings, order state, filled shares, and timestamps. |
+| Ticket and history | `POST /api/user/orders`, `GET /api/user/orders` | V3 fixed-point amount strings, order state, filled shares, timestamps, and response `meta.available_balance`. |
 
 The event category is a stable server-side display key; the client must never
 infer a category from titles. Outcome prices are sourced from the orderbook
 endpoint, and the ticket flow uses the V3 hosted order API.
+
+The initial balance travels in the signed launch request and is returned by
+session exchange. Successful and insufficient-funds order responses carry the
+latest balance in `meta`, so the hosted page does not issue an immediate
+`/api/user/me` request after a bet. The read-only balance callback remains a
+fallback: refresh on restored page visibility/focus and after 60 seconds with
+no balance-bearing response.
 
 ## Iframe contract
 

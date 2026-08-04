@@ -23,6 +23,7 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/session"
 	"github.com/afun-game/predictmarket-saas/internal/v2query"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
+	"github.com/afun-game/predictmarket-saas/pkg/fixed"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 	"github.com/nxsky/twill/runtime/middleware"
 )
@@ -77,6 +78,7 @@ type v3Handler struct {
 type v3SessionCreateRequest struct {
 	UserID    string            `json:"user_id"`
 	Currency  string            `json:"currency"`
+	Balance   string            `json:"balance,omitempty"`
 	Locale    string            `json:"locale"`
 	ReturnURL string            `json:"return_url,omitempty"`
 	IP        string            `json:"ip,omitempty"`
@@ -566,20 +568,33 @@ func (h *v3Handler) createOrderForMode(
 			writeError(w, http.StatusServiceUnavailable, "seamless_unavailable", "seamless order placement is not configured")
 			return
 		}
-		created, err := h.seamless.Place(r.Context(), createRequest)
+		created, balance, err := h.seamless.PlaceWithBalance(r.Context(), createRequest)
 		if err != nil {
-			writeSeamlessOrderError(w, err)
+			writeSeamlessOrderError(w, err, merchantValue.Currency)
 			return
 		}
-		writeJSON(w, http.StatusCreated, map[string]any{"data": created})
+		writeJSON(w, http.StatusCreated, map[string]any{
+			"data": created,
+			"meta": balanceMeta(balance, merchantValue.Currency),
+		})
 		return
 	}
 	created, err := h.orders.Create(r.Context(), createRequest)
 	if err != nil {
+		if errors.Is(err, wallet.ErrInsufficientBalance) {
+			if balance, ok := h.currentPlatformBalance(r, merchantValue.ID, request.UserID, request.Currency); ok {
+				writeErrorWithBalance(w, http.StatusConflict, "insufficient_balance", "insufficient available balance", balance, request.Currency)
+				return
+			}
+		}
 		writeOrderServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"data": created})
+	response := map[string]any{"data": created}
+	if balance, ok := h.currentPlatformBalance(r, merchantValue.ID, request.UserID, request.Currency); ok {
+		response["meta"] = balanceMeta(balance, request.Currency)
+	}
+	writeJSON(w, http.StatusCreated, response)
 }
 
 func (h *v3Handler) getCallbackTransaction(w http.ResponseWriter, r *http.Request) {
@@ -603,7 +618,20 @@ func (h *v3Handler) getCallbackTransaction(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"data": value})
 }
 
-func writeSeamlessOrderError(w http.ResponseWriter, err error) {
+func writeSeamlessOrderError(w http.ResponseWriter, err error, currency string) {
+	if balance, ok := callback.BalanceFromError(err); ok {
+		switch {
+		case errors.Is(err, callback.ErrInsufficientFunds):
+			writeErrorWithBalance(w, http.StatusPaymentRequired, "insufficient_funds", "merchant wallet reported insufficient funds", balance, currency)
+			return
+		case errors.Is(err, callback.ErrUserNotFound):
+			writeErrorWithBalance(w, http.StatusNotFound, "user_not_found", "merchant wallet reported user not found", balance, currency)
+			return
+		case errors.Is(err, callback.ErrUserBlocked):
+			writeErrorWithBalance(w, http.StatusForbidden, "user_blocked", "merchant wallet reported user blocked", balance, currency)
+			return
+		}
+	}
 	switch {
 	case errors.Is(err, callback.ErrInsufficientFunds):
 		writeError(w, http.StatusPaymentRequired, "insufficient_funds", "merchant wallet reported insufficient funds")
@@ -622,6 +650,28 @@ func writeSeamlessOrderError(w http.ResponseWriter, err error) {
 	default:
 		writeOrderServiceError(w, err)
 	}
+}
+
+func balanceMeta(balance, currency string) map[string]any {
+	return map[string]any{
+		"available_balance": balance,
+		"currency":          strings.ToUpper(strings.TrimSpace(currency)),
+	}
+}
+
+func writeErrorWithBalance(w http.ResponseWriter, status int, code, message, balance, currency string) {
+	writeJSON(w, status, map[string]any{
+		"error": map[string]string{"code": code, "message": message},
+		"meta":  balanceMeta(balance, currency),
+	})
+}
+
+func (h *v3Handler) currentPlatformBalance(r *http.Request, merchantID, userID, currency string) (string, bool) {
+	available, _, err := h.wallets.GetBalance(r.Context(), merchantID, userID, currency)
+	if err != nil {
+		return "", false
+	}
+	return formatMoney(available), true
 }
 
 func (h *v3Handler) enforceMerchantPolicy(w http.ResponseWriter, r *http.Request, pool string) bool {
@@ -921,6 +971,20 @@ func (h *v3Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
+	initialBalance := request.Balance
+	if merchantValue.WalletMode == "seamless" {
+		initialBalance, err = normalizeBalanceSnapshot(initialBalance)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "validation_error", "balance is required in seamless wallet mode and must be a non-negative amount with at most two decimals")
+			return
+		}
+	} else if initialBalance != "" {
+		initialBalance, err = normalizeBalanceSnapshot(initialBalance)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "validation_error", "balance must be a non-negative amount with at most two decimals")
+			return
+		}
+	}
 	if err := h.platformUsers.Upsert(r.Context(), platformuser.User{
 		MerchantID:     merchantValue.ID,
 		ExternalUserID: request.UserID,
@@ -935,12 +999,13 @@ func (h *v3Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	if !h.requireActivePlatformUser(w, r, merchantValue.ID, request.UserID) {
 		return
 	}
-	launchToken, launch, err := h.sessions.CreateLaunch(
+	launchToken, launch, err := h.sessions.CreateLaunchWithBalance(
 		r.Context(),
 		merchantValue.ID,
 		request.UserID,
 		request.Currency,
 		merchantValue.WalletMode,
+		initialBalance,
 		request.Locale,
 		request.ReturnURL,
 	)
@@ -1002,6 +1067,7 @@ func (h *v3Handler) exchangeSession(w http.ResponseWriter, r *http.Request) {
 			"token_type":   "Bearer",
 			"expires_at":   value.ExpiresAt,
 			"session":      sessionResponse(value),
+			"user":         sessionUserResponse(value),
 		},
 	})
 }
@@ -1303,6 +1369,7 @@ func validHostedLaunchURL(rawURL string) (*url.URL, error) {
 func normalizeV3SessionRequest(request v3SessionCreateRequest, merchantCurrency string) (v3SessionCreateRequest, error) {
 	request.UserID = strings.TrimSpace(request.UserID)
 	request.Currency = strings.ToUpper(strings.TrimSpace(request.Currency))
+	request.Balance = strings.TrimSpace(request.Balance)
 	request.Locale = strings.TrimSpace(request.Locale)
 	request.ReturnURL = strings.TrimSpace(request.ReturnURL)
 	if request.UserID == "" || len(request.UserID) > 255 {
@@ -1325,6 +1392,19 @@ func normalizeV3SessionRequest(request v3SessionCreateRequest, merchantCurrency 
 		return v3SessionCreateRequest{}, errors.New("return_url must be an absolute HTTPS URL")
 	}
 	return request, nil
+}
+
+func normalizeBalanceSnapshot(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	switch value {
+	case "0", "0.0", "0.00":
+		return "0.00", nil
+	}
+	cents, err := fixed.CentsFromString(value)
+	if err != nil {
+		return "", err
+	}
+	return fixed.FormatCents(cents), nil
 }
 
 func authenticatedUserSession(w http.ResponseWriter, r *http.Request) (*auth.UserSession, bool) {
@@ -1365,6 +1445,17 @@ func sessionResponse(value session.BrowserSession) map[string]any {
 		"created_at":  value.CreatedAt,
 		"expires_at":  value.ExpiresAt,
 		"return_url":  value.ReturnURL,
+	}
+}
+
+func sessionUserResponse(value session.BrowserSession) map[string]any {
+	return map[string]any{
+		"user_id":           value.UserID,
+		"currency":          value.Currency,
+		"wallet_mode":       value.WalletMode,
+		"available_balance": value.Balance,
+		"locked_balance":    "0.00",
+		"locale":            value.Locale,
 	}
 }
 

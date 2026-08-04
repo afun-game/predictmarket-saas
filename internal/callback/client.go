@@ -17,6 +17,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/afun-game/predictmarket-saas/pkg/fixed"
 )
 
 const (
@@ -111,6 +113,18 @@ func (c *Client) DeliverCallback(
 		return nil, fmt.Errorf("decode merchant callback response: %w", err)
 	}
 	response.Status = strings.ToLower(strings.TrimSpace(response.Status))
+	if response.Balance != "" {
+		response.Balance, err = normalizeCallbackBalance(response.Balance)
+		if err != nil {
+			return &response, fmt.Errorf("merchant returned invalid balance: %w", err)
+		}
+	}
+	switch response.Status {
+	case StatusOK, StatusDuplicate, StatusInsufficientFunds:
+		if response.Balance == "" {
+			return &response, errors.New("merchant callback response is missing balance")
+		}
+	}
 	switch response.Status {
 	case StatusOK, StatusDuplicate:
 		return &response, nil
@@ -119,6 +133,19 @@ func (c *Client) DeliverCallback(
 	default:
 		return &response, fmt.Errorf("merchant returned unsupported status %q", response.Status)
 	}
+}
+
+func normalizeCallbackBalance(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	switch value {
+	case "0", "0.0", "0.00":
+		return "0.00", nil
+	}
+	cents, err := fixed.CentsFromString(value)
+	if err != nil {
+		return "", err
+	}
+	return fixed.FormatCents(cents), nil
 }
 
 // VerificationRequest asks a merchant to echo a challenge to prove callback

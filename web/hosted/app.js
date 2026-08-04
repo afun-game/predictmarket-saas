@@ -224,6 +224,9 @@ const state = {
 // and uses the resulting short-lived session credential for every API call.
 let events = [];
 let markets = [];
+const BALANCE_REFRESH_INTERVAL_MS = 60_000;
+let lastBalanceSyncAt = 0;
+let balanceRefreshInFlight = null;
 
 function escapeHTML(value) {
   return String(value)
@@ -527,11 +530,12 @@ document.addEventListener("keydown", (event) => {
 window.addEventListener("hashchange", render);
 
 async function apiFetch(path, options = {}) {
-  const headers = new Headers(options.headers ?? {});
+  const { envelope = false, ...requestOptions } = options;
+  const headers = new Headers(requestOptions.headers ?? {});
   headers.set("Accept", "application/json");
-  if (options.body !== undefined) headers.set("Content-Type", "application/json");
+  if (requestOptions.body !== undefined) headers.set("Content-Type", "application/json");
   if (state.accessToken) headers.set("Authorization", `Bearer ${state.accessToken}`);
-  const response = await fetch(path, { ...options, headers });
+  const response = await fetch(path, { ...requestOptions, headers });
   let payload = null;
   try { payload = await response.json(); } catch { /* 204/no body */ }
   if (response.status === 401) {
@@ -540,9 +544,22 @@ async function apiFetch(path, options = {}) {
     throw new Error(t("error.session"));
   }
   if (!response.ok) {
-    throw new Error(payload?.error?.message ?? t("error.http", { status: response.status }));
+    const error = new Error(payload?.error?.message ?? t("error.http", { status: response.status }));
+    error.meta = payload?.meta;
+    throw error;
   }
-  return payload?.data ?? payload;
+  return envelope ? payload : payload?.data ?? payload;
+}
+
+function applyBalance(meta) {
+  if (!meta?.available_balance || !state.me) return;
+  state.me = {
+    ...state.me,
+    available_balance: meta.available_balance,
+    currency: meta.currency ?? state.me.currency,
+  };
+  lastBalanceSyncAt = Date.now();
+  emit("pm:balance_changed", { balance: state.me.available_balance, currency: state.me.currency });
 }
 
 function launchToken() {
@@ -599,6 +616,7 @@ async function bootstrap() {
   document.documentElement.lang = locale;
   render();
   try {
+    let sessionUser = null;
     const token = launchToken();
     if (!state.accessToken && !token) throw new Error(t("error.launch"));
     if (!state.accessToken) {
@@ -607,18 +625,20 @@ async function bootstrap() {
         body: JSON.stringify({ token }),
       });
       state.accessToken = exchanged.access_token;
+      sessionUser = exchanged.user?.available_balance ? exchanged.user : null;
       // A one-time token must not remain in browser history or referrers.
       const cleanURL = new URL(window.location.href);
       cleanURL.searchParams.delete("token");
       window.history.replaceState({}, document.title, cleanURL.toString());
     }
     const [me, eventPage, marketPage, orderPage] = await Promise.all([
-      apiFetch("/api/user/me"),
+      sessionUser ?? apiFetch("/api/user/me"),
       apiFetch("/api/user/events?limit=100"),
       apiFetch("/api/user/markets?limit=100&status=active"),
       apiFetch("/api/user/orders?limit=100"),
     ]);
     state.me = me;
+    lastBalanceSyncAt = Date.now();
     // The merchant session locale sets the default language unless the user
     // has already picked one on this device.
     if (!savedLocale()) {
@@ -655,16 +675,19 @@ async function placeOrder() {
     const entries = [...(book?.asks ?? []), ...(book?.bids ?? [])].filter((entry) => entry.option === option.label && Number(entry.price) > 0);
     const price = entries[0]?.price;
     if (price === undefined) throw new Error(t("order.noQuote"));
-    const order = await apiFetch("/api/user/orders", {
+    const result = await apiFetch("/api/user/orders", {
       method: "POST",
       headers: { "Idempotency-Key": crypto.randomUUID() },
       body: JSON.stringify({ market_id: market.id, type: "buy", option: option.label, amount: Number(amount), price }),
+      envelope: true,
     });
+    const order = result.data;
     state.orders.unshift(order);
     state.selectedOutcome = null;
-    await refreshMe();
+    applyBalance(result.meta);
     emit("pm:bet_placed", { market_id: market.id, order_id: order.id, outcome: option.label });
   } catch (error) {
+    applyBalance(error?.meta);
     state.error = error instanceof Error ? error.message : t("order.failed");
   } finally {
     state.submitting = false;
@@ -673,10 +696,31 @@ async function placeOrder() {
 }
 
 async function refreshMe() {
-  try {
-    state.me = await apiFetch("/api/user/me");
-    emit("pm:balance_changed", { balance: state.me.available_balance, currency: state.me.currency });
-  } catch { /* apiFetch already emits session_expired */ }
+  if (!state.accessToken || balanceRefreshInFlight) return balanceRefreshInFlight;
+  balanceRefreshInFlight = apiFetch("/api/user/me")
+    .then((me) => {
+      state.me = me;
+      lastBalanceSyncAt = Date.now();
+      emit("pm:balance_changed", { balance: state.me.available_balance, currency: state.me.currency });
+      render();
+    })
+    .catch(() => { /* apiFetch already emits session_expired */ })
+    .finally(() => { balanceRefreshInFlight = null; });
+  return balanceRefreshInFlight;
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshMe();
+});
+
+window.addEventListener("focus", () => {
+  if (Date.now() - lastBalanceSyncAt >= 1_000) refreshMe();
+});
+
+window.setInterval(() => {
+  if (document.visibilityState === "visible" && Date.now() - lastBalanceSyncAt >= BALANCE_REFRESH_INTERVAL_MS) {
+    refreshMe();
+  }
+}, BALANCE_REFRESH_INTERVAL_MS);
 
 bootstrap();

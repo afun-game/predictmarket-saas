@@ -40,6 +40,7 @@ type Launch struct {
 	UserID     string    `json:"user_id"`
 	Currency   string    `json:"currency"`
 	WalletMode string    `json:"wallet_mode"`
+	Balance    string    `json:"balance,omitempty"`
 	Locale     string    `json:"locale"`
 	ReturnURL  string    `json:"return_url,omitempty"`
 	ExpiresAt  time.Time `json:"expires_at"`
@@ -52,6 +53,7 @@ type BrowserSession struct {
 	UserID     string    `json:"user_id"`
 	Currency   string    `json:"currency"`
 	WalletMode string    `json:"wallet_mode"`
+	Balance    string    `json:"balance,omitempty"`
 	Locale     string    `json:"locale"`
 	ReturnURL  string    `json:"return_url,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -110,7 +112,22 @@ func (m *Manager) CreateLaunch(
 	locale string,
 	returnURL string,
 ) (string, Launch, error) {
-	launch, err := m.newLaunch(merchantID, userID, currency, walletMode, locale, returnURL)
+	return m.CreateLaunchWithBalance(ctx, merchantID, userID, currency, walletMode, "", locale, returnURL)
+}
+
+// CreateLaunchWithBalance creates a launch carrying a merchant-provided
+// balance snapshot for the hosted page's initial render.
+func (m *Manager) CreateLaunchWithBalance(
+	ctx context.Context,
+	merchantID string,
+	userID string,
+	currency string,
+	walletMode string,
+	balance string,
+	locale string,
+	returnURL string,
+) (string, Launch, error) {
+	launch, err := m.newLaunch(merchantID, userID, currency, walletMode, balance, locale, returnURL)
 	if err != nil {
 		return "", Launch{}, err
 	}
@@ -144,6 +161,7 @@ func (m *Manager) Exchange(ctx context.Context, launchToken string) (string, Bro
 		UserID:     launch.UserID,
 		Currency:   launch.Currency,
 		WalletMode: launch.WalletMode,
+		Balance:    launch.Balance,
 		Locale:     launch.Locale,
 		ReturnURL:  launch.ReturnURL,
 		CreatedAt:  now,
@@ -273,6 +291,7 @@ func (m *Manager) newLaunch(
 	userID string,
 	currency string,
 	walletMode string,
+	balance string,
 	locale string,
 	returnURL string,
 ) (Launch, error) {
@@ -280,6 +299,7 @@ func (m *Manager) newLaunch(
 	userID = strings.TrimSpace(userID)
 	currency = strings.ToUpper(strings.TrimSpace(currency))
 	walletMode = strings.TrimSpace(walletMode)
+	balance = strings.TrimSpace(balance)
 	locale = strings.TrimSpace(locale)
 	if merchantID == "" || userID == "" || len(userID) > 255 || currency == "" || !validWalletMode(walletMode) || locale == "" || len(locale) > 35 {
 		return Launch{}, ErrInvalidInput
@@ -294,6 +314,7 @@ func (m *Manager) newLaunch(
 		UserID:     userID,
 		Currency:   currency,
 		WalletMode: walletMode,
+		Balance:    balance,
 		Locale:     locale,
 		ReturnURL:  strings.TrimSpace(returnURL),
 		ExpiresAt:  m.now().UTC().Add(launchTokenTTL),

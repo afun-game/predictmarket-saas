@@ -31,6 +31,31 @@ var (
 	ErrCallbackUnverified = errors.New("merchant callback URL has not been verified")
 )
 
+// BalanceError preserves a merchant-authoritative balance on a rejected debit.
+type BalanceError struct {
+	err     error
+	balance string
+}
+
+func (e *BalanceError) Error() string { return e.err.Error() }
+func (e *BalanceError) Unwrap() error { return e.err }
+
+// BalanceFromError returns the balance supplied with a terminal merchant error.
+func BalanceFromError(err error) (string, bool) {
+	var balanceErr *BalanceError
+	if !errors.As(err, &balanceErr) || balanceErr.balance == "" {
+		return "", false
+	}
+	return balanceErr.balance, true
+}
+
+func withBalance(err error, balance string) error {
+	if balance == "" {
+		return err
+	}
+	return &BalanceError{err: err, balance: balance}
+}
+
 // SeamlessCoordinator places shadow-funded orders after a synchronous merchant debit.
 type SeamlessCoordinator struct {
 	database  *sql.DB
@@ -92,48 +117,58 @@ func (c *SeamlessCoordinator) Place(
 	ctx context.Context,
 	request *order.CreateRequest,
 ) (*types.Order, error) {
+	created, _, err := c.PlaceWithBalance(ctx, request)
+	return created, err
+}
+
+// PlaceWithBalance places an order and returns the merchant's post-debit balance.
+func (c *SeamlessCoordinator) PlaceWithBalance(
+	ctx context.Context,
+	request *order.CreateRequest,
+) (*types.Order, string, error) {
 	if request == nil {
-		return nil, errors.New("seamless order request is required")
+		return nil, "", errors.New("seamless order request is required")
 	}
 	request.WalletKind = "shadow"
 	prepared, err := c.placer.Prepare(ctx, request)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if prepared.Existing {
-		return prepared.Order, nil
+		balance, _ := newRepository(c.database).GetLatestBalance(ctx, request.MerchantID, request.UserID, request.Currency)
+		return prepared.Order, balance, nil
 	}
 	endpoint, err := newRepository(c.database).MerchantEndpoint(ctx, request.MerchantID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if endpoint.WalletMode != "seamless" {
-		return nil, ErrSeamlessDisabled
+		return nil, "", ErrSeamlessDisabled
 	}
 	if strings.TrimSpace(endpoint.CallbackURL) == "" || strings.TrimSpace(endpoint.CallbackSecretEnc) == "" {
-		return nil, ErrSeamlessDisabled
+		return nil, "", ErrSeamlessDisabled
 	}
 	if endpoint.SeamlessDegraded {
-		return nil, ErrMerchantDegraded
+		return nil, "", ErrMerchantDegraded
 	}
 	if endpoint.CallbackVerifiedAt == nil {
-		return nil, ErrCallbackUnverified
+		return nil, "", ErrCallbackUnverified
 	}
 	secret, err := c.protector.Decrypt(endpoint.CallbackSecretEnc)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt merchant callback secret: %w", err)
+		return nil, "", fmt.Errorf("decrypt merchant callback secret: %w", err)
 	}
 	transactionID, err := generateUUID(c.random)
 	if err != nil {
-		return nil, fmt.Errorf("generate seamless transaction ID: %w", err)
+		return nil, "", fmt.Errorf("generate seamless transaction ID: %w", err)
 	}
 	now := c.now().UTC()
 	if err := c.insertDebitTransaction(ctx, transactionID, prepared, now); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	callbackID, err := generateUUID(c.random)
 	if err != nil {
-		return nil, fmt.Errorf("generate callback ID: %w", err)
+		return nil, "", fmt.Errorf("generate callback ID: %w", err)
 	}
 	response, deliverErr := c.client.DeliverCallback(ctx, endpoint.CallbackURL, request.MerchantID, secret, CallbackRequest{
 		CallbackID:    callbackID,
@@ -150,18 +185,18 @@ func (c *SeamlessCoordinator) Place(
 		CreatedAt: now,
 	})
 	if deliverErr != nil {
-		return nil, c.handleDebitFailure(ctx, prepared, transactionID, response, deliverErr)
+		return nil, "", c.handleDebitFailure(ctx, prepared, transactionID, response, deliverErr)
 	}
 	if err := c.markDebitAccepted(ctx, transactionID, response, now); err != nil {
 		_ = c.enqueueRollback(ctx, prepared, transactionID)
-		return nil, err
+		return nil, "", err
 	}
 	if err := c.placer.Place(ctx, prepared); err != nil {
 		_ = c.enqueueRollback(ctx, prepared, transactionID)
-		return nil, err
+		return nil, "", err
 	}
 	_ = c.attachDebitOrder(ctx, transactionID, prepared.Order.ID, c.now().UTC())
-	return prepared.Order, nil
+	return prepared.Order, response.Balance, nil
 }
 
 func (c *SeamlessCoordinator) handleDebitFailure(
@@ -176,24 +211,24 @@ func (c *SeamlessCoordinator) handleDebitFailure(
 		switch response.Status {
 		case StatusInsufficientFunds:
 			_ = c.markDebitRejected(ctx, transactionID, response, now)
-			return ErrInsufficientFunds
+			return withBalance(ErrInsufficientFunds, response.Balance)
 		case StatusUserNotFound:
 			_ = c.markDebitRejected(ctx, transactionID, response, now)
-			return ErrUserNotFound
+			return withBalance(ErrUserNotFound, response.Balance)
 		case StatusUserBlocked:
 			_ = c.markDebitRejected(ctx, transactionID, response, now)
-			return ErrUserBlocked
+			return withBalance(ErrUserBlocked, response.Balance)
 		}
 	}
 	if errors.Is(deliverErr, ErrPermanent) && response != nil {
 		_ = c.markDebitRejected(ctx, transactionID, response, now)
 		switch response.Status {
 		case StatusInsufficientFunds:
-			return ErrInsufficientFunds
+			return withBalance(ErrInsufficientFunds, response.Balance)
 		case StatusUserNotFound:
-			return ErrUserNotFound
+			return withBalance(ErrUserNotFound, response.Balance)
 		case StatusUserBlocked:
-			return ErrUserBlocked
+			return withBalance(ErrUserBlocked, response.Balance)
 		}
 		return deliverErr
 	}

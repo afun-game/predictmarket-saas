@@ -113,7 +113,7 @@ func TestV3LaunchExchangeAndTenantScopedMarkets(t *testing.T) {
 		handler,
 		http.MethodPost,
 		"/api/v2/sessions",
-		[]byte(`{"user_id":"site-user-8801","currency":"USD","locale":"zh-CN","return_url":"https://merchant.example/lobby"}`),
+		[]byte(`{"user_id":"site-user-8801","currency":"USD","balance":"88.50","locale":"zh-CN","return_url":"https://merchant.example/lobby"}`),
 		"launch-request-1",
 	)
 	if created.Code != http.StatusCreated {
@@ -166,6 +166,9 @@ func TestV3LaunchExchangeAndTenantScopedMarkets(t *testing.T) {
 	exchange := struct {
 		Data struct {
 			AccessToken string `json:"access_token"`
+			User        struct {
+				AvailableBalance string `json:"available_balance"`
+			} `json:"user"`
 		} `json:"data"`
 	}{}
 	if err := json.Unmarshal(exchanged.Body.Bytes(), &exchange); err != nil {
@@ -173,6 +176,9 @@ func TestV3LaunchExchangeAndTenantScopedMarkets(t *testing.T) {
 	}
 	if exchange.Data.AccessToken == "" {
 		t.Fatal("access token is empty")
+	}
+	if exchange.Data.User.AvailableBalance != "88.50" {
+		t.Fatalf("exchange balance = %q, want 88.50", exchange.Data.User.AvailableBalance)
 	}
 
 	me := v3Request(t, handler, http.MethodGet, "/api/user/me", nil, "Bearer "+exchange.Data.AccessToken)

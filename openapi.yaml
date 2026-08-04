@@ -540,15 +540,6 @@ paths:
       parameters: [{$ref: "#/components/parameters/TimeRange"}]
       responses: {"200": {$ref: "#/components/responses/OK"}, "401": {$ref: "#/components/responses/Error"}}
 components:
-  schemas:
-    Settlement:
-      type: object
-      properties:
-        market_id: {type: string, format: uuid}
-        event_id: {type: string, format: uuid}
-        winning_option: {type: string}
-        settlement_type: {type: string, enum: [settle, void]}
-        settled_at: {type: string, format: date-time}
   securitySchemes:
     merchantBearer: {type: http, scheme: bearer, bearerFormat: API key}
     adminBearer: {type: http, scheme: bearer, bearerFormat: Admin API key}
@@ -618,12 +609,27 @@ components:
       required: true
       content: {application/json: {schema: {type: object, required: [status], properties: {status: {type: string}}}}}
   schemas:
+    Settlement:
+      type: object
+      properties:
+        market_id: {type: string, format: uuid}
+        event_id: {type: string, format: uuid}
+        winning_option: {type: string}
+        settlement_type: {type: string, enum: [settle, void]}
+        settled_at: {type: string, format: date-time}
     DataEnvelope: {type: object, required: [data], properties: {data: {}, meta: {type: object, additionalProperties: true}}}
     ErrorEnvelope:
       type: object
       required: [error]
       properties:
         error: {type: object, required: [code, message], properties: {code: {type: string}, message: {type: string}}}
+        meta: {$ref: "#/components/schemas/BalanceMeta"}
+    BalanceMeta:
+      type: object
+      required: [available_balance, currency]
+      properties:
+        available_balance: {type: string, pattern: '^(0|[1-9][0-9]*)(\.[0-9]{1,2})?$'}
+        currency: {$ref: "#/components/schemas/Currency"}
     Currency: {type: string, enum: [USD, EUR, CNY, JPY, GBP, MXN]}
     EventStatus: {type: string, enum: [pending, active, closed, resolved]}
     MarketStatus: {type: string, enum: [active, suspended, closed, settled]}
@@ -651,6 +657,10 @@ components:
       properties:
         user_id: {type: string, maxLength: 255}
         currency: {$ref: "#/components/schemas/Currency"}
+        balance:
+          type: string
+          pattern: '^(0|[1-9][0-9]*)(\.[0-9]{1,2})?$'
+          description: Required for seamless wallets; used as the hosted page's initial balance snapshot.
         locale: {type: string, maxLength: 35, default: en-US}
         return_url: {type: string, format: uri}
         ip: {type: string}

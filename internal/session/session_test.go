@@ -43,6 +43,25 @@ func TestExchangeConsumesLaunchTokenOnce(t *testing.T) {
 	}
 }
 
+func TestExchangeReturnsLaunchBalance(t *testing.T) {
+	t.Parallel()
+
+	manager := testManager(t)
+	launchToken, _, err := manager.CreateLaunchWithBalance(
+		context.Background(), "merchant-1", "user-1", "USD", "seamless", "70.00", "en-US", "",
+	)
+	if err != nil {
+		t.Fatalf("CreateLaunchWithBalance() error = %v", err)
+	}
+	_, value, err := manager.Exchange(context.Background(), launchToken)
+	if err != nil {
+		t.Fatalf("Exchange() error = %v", err)
+	}
+	if value.Balance != "70.00" {
+		t.Fatalf("Exchange() balance = %q, want 70.00", value.Balance)
+	}
+}
+
 func TestRefreshExtendsBrowserSession(t *testing.T) {
 	t.Parallel()
 
