@@ -6,6 +6,7 @@ import (
 	"math"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 )
@@ -115,6 +116,46 @@ func TestListFiltersAndPagination(t *testing.T) {
 	}
 	if values[0].ID != first.ID && values[0].ID != second.ID {
 		t.Errorf("List(paged) returned unknown market %q", values[0].ID)
+	}
+}
+
+func TestListSortsLatestAndPopular(t *testing.T) {
+	repository := newMemoryRepository()
+	service := newService(repository)
+	now := time.Date(2026, time.August, 4, 10, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return now }
+
+	older := createMarket(t, service, validCreateRequest())
+	now = now.Add(time.Minute)
+	newerRequest := validCreateRequest()
+	newerRequest.EventID = "33333333-3333-4333-8333-333333333333"
+	newer := createMarket(t, service, newerRequest)
+
+	repository.mu.Lock()
+	repository.byID[older.ID].TotalVolume = 100
+	repository.byID[newer.ID].TotalVolume = 10
+	repository.mu.Unlock()
+
+	latest, _, err := service.List(context.Background(), &ListFilters{Sort: "latest"})
+	if err != nil {
+		t.Fatalf("List(latest) error = %v", err)
+	}
+	if latest[0].ID != newer.ID {
+		t.Errorf("List(latest) first ID = %q, want %q", latest[0].ID, newer.ID)
+	}
+
+	popular, _, err := service.List(context.Background(), &ListFilters{Sort: "popular"})
+	if err != nil {
+		t.Fatalf("List(popular) error = %v", err)
+	}
+	if popular[0].ID != older.ID {
+		t.Errorf("List(popular) first ID = %q, want %q", popular[0].ID, older.ID)
+	}
+
+	_, _, err = service.List(context.Background(), &ListFilters{Sort: "oldest"})
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) || validationErr.Field != "sort" {
+		t.Fatalf("List(invalid sort) error = %v, want ValidationError for sort", err)
 	}
 }
 

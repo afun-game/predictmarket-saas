@@ -97,6 +97,7 @@ func (h *marketHandler) list(w http.ResponseWriter, r *http.Request) {
 		MerchantID: authenticated.ID,
 		EventID:    r.URL.Query().Get("event_id"),
 		Status:     r.URL.Query().Get("status"),
+		Sort:       r.URL.Query().Get("sort"),
 		Page:       page,
 		Limit:      limit,
 	}

@@ -18,6 +18,7 @@ import (
 const (
 	defaultPage            = 1
 	defaultLimit           = 20
+	defaultSort            = "latest"
 	maxLimit               = 100
 	maxPage                = 1000
 	defaultMerchantFeeRate = 0.0
@@ -57,6 +58,7 @@ type ListFilters struct {
 	MerchantID string `json:"merchant_id,omitempty"`
 	EventID    string `json:"event_id,omitempty"`
 	Status     string `json:"status,omitempty"`
+	Sort       string `json:"sort,omitempty"`
 	Page       int    `json:"page,omitempty"`
 	Limit      int    `json:"limit,omitempty"`
 }
@@ -287,6 +289,7 @@ func normalizeFilters(filters *ListFilters) (ListFilters, error) {
 	value.MerchantID = strings.TrimSpace(value.MerchantID)
 	value.EventID = strings.TrimSpace(value.EventID)
 	value.Status = strings.ToLower(strings.TrimSpace(value.Status))
+	value.Sort = strings.ToLower(strings.TrimSpace(value.Sort))
 	if value.MerchantID != "" && !isUUID(value.MerchantID) {
 		return ListFilters{}, &ValidationError{Field: "merchant_id", Message: "must be a UUID"}
 	}
@@ -295,6 +298,12 @@ func normalizeFilters(filters *ListFilters) (ListFilters, error) {
 	}
 	if value.Status != "" && !validStatus(value.Status) {
 		return ListFilters{}, &ValidationError{Field: "status", Message: "is not supported"}
+	}
+	if value.Sort == "" {
+		value.Sort = defaultSort
+	}
+	if !validSort(value.Sort) {
+		return ListFilters{}, &ValidationError{Field: "sort", Message: "must be latest or popular"}
 	}
 	if value.Page == 0 {
 		value.Page = defaultPage
@@ -312,6 +321,10 @@ func normalizeFilters(filters *ListFilters) (ListFilters, error) {
 		return ListFilters{}, &ValidationError{Field: "limit", Message: "must be between 1 and 100"}
 	}
 	return value, nil
+}
+
+func validSort(sort string) bool {
+	return sort == "latest" || sort == "popular"
 }
 
 func validateMarketID(marketID string) (string, error) {

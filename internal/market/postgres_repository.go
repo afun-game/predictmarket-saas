@@ -140,12 +140,16 @@ WHERE ($1 = '' OR merchant_id = NULLIF($1, '')::uuid)
 		return nil, 0, fmt.Errorf("count markets: %w", err)
 	}
 
+	orderBy := "created_at DESC, id"
+	if filters.Sort == "popular" {
+		orderBy = "total_volume DESC, created_at DESC, id"
+	}
 	query := "SELECT " + marketColumns + `
 FROM markets
 WHERE ($1 = '' OR merchant_id = NULLIF($1, '')::uuid)
   AND ($2 = '' OR event_id = NULLIF($2, '')::uuid)
   AND ($3 = '' OR status = $3)
-ORDER BY created_at DESC, id
+ORDER BY ` + orderBy + `
 LIMIT $4 OFFSET $5`
 	offset := (filters.Page - 1) * filters.Limit
 	rows, err := r.database.QueryContext(

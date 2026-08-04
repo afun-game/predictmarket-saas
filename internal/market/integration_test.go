@@ -63,6 +63,39 @@ func TestMarketPostgresIntegration(t *testing.T) {
 		t.Fatalf("List() values = %#v, total = %d", values, total)
 	}
 
+	newer, err := fixture.service.Create(ctx, &CreateRequest{
+		MerchantID:    fixture.merchantID,
+		EventID:       fixture.eventID,
+		Type:          "binary",
+		Question:      "Will popular sorting use volume?",
+		Options:       []string{"Yes", "No"},
+		LiquidityPool: 10,
+	})
+	if err != nil {
+		t.Fatalf("Create(second market) error = %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM markets WHERE id = $1", newer.ID)
+	})
+	if _, err := fixture.database.ExecContext(
+		ctx,
+		"UPDATE markets SET total_volume = CASE id WHEN $1 THEN 100 ELSE 10 END WHERE id IN ($1, $2)",
+		created.ID,
+		newer.ID,
+	); err != nil {
+		t.Fatalf("set market volumes: %v", err)
+	}
+	popular, _, err := fixture.service.List(ctx, &ListFilters{
+		MerchantID: fixture.merchantID,
+		Sort:       "popular",
+	})
+	if err != nil {
+		t.Fatalf("List(popular) error = %v", err)
+	}
+	if len(popular) != 2 || popular[0].ID != created.ID {
+		t.Fatalf("List(popular) values = %#v", popular)
+	}
+
 	const additions = 10
 	var waitGroup sync.WaitGroup
 	for range additions {

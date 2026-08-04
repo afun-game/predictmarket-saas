@@ -369,6 +369,7 @@ paths:
       parameters:
         - {name: event_id, in: query, schema: {type: string, format: uuid}}
         - {name: status, in: query, schema: {$ref: "#/components/schemas/MarketStatus"}}
+        - {$ref: "#/components/parameters/MarketSort"}
         - {$ref: "#/components/parameters/Page"}
         - {$ref: "#/components/parameters/Limit"}
       responses: {"200": {$ref: "#/components/responses/OK"}}
@@ -551,6 +552,11 @@ components:
     MerchantID: {name: merchantID, in: path, required: true, schema: {type: string, format: uuid}}
     EventID: {name: eventID, in: path, required: true, schema: {type: string, format: uuid}}
     MarketID: {name: marketID, in: path, required: true, schema: {type: string, format: uuid}}
+    MarketSort:
+      name: sort
+      in: query
+      description: Sort by creation time (`latest`) or cumulative matched volume (`popular`).
+      schema: {type: string, enum: [latest, popular], default: latest}
     OrderID: {name: orderID, in: path, required: true, schema: {type: string, format: uuid}}
     UserID: {name: userID, in: path, required: true, schema: {type: string, maxLength: 255}}
     MerchantTransactionID: {name: merchantTransactionID, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 255}}

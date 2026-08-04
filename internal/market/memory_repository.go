@@ -70,6 +70,9 @@ func (r *memoryRepository) List(
 		}
 	}
 	sort.Slice(values, func(i, j int) bool {
+		if filters.Sort == "popular" && values[i].TotalVolume != values[j].TotalVolume {
+			return values[i].TotalVolume > values[j].TotalVolume
+		}
 		if values[i].CreatedAt.Equal(values[j].CreatedAt) {
 			return values[i].ID < values[j].ID
 		}

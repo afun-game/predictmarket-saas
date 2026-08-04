@@ -87,6 +87,31 @@ func TestMarketHTTPFlow(t *testing.T) {
 		t,
 		handler,
 		http.MethodGet,
+		"/api/v1/markets?sort=popular",
+		nil,
+		authorization,
+	)
+	if response.Code != http.StatusOK {
+		t.Fatalf("list popular markets status = %d, body = %s", response.Code, response.Body.String())
+	}
+	assertMarketListResponse(t, response.Body.Bytes(), created.Data.ID)
+
+	response = performRequest(
+		t,
+		handler,
+		http.MethodGet,
+		"/api/v1/markets?sort=oldest",
+		nil,
+		authorization,
+	)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid market sort status = %d, body = %s", response.Code, response.Body.String())
+	}
+
+	response = performRequest(
+		t,
+		handler,
+		http.MethodGet,
 		"/api/v1/markets/"+created.Data.ID,
 		nil,
 		authorization,

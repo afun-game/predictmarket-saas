@@ -307,12 +307,15 @@ Content-Type: application/json
 
 #### List Markets
 ```http
-GET /api/v1/markets?status=active&page=1&limit=20
+GET /api/v1/markets?status=active&sort=popular&page=1&limit=20
 Authorization: Bearer YOUR_API_KEY
 ```
 
 The authenticated merchant ID is always applied to the query. Supported
 filters are `event_id` and `status`; pagination metadata is returned in `meta`.
+Use `sort=latest` (the default) for newest markets first, or `sort=popular` for
+the highest cumulative matched volume first. Both modes use creation time and
+market ID as deterministic tie-breakers so pagination remains stable.
 
 #### Get Market
 ```http

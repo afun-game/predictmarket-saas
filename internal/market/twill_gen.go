@@ -842,6 +842,7 @@ type __is_ListFilters[T ~struct {
 	MerchantID string "json:\"merchant_id,omitempty\""
 	EventID    string "json:\"event_id,omitempty\""
 	Status     string "json:\"status,omitempty\""
+	Sort       string "json:\"sort,omitempty\""
 	Page       int    "json:\"page,omitempty\""
 	Limit      int    "json:\"limit,omitempty\""
 }] struct{}
@@ -855,6 +856,7 @@ func (x *ListFilters) WeaverMarshal(enc *codegen.Encoder) {
 	enc.String(x.MerchantID)
 	enc.String(x.EventID)
 	enc.String(x.Status)
+	enc.String(x.Sort)
 	enc.Int(x.Page)
 	enc.Int(x.Limit)
 }
@@ -866,6 +868,7 @@ func (x *ListFilters) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.MerchantID = dec.String()
 	x.EventID = dec.String()
 	x.Status = dec.String()
+	x.Sort = dec.String()
 	x.Page = dec.Int()
 	x.Limit = dec.Int()
 }
@@ -1071,6 +1074,7 @@ func servicetwill_size_ListFilters_f7a95a88(x *ListFilters) int {
 	size += (4 + len(x.MerchantID))
 	size += (4 + len(x.EventID))
 	size += (4 + len(x.Status))
+	size += (4 + len(x.Sort))
 	size += 8
 	size += 8
 	return size
