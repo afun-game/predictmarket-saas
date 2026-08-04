@@ -213,6 +213,7 @@ func merchantState(merchant *types.Merchant) map[string]any {
 		"wallet_mode":    merchant.WalletMode,
 		"fee_rate":       merchant.FeeRate,
 		"api_key_prefix": merchant.APIKeyPrefix,
+		"callback_url":   merchant.CallbackURL,
 		"created_at":     merchant.CreatedAt,
 	}
 }

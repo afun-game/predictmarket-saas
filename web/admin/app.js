@@ -357,6 +357,10 @@ function credentialRow(label, value, sourceKey) {
 }
 
 function credentialsPanel(cred) {
+  const callbackRow =
+    cred.callback_secret
+      ? credentialRow("Callback Secret", cred.callback_secret, "callbackSecret")
+      : "";
   return `
   <div class="card cred-panel">
     <div class="section-heading"><h2>开户凭据</h2></div>
@@ -365,6 +369,7 @@ function credentialsPanel(cred) {
       ${credentialRow("商户 ID", cred.id ?? "", "merchantId")}
       ${credentialRow("API Key", cred.api_key ?? "", "apiKey")}
       ${credentialRow("API Secret", cred.api_secret ?? "", "apiSecret")}
+      ${callbackRow}
     </div>
     <div class="cred-actions">
       <button class="btn btn--primary" type="button" data-action="dismiss-credentials" data-id="${escapeHTML(cred.id ?? "")}">我已保存</button>
@@ -485,6 +490,11 @@ async function merchantsPage() {
         <div class="field"><label>邮箱 *</label><input class="input" name="email" type="email" required></div>
         <div class="field"><label>币种</label><input class="input" name="currency" value="USD"></div>
         <div class="field"><label>时区</label><input class="input" name="timezone" value="UTC"></div>
+        <div class="field"><label>钱包模式</label><select class="input" name="wallet_mode" data-wallet-toggle>
+          <option value="transfer" selected>转账模式 transfer</option>
+          <option value="seamless">无缝模式 seamless</option>
+        </select></div>
+        <div class="field" data-callback-field hidden><label>回调地址（seamless 必填）</label><input class="input" name="callback_url" placeholder="https://merchant.example.com/hooks" autocomplete="off"></div>
         <div class="field form-field--actions"><button class="btn btn--primary" type="submit">创建商户</button><button class="btn btn--ghost" type="button" data-action="toggle-create-merchant">取消</button></div>
       </div>
     </form>`
@@ -545,6 +555,11 @@ async function merchantDetailPage(id) {
         <div class="field"><label>币种</label><input class="input" name="currency" value="${escapeHTML(merchant.currency ?? "")}" placeholder="CNY"></div>
         <div class="field"><label>时区</label><input class="input" name="timezone" value="${escapeHTML(merchant.timezone ?? "")}" placeholder="Asia/Shanghai"></div>
         <div class="field"><label>费率</label><input class="input" name="fee_rate" value="${escapeHTML(merchant.fee_rate ?? "")}" placeholder="0.005"></div>
+        <div class="field"><label>钱包模式</label><select class="input" name="wallet_mode" data-wallet-toggle>
+          <option value="transfer" ${(merchant.wallet_mode ?? "transfer") === "transfer" ? "selected" : ""}>转账模式 transfer</option>
+          <option value="seamless" ${merchant.wallet_mode === "seamless" ? "selected" : ""}>无缝模式 seamless</option>
+        </select></div>
+        <div class="field" data-callback-field ${merchant.wallet_mode === "seamless" ? "" : "hidden"}><label>回调地址（seamless 必填）</label><input class="input" name="callback_url" value="${escapeHTML(merchant.callback_url ?? "")}" placeholder="https://merchant.example.com/hooks" autocomplete="off"></div>
         <div class="field form-grid__actions"><button class="btn btn--primary" type="submit">保存</button></div>
       </form>
     </div>`
@@ -552,9 +567,9 @@ async function merchantDetailPage(id) {
   const reissuePanel = view.reissuedSecret && view.reissuedSecret.id === id
     ? `
     <div class="card cred-panel">
-      <div class="section-heading"><h2>重发的 API Secret</h2></div>
+      <div class="section-heading"><h2>${view.reissuedSecret.callback ? "回调密钥（Callback Secret）" : "重发的 API Secret"}</h2></div>
       <div class="cred-alert">凭据仅显示一次，请立即保存</div>
-      <div class="kv">${credentialRow("API Secret", view.reissuedSecret.api_secret ?? "", "reissuedSecret")}</div>
+      <div class="kv">${credentialRow(view.reissuedSecret.callback ? "Callback Secret" : "API Secret", view.reissuedSecret.api_secret ?? "", "reissuedSecret")}</div>
       <div class="cred-actions"><button class="btn btn--primary" type="button" data-action="dismiss-credentials">我已保存</button></div>
     </div>`
     : "";
@@ -1132,15 +1147,28 @@ async function handleAction(action, target) {
 
 document.addEventListener("change", (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLSelectElement) || target.name !== "type") return;
-  const form = target.closest('form[data-action="create-market"]');
-  if (!form) return;
-  const liquidityField = form.querySelector("[data-liquidity-field]");
-  const liquidityHint = form.querySelector("[data-liquidity-hint]");
-  if (!liquidityField || !liquidityHint) return;
-  const parimutuel = target.value === "parimutuel";
-  liquidityField.hidden = parimutuel;
-  liquidityHint.hidden = !parimutuel;
+  if (!(target instanceof HTMLSelectElement)) return;
+  // 市场类型切换：奖池市场隐藏初始流动性。
+  if (target.name === "type") {
+    const form = target.closest('form[data-action="create-market"]');
+    if (form) {
+      const liquidityField = form.querySelector("[data-liquidity-field]");
+      const liquidityHint = form.querySelector("[data-liquidity-hint]");
+      if (liquidityField && liquidityHint) {
+        const parimutuel = target.value === "parimutuel";
+        liquidityField.hidden = parimutuel;
+        liquidityHint.hidden = !parimutuel;
+      }
+    }
+  }
+  // 钱包模式切换：无缝模式显示回调地址输入。
+  if (target.hasAttribute("data-wallet-toggle")) {
+    const form = target.closest("form");
+    const callbackField = form?.querySelector("[data-callback-field]");
+    if (callbackField) {
+      callbackField.hidden = target.value !== "seamless";
+    }
+  }
 });
 
 document.addEventListener("submit", (event) => {
@@ -1325,6 +1353,16 @@ async function createMerchant(form) {
     toast("请填写名称与邮箱", "error");
     return;
   }
+  const walletMode = String(data.get("wallet_mode") ?? "transfer").trim() || "transfer";
+  body.wallet_mode = walletMode;
+  if (walletMode === "seamless") {
+    const callbackUrl = String(data.get("callback_url") ?? "").trim();
+    if (!callbackUrl) {
+      toast("无缝模式必须填写回调地址", "error");
+      return;
+    }
+    body.callback_url = callbackUrl;
+  }
   const created = await apiFetch("/api/v1/admin/merchants", { method: "POST", body: JSON.stringify(body) });
   view.merchantCredentials = created;
   view.showCreateMerchant = false;
@@ -1446,7 +1484,23 @@ async function editMerchant(form) {
     }
     body.fee_rate = number;
   }
-  await apiFetch(`/api/v1/admin/merchants/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  const walletMode = String(data.get("wallet_mode") ?? "").trim();
+  if (walletMode) {
+    body.wallet_mode = walletMode;
+    if (walletMode === "seamless") {
+      const callbackUrl = String(data.get("callback_url") ?? "").trim();
+      if (!callbackUrl) {
+        toast("无缝模式必须填写回调地址", "error");
+        return;
+      }
+      body.callback_url = callbackUrl;
+    }
+  }
+  const updated = await apiFetch(`/api/v1/admin/merchants/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  if (updated.callback_secret) {
+    // 切换到无缝模式时生成的回调密钥，一次性展示。
+    view.reissuedSecret = { id, api_secret: updated.callback_secret, callback: true };
+  }
   toast("商户信息已更新");
   render();
 }

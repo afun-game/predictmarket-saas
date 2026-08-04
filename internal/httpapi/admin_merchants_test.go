@@ -971,3 +971,78 @@ func TestAdminMerchantsReissueSecret(t *testing.T) {
 		t.Errorf("reissue audit action missing; actions = %#v", env.logs.Actions())
 	}
 }
+
+func TestAdminMerchantsCreateSeamlessIssuesCallbackSecret(t *testing.T) {
+	t.Setenv("MERCHANT_SECRET_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY")
+	env := newAdminMerchantsTestEnv(t, adminMerchantsTestAccount("boss", "pw", adminauth.RoleSuperAdmin))
+	cookie := adminMerchantsTestLogin(t, env, "boss", "pw")
+
+	response := adminMerchantsTestRequest(
+		t,
+		env.handler,
+		http.MethodPost,
+		"/api/v1/admin/merchants",
+		[]byte(`{"name":"无缝商户","email":"seamless@test.dev","currency":"USD","timezone":"UTC","wallet_mode":"seamless","callback_url":"https://callback.example.com/hooks"}`),
+		cookie,
+	)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create seamless merchant status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var created struct {
+		Data struct {
+			ID             string `json:"id"`
+			WalletMode     string `json:"wallet_mode"`
+			CallbackSecret string `json:"callback_secret"`
+		} `json:"data"`
+	}
+	adminMerchantsTestDecode(t, response, &created)
+	if created.Data.WalletMode != "seamless" {
+		t.Fatalf("wallet_mode = %q, want seamless", created.Data.WalletMode)
+	}
+	if !strings.HasPrefix(created.Data.CallbackSecret, "cb_live_") {
+		t.Fatalf("callback_secret = %q, want cb_live_...", created.Data.CallbackSecret)
+	}
+}
+
+func TestAdminMerchantsUpdateWalletMode(t *testing.T) {
+	t.Setenv("MERCHANT_SECRET_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY")
+	env := newAdminMerchantsTestEnv(t, adminMerchantsTestAccount("boss", "pw", adminauth.RoleSuperAdmin))
+	cookie := adminMerchantsTestLogin(t, env, "boss", "pw")
+
+	created := adminMerchantsTestRequest(
+		t, env.handler, http.MethodPost, "/api/v1/admin/merchants",
+		[]byte(`{"name":"模式切换商户","email":"mode@test.dev","currency":"USD","timezone":"UTC"}`),
+		cookie,
+	)
+	var decoded struct {
+		Data struct {
+			ID         string `json:"id"`
+			WalletMode string `json:"wallet_mode"`
+		} `json:"data"`
+	}
+	adminMerchantsTestDecode(t, created, &decoded)
+	if decoded.Data.WalletMode != "transfer" {
+		t.Fatalf("default wallet_mode = %q, want transfer", decoded.Data.WalletMode)
+	}
+
+	updated := adminMerchantsTestRequest(
+		t, env.handler, http.MethodPatch, "/api/v1/admin/merchants/"+decoded.Data.ID,
+		[]byte(`{"wallet_mode":"seamless","callback_url":"https://callback.example.com/hooks"}`), cookie,
+	)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("update wallet mode status = %d, body = %s", updated.Code, updated.Body.String())
+	}
+	var result struct {
+		Data struct {
+			WalletMode     string `json:"wallet_mode"`
+			CallbackSecret string `json:"callback_secret"`
+		} `json:"data"`
+	}
+	adminMerchantsTestDecode(t, updated, &result)
+	if result.Data.WalletMode != "seamless" {
+		t.Fatalf("updated wallet_mode = %q, want seamless", result.Data.WalletMode)
+	}
+	if !strings.HasPrefix(result.Data.CallbackSecret, "cb_live_") {
+		t.Fatalf("updated callback_secret = %q, want cb_live_...", result.Data.CallbackSecret)
+	}
+}

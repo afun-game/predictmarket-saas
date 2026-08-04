@@ -15,24 +15,56 @@ import (
 
 // createMerchant opens a new merchant account. The API key and secret are
 // returned in cleartext exactly once, mirroring the self-service register
-// endpoint; the console shows them in a save-once dialog.
+// endpoint; the console shows them in a save-once dialog. An optional
+// wallet_mode (transfer/seamless) is applied via the admin-only integration
+// configuration; seamless generates a callback secret that is returned once.
 func (h *adminHandler) createMerchant(w http.ResponseWriter, r *http.Request) {
-	var request merchant.RegisterRequest
+	request := struct {
+		Name        string  `json:"name"`
+		Email       string  `json:"email"`
+		Currency    string  `json:"currency"`
+		Timezone    string  `json:"timezone"`
+		WalletMode  *string `json:"wallet_mode,omitempty"`
+		CallbackURL *string `json:"callback_url,omitempty"`
+	}{}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	registered, err := h.merchants.Register(r.Context(), &request)
+	registered, err := h.merchants.Register(r.Context(), &merchant.RegisterRequest{
+		Name:     request.Name,
+		Email:    request.Email,
+		Currency: request.Currency,
+		Timezone: request.Timezone,
+	})
 	if err != nil {
 		writeServiceError(w, err)
 		return
 	}
-	if principal, ok := auth.AdminPrincipalFromContext(r.Context()); ok {
-		h.adminAudit(principal, "create.merchant", "merchant", registered.ID, nil, merchantState(registered), r)
-	}
 	payload := merchantState(registered)
 	payload["api_key"] = registered.APIKey
 	payload["api_secret"] = registered.APISecret
+	if request.WalletMode != nil && strings.TrimSpace(*request.WalletMode) != "" {
+		mode := strings.ToLower(strings.TrimSpace(*request.WalletMode))
+		integration := &merchant.IntegrationRequest{WalletMode: &mode}
+		if request.CallbackURL != nil {
+			urlValue := strings.TrimSpace(*request.CallbackURL)
+			integration.CallbackURL = &urlValue
+		}
+		configured, configureErr := h.merchants.ConfigureIntegration(r.Context(), registered.ID, integration)
+		if configureErr != nil {
+			writeServiceError(w, configureErr)
+			return
+		}
+		payload["wallet_mode"] = configured.WalletMode
+		if configured.CallbackSecret != "" {
+			// Seamless mode generated a callback secret; it is shown once.
+			payload["callback_secret"] = configured.CallbackSecret
+		}
+	}
+	if principal, ok := auth.AdminPrincipalFromContext(r.Context()); ok {
+		h.adminAudit(principal, "create.merchant", "merchant", registered.ID, nil, merchantState(registered), r)
+	}
 	writeJSON(w, http.StatusCreated, map[string]any{"data": payload})
 }
 
@@ -66,10 +98,17 @@ func (h *adminHandler) getMerchant(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": state})
 }
 
-// updateMerchant serves PATCH /api/v1/admin/merchants/{merchantID}.
+// updateMerchant serves PATCH /api/v1/admin/merchants/{merchantID}. Basic
+// fields go through merchant.Update; wallet_mode is applied through the
+// admin-only integration configuration (switching to seamless generates a
+// callback secret that is returned once).
 func (h *adminHandler) updateMerchant(w http.ResponseWriter, r *http.Request) {
 	merchantID := r.PathValue("merchantID")
-	var request merchant.UpdateRequest
+	var request struct {
+		merchant.UpdateRequest
+		WalletMode  *string `json:"wallet_mode,omitempty"`
+		CallbackURL *string `json:"callback_url,omitempty"`
+	}
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
@@ -79,10 +118,28 @@ func (h *adminHandler) updateMerchant(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, err)
 		return
 	}
-	updated, err := h.merchants.Update(r.Context(), merchantID, &request)
+	updated, err := h.merchants.Update(r.Context(), merchantID, &request.UpdateRequest)
 	if err != nil {
 		writeServiceError(w, err)
 		return
+	}
+	payload := merchantState(updated)
+	if request.WalletMode != nil && strings.TrimSpace(*request.WalletMode) != "" {
+		mode := strings.ToLower(strings.TrimSpace(*request.WalletMode))
+		integration := &merchant.IntegrationRequest{WalletMode: &mode}
+		if request.CallbackURL != nil {
+			urlValue := strings.TrimSpace(*request.CallbackURL)
+			integration.CallbackURL = &urlValue
+		}
+		configured, configureErr := h.merchants.ConfigureIntegration(r.Context(), merchantID, integration)
+		if configureErr != nil {
+			writeServiceError(w, configureErr)
+			return
+		}
+		payload["wallet_mode"] = configured.WalletMode
+		if configured.CallbackSecret != "" {
+			payload["callback_secret"] = configured.CallbackSecret
+		}
 	}
 	if principal, ok := auth.AdminPrincipalFromContext(r.Context()); ok {
 		h.adminAudit(
@@ -91,11 +148,11 @@ func (h *adminHandler) updateMerchant(w http.ResponseWriter, r *http.Request) {
 			"merchant",
 			merchantID,
 			merchantState(current),
-			merchantState(updated),
+			payload,
 			r,
 		)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": merchantState(updated)})
+	writeJSON(w, http.StatusOK, map[string]any{"data": payload})
 }
 
 // updateMerchantStatus serves PATCH /api/v1/admin/merchants/{merchantID}/status.
