@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,8 @@ import (
 type validatorStub struct{}
 
 type signedValidatorStub struct{}
+
+type userSessionValidatorStub struct{}
 
 func (validatorStub) ValidateAPIKey(
 	_ context.Context,
@@ -34,6 +37,65 @@ func (signedValidatorStub) ValidateSignedRequest(
 	_ []byte,
 ) (*types.Merchant, error) {
 	return &types.Merchant{ID: "merchant-1"}, nil
+}
+
+func (userSessionValidatorStub) ValidateUserSession(
+	_ context.Context,
+	token string,
+) (*UserSession, error) {
+	if token != "valid-session" {
+		return nil, errors.New("invalid session")
+	}
+	return &UserSession{ID: "session-1", UserID: "user-1"}, nil
+}
+
+func TestRequireUserSessionErrorResponses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		authorization string
+		wantCode      string
+		wantChallenge string
+	}{
+		{name: "missing bearer", wantCode: "unauthorized", wantChallenge: "Bearer"},
+		{
+			name:          "invalid bearer",
+			authorization: "Bearer invalid",
+			wantCode:      "invalid_token",
+			wantChallenge: `Bearer error="invalid_token"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			request.Header.Set("Authorization", test.authorization)
+			recorder := httptest.NewRecorder()
+			RequireUserSession(userSessionValidatorStub{}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			})).ServeHTTP(recorder, request)
+
+			if recorder.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+			}
+			if challenge := recorder.Header().Get("WWW-Authenticate"); challenge != test.wantChallenge {
+				t.Errorf("WWW-Authenticate = %q, want %q", challenge, test.wantChallenge)
+			}
+			var response struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response.Error.Code != test.wantCode {
+				t.Errorf("error code = %q, want %q", response.Error.Code, test.wantCode)
+			}
+		})
+	}
 }
 
 func TestRequireMerchant(t *testing.T) {

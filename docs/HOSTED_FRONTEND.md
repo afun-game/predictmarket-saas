@@ -55,6 +55,13 @@ entered only through the one-time Launch URL:
 4. The session credential is kept in memory (not a query string or persistent
    browser storage), then used for `/api/user/*` requests.
 
+Session errors are classified by authentication context: a missing exchange
+`token` is `400 validation_error`; an unknown, expired, consumed, or revoked
+launch token is `401 invalid_token`. Protected `/api/user/*` routes return
+`401 unauthorized` when the Bearer credential is missing and `401
+invalid_token` when it is invalid or expired. A `404` is reserved for an
+actual resource that is absent or hidden by tenant isolation.
+
 When the V3 routes are enabled, the API also serves this prototype directly
 at `GET /launch` (the assets are embedded into the binary), so a single
 deployment can host both the API and the sandbox trading page; point

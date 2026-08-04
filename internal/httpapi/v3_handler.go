@@ -1055,7 +1055,7 @@ func (h *v3Handler) exchangeSession(w http.ResponseWriter, r *http.Request) {
 	}
 	accessToken, value, err := h.sessions.Exchange(r.Context(), request.Token)
 	if err != nil {
-		writeSessionError(w, err)
+		writeSessionExchangeError(w, err)
 		return
 	}
 	if !h.requireActivePlatformUser(w, r, value.MerchantID, value.UserID) {
@@ -1079,7 +1079,7 @@ func (h *v3Handler) refreshSession(w http.ResponseWriter, r *http.Request) {
 	}
 	accessToken, value, err := h.sessions.Refresh(r.Context(), browserSession.ID)
 	if err != nil {
-		writeSessionError(w, err)
+		writeUserSessionError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -1509,12 +1509,39 @@ func writeSessionError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, session.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, "validation_error", "session request is invalid")
-	case errors.Is(err, session.ErrExpired):
-		writeError(w, http.StatusUnauthorized, "session_expired", "session token has expired")
-	case errors.Is(err, session.ErrUnauthorized):
-		writeError(w, http.StatusUnauthorized, "unauthorized", "browser session is invalid")
-	case errors.Is(err, session.ErrNotFound):
+	case errors.Is(err, session.ErrExpired), errors.Is(err, session.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found", "session was not found")
+	case errors.Is(err, session.ErrUnauthorized):
+		writeError(w, http.StatusNotFound, "not_found", "session was not found")
+	default:
+		writeError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+	}
+}
+
+func writeSessionExchangeError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, session.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "validation_error", "token is required")
+	case errors.Is(err, session.ErrExpired),
+		errors.Is(err, session.ErrUnauthorized),
+		errors.Is(err, session.ErrNotFound):
+		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+		writeError(w, http.StatusUnauthorized, "invalid_token", "launch token is invalid, expired, or already used")
+	default:
+		writeError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+	}
+}
+
+func writeUserSessionError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, session.ErrExpired):
+		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+		writeError(w, http.StatusUnauthorized, "session_expired", "user session has expired")
+	case errors.Is(err, session.ErrUnauthorized), errors.Is(err, session.ErrNotFound):
+		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+		writeError(w, http.StatusUnauthorized, "invalid_token", "user session is invalid")
+	case errors.Is(err, session.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "validation_error", "session request is invalid")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 	}

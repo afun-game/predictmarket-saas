@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -31,8 +32,8 @@ func TestExchangeConsumesLaunchTokenOnce(t *testing.T) {
 	if token == "" || value.ID == "" {
 		t.Fatalf("Exchange() = token %q, session %#v", token, value)
 	}
-	if _, _, err := manager.Exchange(context.Background(), launchToken); err == nil {
-		t.Fatal("second Exchange() error = nil, want consumed-token error")
+	if _, _, err := manager.Exchange(context.Background(), launchToken); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("second Exchange() error = %v, want ErrUnauthorized", err)
 	}
 	validated, err := manager.Validate(context.Background(), token)
 	if err != nil {
@@ -117,8 +118,20 @@ func TestRevokeInvalidatesUnexchangedLaunchToken(t *testing.T) {
 	if err := manager.Revoke(context.Background(), "merchant-1", launch.ID); err != nil {
 		t.Fatalf("Revoke() error = %v", err)
 	}
-	if _, _, err := manager.Exchange(context.Background(), launchToken); err != ErrNotFound {
-		t.Errorf("Exchange() after pending revoke error = %v, want %v", err, ErrNotFound)
+	if _, _, err := manager.Exchange(context.Background(), launchToken); !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("Exchange() after pending revoke error = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestExchangeClassifiesMissingAndUnknownTokens(t *testing.T) {
+	t.Parallel()
+
+	manager := testManager(t)
+	if _, _, err := manager.Exchange(context.Background(), " "); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("Exchange(empty) error = %v, want ErrInvalidInput", err)
+	}
+	if _, _, err := manager.Exchange(context.Background(), "lt_unknown"); !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("Exchange(unknown) error = %v, want ErrUnauthorized", err)
 	}
 }
 

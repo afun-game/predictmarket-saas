@@ -153,17 +153,41 @@ func RequireUserSession(validator UserSessionValidator, next http.Handler) http.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, ok := bearerToken(r.Header.Get("Authorization"))
 		if !ok {
-			writeUnauthorized(w)
+			writeUserSessionUnauthorized(
+				w,
+				"unauthorized",
+				"a valid user session is required",
+				"Bearer",
+			)
 			return
 		}
 		session, err := validator.ValidateUserSession(r.Context(), token)
 		if err != nil {
-			writeUnauthorized(w)
+			writeUserSessionUnauthorized(
+				w,
+				"invalid_token",
+				"user session token is invalid or expired",
+				`Bearer error="invalid_token"`,
+			)
 			return
 		}
 		ctx := context.WithValue(r.Context(), userSessionContextKey{}, session)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func writeUserSessionUnauthorized(w http.ResponseWriter, code, message, challenge string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("WWW-Authenticate", challenge)
+	w.WriteHeader(http.StatusUnauthorized)
+	if err := json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]string{
+			"code":    code,
+			"message": message,
+		},
+	}); err != nil {
+		return
+	}
 }
 
 // AdminPrincipal is the authenticated administrator identity carried by a

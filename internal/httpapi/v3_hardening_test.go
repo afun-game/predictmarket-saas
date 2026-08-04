@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -16,9 +17,116 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/order"
 	"github.com/afun-game/predictmarket-saas/internal/platformuser"
+	"github.com/afun-game/predictmarket-saas/internal/session"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 )
+
+func TestSessionExchangeRejectsInvalidCredentials(t *testing.T) {
+	t.Parallel()
+
+	handler := newV3HardeningHandler(t, &types.Merchant{
+		ID:         "merchant-1",
+		Status:     "active",
+		Currency:   "USD",
+		WalletMode: "transfer",
+	})
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantCode   string
+		challenge  string
+	}{
+		{name: "empty body", body: "", wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
+		{name: "missing token", body: `{}`, wantStatus: http.StatusBadRequest, wantCode: "validation_error"},
+		{
+			name:       "unknown token",
+			body:       `{"token":"lt_unknown"}`,
+			wantStatus: http.StatusUnauthorized,
+			wantCode:   "invalid_token",
+			challenge:  `Bearer error="invalid_token"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := v3Request(
+				t,
+				handler,
+				http.MethodPost,
+				"/api/user/session/exchange",
+				[]byte(test.body),
+				"",
+			)
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d; body = %s", recorder.Code, test.wantStatus, recorder.Body.String())
+			}
+			var response struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response.Error.Code != test.wantCode {
+				t.Errorf("error code = %q, want %q", response.Error.Code, test.wantCode)
+			}
+			if challenge := recorder.Header().Get("WWW-Authenticate"); challenge != test.challenge {
+				t.Errorf("WWW-Authenticate = %q, want %q", challenge, test.challenge)
+			}
+		})
+	}
+}
+
+func TestSessionErrorMappingsRespectAuthenticationContext(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		write      func(http.ResponseWriter, error)
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "expired merchant session resource",
+			write:      writeSessionError,
+			err:        session.ErrExpired,
+			wantStatus: http.StatusNotFound,
+			wantCode:   "not_found",
+		},
+		{
+			name:       "missing browser session during refresh",
+			write:      writeUserSessionError,
+			err:        session.ErrNotFound,
+			wantStatus: http.StatusUnauthorized,
+			wantCode:   "invalid_token",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			test.write(recorder, test.err)
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.wantStatus)
+			}
+			var response struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response.Error.Code != test.wantCode {
+				t.Errorf("error code = %q, want %q", response.Error.Code, test.wantCode)
+			}
+		})
+	}
+}
 
 func TestAllowedClientIP(t *testing.T) {
 	t.Parallel()

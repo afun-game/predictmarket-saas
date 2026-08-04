@@ -148,6 +148,9 @@ func (m *Manager) Exchange(ctx context.Context, launchToken string) (string, Bro
 		return "", BrowserSession{}, ErrInvalidInput
 	}
 	launch, err := m.store.ConsumeLaunch(ctx, launchToken)
+	if errors.Is(err, ErrNotFound) {
+		return "", BrowserSession{}, ErrUnauthorized
+	}
 	if err != nil {
 		return "", BrowserSession{}, err
 	}
