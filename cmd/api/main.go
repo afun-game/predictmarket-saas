@@ -175,7 +175,12 @@ func run(
 		mux.Handle("GET /styles.css", hostedui.Handler())
 		// Serve the embedded admin console at /admin. It shares the
 		// SESSION_JWT_SECRET so it is enabled together with the V3 stack.
-		adminConfig, closeAdmin, err := configuredAdmin(resources, app.settlement.Get())
+		adminConfig, closeAdmin, err := configuredAdmin(
+			resources,
+			app.settlement.Get(),
+			v3Config.Sessions,
+			v3Config.HostedLaunchURL,
+		)
 		if err != nil {
 			slog.Warn("Admin console is disabled", "error", err)
 		} else {
@@ -212,7 +217,12 @@ func run(
 // secret. It shares SESSION_JWT_SECRET with the V3 stack, so the console is
 // enabled together with V3. ADMIN_USERNAME/ADMIN_PASSWORD bootstrap the first
 // super-admin account when no admin account exists yet.
-func configuredAdmin(resources resourceEndpoints, settlementService settlement.Service) (httpapi.AdminConfig, func(), error) {
+func configuredAdmin(
+	resources resourceEndpoints,
+	settlementService settlement.Service,
+	sessions *session.Manager,
+	hostedLaunchURL string,
+) (httpapi.AdminConfig, func(), error) {
 	sessionSecret := strings.TrimSpace(os.Getenv("SESSION_JWT_SECRET"))
 	if sessionSecret == "" {
 		return httpapi.AdminConfig{}, func() {}, errors.New("SESSION_JWT_SECRET is required for the admin console")
@@ -236,11 +246,13 @@ func configuredAdmin(resources resourceEndpoints, settlementService settlement.S
 		}
 	}
 	config := httpapi.AdminConfig{
-		Accounts:      manager,
-		Queries:       adminquery.New(database),
-		PlatformUsers: platformuser.NewPostgresRepository(database),
-		Settlement:    settlementService,
-		Parimutuel:    parimutuel.NewServiceWithRepository(parimutuel.NewPostgresRepository(database)),
+		Accounts:        manager,
+		Queries:         adminquery.New(database),
+		PlatformUsers:   platformuser.NewPostgresRepository(database),
+		Settlement:      settlementService,
+		Parimutuel:      parimutuel.NewServiceWithRepository(parimutuel.NewPostgresRepository(database)),
+		Sessions:        sessions,
+		HostedLaunchURL: hostedLaunchURL,
 	}
 	return config, func() { _ = database.Close() }, nil
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/order"
 	"github.com/afun-game/predictmarket-saas/internal/parimutuel"
 	"github.com/afun-game/predictmarket-saas/internal/platformuser"
+	"github.com/afun-game/predictmarket-saas/internal/session"
 	"github.com/afun-game/predictmarket-saas/internal/settlement"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
@@ -33,11 +34,13 @@ const (
 // AdminConfig wires the admin console backend into the HTTP API. It is
 // appended to NewHandler's optionalServices and registered on a type switch.
 type AdminConfig struct {
-	Accounts      *adminauth.Manager
-	Queries       *adminquery.Service
-	PlatformUsers platformuser.Repository
-	Settlement    settlement.Service
-	Parimutuel    parimutuel.Service
+	Accounts        *adminauth.Manager
+	Queries         *adminquery.Service
+	PlatformUsers   platformuser.Repository
+	Settlement      settlement.Service
+	Parimutuel      parimutuel.Service
+	Sessions        *session.Manager
+	HostedLaunchURL string
 }
 
 type adminHandler struct {
@@ -110,6 +113,7 @@ func registerAdminRoutes(
 	mux.Handle("GET /api/v1/admin/transactions", session(http.HandlerFunc(handler.listTransactions)))
 	mux.Handle("GET /api/v1/admin/audit-logs", session(http.HandlerFunc(handler.listAuditLogs)))
 	mux.Handle("GET /api/v1/admin/overview", session(http.HandlerFunc(handler.overview)))
+	mux.Handle("POST /api/v1/admin/test-token", session(super(http.HandlerFunc(handler.createTestToken))))
 
 	if config.Parimutuel != nil {
 		registerParimutuelRoutes(mux, merchantService, marketService, walletService, config.Parimutuel)
