@@ -19,6 +19,7 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/event"
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/internal/order"
+	"github.com/afun-game/predictmarket-saas/internal/parimutuel"
 	"github.com/afun-game/predictmarket-saas/internal/platformuser"
 	"github.com/afun-game/predictmarket-saas/internal/session"
 	"github.com/afun-game/predictmarket-saas/internal/v2query"
@@ -41,12 +42,14 @@ const (
 // V3Config contains the infrastructure required for the V3 Launch and hosted
 // read-only API. The V3 routes are not registered unless all fields are set.
 type V3Config struct {
-	Authenticator   auth.SignedMerchantValidator
-	Sessions        *session.Manager
-	PlatformUsers   platformuser.Repository
-	Queries         v2query.Service
-	Callbacks       callback.Service
-	Seamless        *callback.SeamlessCoordinator
+	Authenticator auth.SignedMerchantValidator
+	Sessions      *session.Manager
+	PlatformUsers platformuser.Repository
+	Queries       v2query.Service
+	Callbacks     callback.Service
+	Seamless      *callback.SeamlessCoordinator
+	// Parimutuel powers pool betting for the hosted UI (/api/user/bets).
+	Parimutuel      parimutuel.Service
 	HostedLaunchURL string
 	// Audit records state-changing merchant requests (V3 §7.3).
 	Audit audit.Store
@@ -68,6 +71,7 @@ type v3Handler struct {
 	queries       v2query.Service
 	callbacks     callback.Service
 	seamless      *callback.SeamlessCoordinator
+	parimutuel    parimutuel.Service
 	launchURL     *url.URL
 	audit         audit.Store
 	orderLimiter  ratelimit.Limiter
@@ -156,6 +160,7 @@ func registerV3Routes(
 		queries:       config.Queries,
 		callbacks:     config.Callbacks,
 		seamless:      config.Seamless,
+		parimutuel:    config.Parimutuel,
 		launchURL:     launchURL,
 		audit:         config.Audit,
 		orderLimiter:  config.MerchantOrderLimiter,
@@ -228,9 +233,14 @@ func registerV3Routes(
 	mux.Handle("GET /api/user/markets", userSession(http.HandlerFunc(handler.listMarkets)))
 	mux.Handle("GET /api/user/markets/{marketID}", userSession(http.HandlerFunc(handler.getMarket)))
 	mux.Handle("GET /api/user/markets/{marketID}/orderbook", userSession(http.HandlerFunc(handler.getOrderBook)))
+	mux.Handle("GET /api/user/markets/{marketID}/pools", userSession(http.HandlerFunc(handler.getUserMarketPools)))
 	mux.Handle(
 		"POST /api/user/orders",
 		userSession(middleware.RequireIdempotencyKey(http.MethodPost)(http.HandlerFunc(handler.createUserOrder))),
+	)
+	mux.Handle(
+		"POST /api/user/bets",
+		userSession(middleware.RequireIdempotencyKey(http.MethodPost)(http.HandlerFunc(handler.createUserBet))),
 	)
 	mux.Handle("GET /api/user/orders", userSession(http.HandlerFunc(handler.listUserOrders)))
 	mux.Handle(
@@ -485,6 +495,124 @@ func (h *v3Handler) createUserOrder(w http.ResponseWriter, r *http.Request) {
 		Price:       request.Price,
 		TimeInForce: request.TimeInForce,
 	}, "hosted")
+}
+
+type userBetCreateRequest struct {
+	MarketID string  `json:"market_id"`
+	Option   string  `json:"option"`
+	Amount   float64 `json:"amount"`
+}
+
+// createUserBet places a parimutuel stake for the browser session. The stake
+// leaves the wallet immediately (type "bet"); if the pool rejects it the
+// debit is refunded (type "bet_refund"), mirroring the merchant /api/v1/bets
+// path. Order-book markets are rejected here and must use /api/user/orders.
+func (h *v3Handler) createUserBet(w http.ResponseWriter, r *http.Request) {
+	browserSession, ok := authenticatedUserSession(w, r)
+	if !ok {
+		return
+	}
+	if !h.requireActivePlatformUser(w, r, browserSession.MerchantID, browserSession.UserID) {
+		return
+	}
+	request := userBetCreateRequest{}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	request.MarketID = strings.TrimSpace(request.MarketID)
+	if request.MarketID == "" {
+		writeError(w, http.StatusBadRequest, "validation_error", "market_id is required")
+		return
+	}
+	marketValue, err := h.markets.Get(r.Context(), request.MarketID)
+	if err != nil {
+		writeMarketServiceError(w, err)
+		return
+	}
+	if marketValue.MerchantID != browserSession.MerchantID {
+		writeError(w, http.StatusNotFound, "not_found", "market was not found")
+		return
+	}
+	if marketValue.Type != "parimutuel" {
+		writeError(w, http.StatusBadRequest, "validation_error", "market is not a parimutuel market")
+		return
+	}
+	if h.parimutuel == nil {
+		writeError(w, http.StatusServiceUnavailable, "parimutuel_unavailable", "parimutuel betting is not configured")
+		return
+	}
+	currency := strings.ToUpper(strings.TrimSpace(browserSession.Currency))
+	if currency == "" {
+		currency = "USD"
+	}
+	if err := h.wallets.Debit(r.Context(), browserSession.MerchantID, browserSession.UserID, currency, request.Amount, "bet"); err != nil {
+		if errors.Is(err, wallet.ErrInsufficientBalance) {
+			writeError(w, http.StatusBadRequest, "insufficient_balance", "insufficient available balance")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "could not debit wallet")
+		return
+	}
+	bet, err := h.parimutuel.PlaceBet(r.Context(), parimutuel.Bet{
+		MarketID:   request.MarketID,
+		MerchantID: browserSession.MerchantID,
+		UserID:     browserSession.UserID,
+		Option:     request.Option,
+		Stake:      request.Amount,
+		Currency:   currency,
+	})
+	if err != nil {
+		// Best-effort refund: the debit already left the wallet.
+		_ = h.wallets.Credit(r.Context(), browserSession.MerchantID, browserSession.UserID, currency, request.Amount, "bet_refund")
+		writeParimutuelServiceError(w, err)
+		return
+	}
+	response := map[string]any{"data": bet}
+	if balance, ok := h.currentPlatformBalance(r, browserSession.MerchantID, browserSession.UserID, currency); ok {
+		response["meta"] = balanceMeta(balance, currency)
+	}
+	writeJSON(w, http.StatusCreated, response)
+}
+
+// getUserMarketPools exposes a parimutuel market's pool totals and per-option
+// stakes so the hosted UI can render 奖池 odds instead of an order book.
+func (h *v3Handler) getUserMarketPools(w http.ResponseWriter, r *http.Request) {
+	value, ok := h.authorizedUserMarket(w, r)
+	if !ok {
+		return
+	}
+	if value.Type != "parimutuel" {
+		writeError(w, http.StatusBadRequest, "validation_error", "market is not a parimutuel market")
+		return
+	}
+	if h.parimutuel == nil {
+		writeError(w, http.StatusServiceUnavailable, "parimutuel_unavailable", "parimutuel betting is not configured")
+		return
+	}
+	pools, err := h.parimutuel.GetPools(r.Context(), value.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "could not load parimutuel pools")
+		return
+	}
+	stakes, err := h.parimutuel.OptionStakes(r.Context(), value.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "could not load parimutuel stakes")
+		return
+	}
+	payload := map[string]any{
+		"market_id":   value.ID,
+		"currency":    "",
+		"total_stake": "0.00",
+		"total_fees":  "0.00",
+		"options":     stakes,
+	}
+	if len(pools) > 0 {
+		payload["currency"] = pools[0].Currency
+		payload["total_stake"] = formatMoney(pools[0].TotalStake)
+		payload["total_fees"] = formatMoney(pools[0].TotalFees)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": payload})
 }
 
 func (h *v3Handler) listUserOrders(w http.ResponseWriter, r *http.Request) {

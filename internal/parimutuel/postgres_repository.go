@@ -222,6 +222,33 @@ FROM parimutuel_pools WHERE market_id = $1`
 	return items, rows.Err()
 }
 
+// OptionStakes sums the active stake per option for one market. The totals
+// feed the per-outcome implied odds shown in the hosted UI.
+func (r *PostgresRepository) OptionStakes(ctx context.Context, marketID string) ([]OptionStake, error) {
+	if r == nil || r.database == nil {
+		return nil, errors.New("parimutuel database is not configured")
+	}
+	const query = `
+SELECT option, SUM(stake)
+FROM parimutuel_bets
+WHERE market_id = $1 AND status = 'active'
+GROUP BY option`
+	rows, err := r.database.QueryContext(ctx, query, marketID)
+	if err != nil {
+		return nil, fmt.Errorf("get parimutuel option stakes: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	items := []OptionStake{}
+	for rows.Next() {
+		item := OptionStake{}
+		if err := rows.Scan(&item.Option, &item.Stake); err != nil {
+			return nil, fmt.Errorf("scan parimutuel option stake: %w", err)
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func normalizePage(page, limit int) (int, int) {
 	if page < 1 {
 		page = 1

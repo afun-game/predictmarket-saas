@@ -127,3 +127,35 @@ func TestListBetsIsMerchantScoped(t *testing.T) {
 		t.Fatalf("cross-tenant bets leaked: %+v", items)
 	}
 }
+
+func TestOptionStakesAggregatesActiveBets(t *testing.T) {
+	service, _ := newFixture(t)
+	for _, bet := range []Bet{
+		{MarketID: "m-1", MerchantID: "merchant-1", UserID: "u1", Option: "Yes", Stake: 10, Currency: "USD"},
+		{MarketID: "m-1", MerchantID: "merchant-1", UserID: "u2", Option: "Yes", Stake: 5, Currency: "USD"},
+		{MarketID: "m-1", MerchantID: "merchant-1", UserID: "u3", Option: "No", Stake: 20, Currency: "USD"},
+	} {
+		if _, err := service.PlaceBet(context.Background(), bet); err != nil {
+			t.Fatalf("place bet: %v", err)
+		}
+	}
+	stakes, err := service.OptionStakes(context.Background(), "m-1")
+	if err != nil {
+		t.Fatalf("OptionStakes() error = %v", err)
+	}
+	totals := map[string]float64{}
+	for _, item := range stakes {
+		totals[item.Option] = item.Stake
+	}
+	if totals["Yes"] != 15 || totals["No"] != 20 {
+		t.Errorf("option stakes = %v, want Yes=15 No=20", totals)
+	}
+
+	empty, err := service.OptionStakes(context.Background(), "m-binary")
+	if err != nil {
+		t.Fatalf("OptionStakes(binary) error = %v", err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("binary market stakes = %v, want empty", empty)
+	}
+}

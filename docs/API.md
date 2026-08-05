@@ -779,6 +779,26 @@ settlement/refund credits are delivered through the callback outbox. The
 merchant callback URL and encrypted callback secret must be configured by an
 administrator before seamless orders are accepted.
 
+### Parimutuel pool betting (hosted)
+
+Pari-mutuel (奖池) markets have no order book; the browser stakes money into
+the pool instead of buying shares:
+
+```http
+GET  /api/user/markets/{market_id}/pools
+POST /api/user/bets
+```
+
+`GET …/pools` returns the pool totals (`total_stake`, `total_fees`,
+`currency`) plus per-option active stakes (`options: [{option, stake}]`),
+which the hosted UI renders as implied odds. `POST /api/user/bets` takes
+`{market_id, option, amount}` and requires `Idempotency-Key`; the stake is
+debited from the wallet (type `bet`) and joins the pool, and a rejected bet
+is refunded (type `bet_refund`). Both endpoints refuse order-book markets
+with `400` and are scoped to the session's merchant. Parimutuel stakes use
+the platform wallet (`transfer` mode); seamless merchants are not yet
+supported for pool betting.
+
 ## Merchant integration hardening
 
 The following administrator-only endpoints manage the production gate for

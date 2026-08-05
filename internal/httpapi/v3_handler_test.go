@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +17,7 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/order"
+	"github.com/afun-game/predictmarket-saas/internal/parimutuel"
 	"github.com/afun-game/predictmarket-saas/internal/platformuser"
 	"github.com/afun-game/predictmarket-saas/internal/session"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
@@ -617,4 +619,251 @@ func v3TestSessionManager(t *testing.T) *session.Manager {
 		t.Fatalf("NewManager() error = %v", err)
 	}
 	return manager
+}
+
+// TestV3UserParimutuelBetFlow pins the hosted 奖池 flow: a parimutuel market
+// must quote pool odds (not an order book) and accept stakes through
+// /api/user/bets, debiting the wallet and joining the pool. Order-book
+// markets must reject pool bets before any debit.
+func TestV3UserParimutuelBetFlow(t *testing.T) {
+	t.Parallel()
+
+	merchantService := merchant.NewService()
+	eventService := event.NewService()
+	marketService := market.NewService()
+	walletService := wallet.NewService()
+	orderService := order.NewServiceWithDependencies(marketService, walletService)
+	// The in-memory parimutuel repository validates bets against seeded
+	// markets (the Postgres repository locks the real markets row).
+	parimutuelRepo := parimutuel.NewMemoryRepository()
+	parimutuelService := parimutuel.NewServiceWithRepository(parimutuelRepo)
+	manager := v3TestSessionManager(t)
+	signer := &signedMerchantStub{}
+	handler := NewHandler(
+		merchantService,
+		eventService,
+		marketService,
+		walletService,
+		orderService,
+		currency.NewService(),
+		"admin-secret",
+		V3Config{
+			Authenticator:   signer,
+			Sessions:        manager,
+			PlatformUsers:   platformuser.NewMemoryRepository(),
+			HostedLaunchURL: "https://play.example/launch",
+			Parimutuel:      parimutuelService,
+		},
+	)
+	credentials := registerMerchant(t, handler, "Pool Tenant", "pool-v3@example.test")
+	signer.merchant = &types.Merchant{
+		ID:         credentials.Data.MerchantID,
+		Status:     "active",
+		Currency:   "USD",
+		WalletMode: "transfer",
+	}
+	eventID := createActiveEventForMarket(t, handler, "v3-pool-event")
+	poolMarketID := createParimutuelMarketForMerchant(t, handler, credentials.Data.MerchantID, eventID)
+	binaryMarketID := createMarketForMerchant(t, handler, credentials.Data.MerchantID, eventID)
+	// The admin console seeds the pool row at market creation; the v3
+	// handler shares the service, so seed it here for the test universe.
+	parimutuelRepo.SeedMarket(poolMarketID, "parimutuel", "active", "active", []string{"Yes", "No"})
+	if err := parimutuelService.CreatePools(context.Background(), poolMarketID, "USD"); err != nil {
+		t.Fatalf("CreatePools() error = %v", err)
+	}
+	if _, err := walletService.Deposit(context.Background(), &wallet.TransferRequest{
+		MerchantID:            credentials.Data.MerchantID,
+		MerchantTransactionID: "fund-pool-user",
+		UserID:                "pool-user",
+		Currency:              "USD",
+		Amount:                "20.00",
+	}); err != nil {
+		t.Fatalf("fund pool user: %v", err)
+	}
+
+	launchToken, _, err := manager.CreateLaunch(
+		context.Background(),
+		credentials.Data.MerchantID,
+		"pool-user",
+		"USD",
+		"transfer",
+		"zh-CN",
+		"",
+	)
+	if err != nil {
+		t.Fatalf("CreateLaunch() error = %v", err)
+	}
+	accessToken, _, err := manager.Exchange(context.Background(), launchToken)
+	if err != nil {
+		t.Fatalf("Exchange() error = %v", err)
+	}
+
+	initial := decodePoolsResponse(t, userPoolsRequest(t, handler, poolMarketID, accessToken).Body.Bytes())
+	if initial.TotalStake != "0.00" || len(initial.Options) != 0 || initial.Currency != "USD" {
+		t.Errorf("initial pools = %#v", initial)
+	}
+
+	first := userBetRequest(t, handler, poolMarketID, "Yes", 5, accessToken, "pool-bet-001")
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first bet status = %d, body = %s", first.Code, first.Body.String())
+	}
+	firstBet := decodeBetResponse(t, first.Body.Bytes())
+	if firstBet.Data.ID == "" || firstBet.Data.Option != "Yes" || firstBet.Data.Stake != 5 {
+		t.Errorf("first bet = %#v", firstBet.Data)
+	}
+	if firstBet.Meta.AvailableBalance != "15.00" {
+		t.Errorf("balance after first bet = %q, want 15.00", firstBet.Meta.AvailableBalance)
+	}
+
+	updated := decodePoolsResponse(t, userPoolsRequest(t, handler, poolMarketID, accessToken).Body.Bytes())
+	if updated.TotalStake != "5.00" || len(updated.Options) != 1 || updated.Options[0].Option != "Yes" || updated.Options[0].Stake != 5 {
+		t.Errorf("pools after first bet = %#v", updated)
+	}
+
+	second := userBetRequest(t, handler, poolMarketID, "Yes", 7.5, accessToken, "pool-bet-002")
+	if second.Code != http.StatusCreated {
+		t.Fatalf("second bet status = %d, body = %s", second.Code, second.Body.String())
+	}
+	final := decodePoolsResponse(t, userPoolsRequest(t, handler, poolMarketID, accessToken).Body.Bytes())
+	if final.TotalStake != "12.50" || len(final.Options) != 1 || final.Options[0].Stake != 12.5 {
+		t.Errorf("pools after second bet = %#v", final)
+	}
+
+	profile := v3Request(t, handler, http.MethodGet, "/api/user/me", nil, "Bearer "+accessToken)
+	me := struct {
+		Data struct {
+			AvailableBalance string `json:"available_balance"`
+		} `json:"data"`
+	}{}
+	if err := json.Unmarshal(profile.Body.Bytes(), &me); err != nil {
+		t.Fatalf("decode profile: %v", err)
+	}
+	if me.Data.AvailableBalance != "7.50" {
+		t.Errorf("balance after second bet = %q, want 7.50", me.Data.AvailableBalance)
+	}
+
+	// Order-book markets refuse pool bets before any wallet debit.
+	rejected := userBetRequest(t, handler, binaryMarketID, "Yes", 5, accessToken, "pool-bet-003")
+	if rejected.Code != http.StatusBadRequest {
+		t.Errorf("binary bet status = %d, want %d; body = %s", rejected.Code, http.StatusBadRequest, rejected.Body.String())
+	}
+	binaryPools := userPoolsRequest(t, handler, binaryMarketID, accessToken)
+	if binaryPools.Code != http.StatusBadRequest {
+		t.Errorf("binary pools status = %d, want %d; body = %s", binaryPools.Code, http.StatusBadRequest, binaryPools.Body.String())
+	}
+
+	// Bets never leak into the order-book order history.
+	orders := v3Request(t, handler, http.MethodGet, "/api/user/orders?limit=500", nil, "Bearer "+accessToken)
+	orderList := struct {
+		Data []map[string]any `json:"data"`
+	}{}
+	if err := json.Unmarshal(orders.Body.Bytes(), &orderList); err != nil {
+		t.Fatalf("decode order list: %v", err)
+	}
+	if len(orderList.Data) != 0 {
+		t.Errorf("order list = %#v, want empty", orderList.Data)
+	}
+}
+
+func createParimutuelMarketForMerchant(
+	t *testing.T,
+	handler http.Handler,
+	merchantID string,
+	eventID string,
+) string {
+	t.Helper()
+	response := performRequest(
+		t,
+		handler,
+		http.MethodPost,
+		"/api/v1/markets",
+		[]byte(fmt.Sprintf(`{
+			"merchant_id":%q,
+			"event_id":%q,
+			"type":"parimutuel",
+			"question":"Pool market",
+			"options":["Yes","No"],
+			"liquidity_pool":0
+		}`, merchantID, eventID)),
+		"Bearer admin-secret",
+	)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create parimutuel market status = %d, body = %s", response.Code, response.Body.String())
+	}
+	return decodeMarketResponse(t, response.Body.Bytes()).Data.ID
+}
+
+func userPoolsRequest(
+	t *testing.T,
+	handler http.Handler,
+	marketID string,
+	token string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, "/api/user/markets/"+marketID+"/pools", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	return recorder
+}
+
+func userBetRequest(
+	t *testing.T,
+	handler http.Handler,
+	marketID string,
+	option string,
+	amount float64,
+	token string,
+	idempotencyKey string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	body := fmt.Sprintf(`{"market_id":%q,"option":%q,"amount":%v}`, marketID, option, amount)
+	request := httptest.NewRequest(http.MethodPost, "/api/user/bets", bytes.NewBufferString(body))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Idempotency-Key", idempotencyKey)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	return recorder
+}
+
+type userPoolView struct {
+	MarketID   string `json:"market_id"`
+	Currency   string `json:"currency"`
+	TotalStake string `json:"total_stake"`
+	Options    []struct {
+		Option string  `json:"option"`
+		Stake  float64 `json:"stake"`
+	} `json:"options"`
+}
+
+func decodePoolsResponse(t *testing.T, body []byte) userPoolView {
+	t.Helper()
+	var response struct {
+		Data userPoolView `json:"data"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		t.Fatalf("decode pools response: %v", err)
+	}
+	return response.Data
+}
+
+type userBetView struct {
+	Data struct {
+		ID     string  `json:"id"`
+		Option string  `json:"option"`
+		Stake  float64 `json:"stake"`
+	} `json:"data"`
+	Meta struct {
+		AvailableBalance string `json:"available_balance"`
+	} `json:"meta"`
+}
+
+func decodeBetResponse(t *testing.T, body []byte) userBetView {
+	t.Helper()
+	var response userBetView
+	if err := json.Unmarshal(body, &response); err != nil {
+		t.Fatalf("decode bet response: %v", err)
+	}
+	return response
 }

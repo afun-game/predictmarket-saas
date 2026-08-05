@@ -41,6 +41,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 管理台前端 `web/admin`：登录、仪表盘、商户/用户/事件/市场/订单/流水/
   审计 8 个页面，全部中文，复用托管页视觉语言。
 
+### Added (Hosted parimutuel betting)
+- 修复托管前端奖池市场误用订单簿模式：`web/hosted` 此前无视市场类型，
+  奖池市场下单时读取空盘口报价并报“无报价”失败。现在市场页按
+  `type` 展示「奖池模式/订单簿模式」徽标，奖池市场按池内各选项投注额
+  推算隐含概率展示，票据标注「奖池投注」，下单走投注额（非份额）。
+- 新增用户会话奖池接口：`POST /api/user/bets` 下注（扣减钱包入池，
+  失败自动退款，与商户侧 `/api/v1/bets` 同语义）、
+  `GET /api/user/markets/{id}/pools` 查询池总量与分选项投注额；
+  订单簿市场对二者分别拒绝 400。
+- `internal/parimutuel` 新增 `OptionStakes` 聚合（内存/Postgres 双实现），
+  为前端提供分选项隐含概率数据。
+
 ### Added (V3 hardening)
 - Per-merchant seamless circuit breaker: five consecutive callback/webhook
   failures mark a merchant degraded, seamless orders are refused, and a

@@ -52,6 +52,13 @@ type Pool struct {
 	TotalFees  float64 `json:"total_fees"`
 }
 
+// OptionStake is the active stake total for one market option. It drives
+// the per-outcome implied odds shown in the hosted UI.
+type OptionStake struct {
+	Option string  `json:"option"`
+	Stake  float64 `json:"stake"`
+}
+
 // ListFilters scopes bet history for one merchant. MerchantID is required
 // by the repository: bets are tenant-scoped like orders.
 type ListFilters struct {
@@ -74,6 +81,8 @@ type Service interface {
 	ListBets(ctx context.Context, filters ListFilters) ([]Bet, int, error)
 	// GetPools returns the pool totals for one market.
 	GetPools(ctx context.Context, marketID string) ([]Pool, error)
+	// OptionStakes returns the active stake total per option for one market.
+	OptionStakes(ctx context.Context, marketID string) ([]OptionStake, error)
 }
 
 // ValidationError identifies an invalid bet field.
@@ -92,6 +101,7 @@ type Repository interface {
 	PlaceBet(ctx context.Context, bet Bet) (*Bet, error)
 	ListBets(ctx context.Context, filters ListFilters) ([]Bet, int, error)
 	GetPools(ctx context.Context, marketID string) ([]Pool, error)
+	OptionStakes(ctx context.Context, marketID string) ([]OptionStake, error)
 	// LockMarketForBet returns the market's type, status, options, and event
 	// status while holding the market row lock.
 	LockMarketForBet(ctx context.Context, marketID string) (marketType string, status string, options []string, eventStatus string, err error)

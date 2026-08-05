@@ -143,6 +143,26 @@ func (r *MemoryRepository) ListBets(ctx context.Context, filters ListFilters) ([
 	return items, len(items), nil
 }
 
+func (r *MemoryRepository) OptionStakes(ctx context.Context, marketID string) ([]OptionStake, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	totals := map[string]float64{}
+	for _, bet := range r.bets {
+		if bet.MarketID != marketID || bet.Status != StatusActive {
+			continue
+		}
+		totals[bet.Option] += bet.Stake
+	}
+	items := []OptionStake{}
+	for option, stake := range totals {
+		items = append(items, OptionStake{Option: option, Stake: stake})
+	}
+	return items, nil
+}
+
 func (r *MemoryRepository) GetPools(ctx context.Context, marketID string) ([]Pool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

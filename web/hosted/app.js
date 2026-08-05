@@ -58,6 +58,12 @@ const translations = {
     "market.notice": "价格反映市场当前观点，不构成任何建议。下单前请确认结算规则。",
     "market.choice": "选择：{label}",
     "market.liveBook": "实时盘口",
+    "market.poolStake": "奖池投注",
+    "market.modeOrderbook": "订单簿模式",
+    "market.modeParimutuel": "奖池模式",
+    "market.pool": "奖池",
+    "market.poolTotal": "累计投注 {amount}",
+    "market.poolOption": "{option} 投注 {amount}",
     "market.continue": "继续",
     "market.submitting": "提交中…",
     "orders.title": "我的订单",
@@ -72,6 +78,7 @@ const translations = {
     "error.launch": "请从商户站点提供的 Launch URL 打开此页面。",
     "error.load": "无法载入托管页面。",
     "order.amountPrompt": "请输入份额（最多 6 位小数）",
+    "order.stakePrompt": "请输入投注金额（{currency}，最多 2 位小数）",
     "order.noQuote": "该结果暂无可成交报价，请稍后再试。",
     "order.failed": "下单失败。",
     "deadline.tbd": "待定",
@@ -130,6 +137,12 @@ const translations = {
     "market.notice": "Prices reflect the market's current view and are not advice. Review the settlement rules before ordering.",
     "market.choice": "Choice: {label}",
     "market.liveBook": "Live book",
+    "market.poolStake": "Pool bet",
+    "market.modeOrderbook": "Order book",
+    "market.modeParimutuel": "Pool",
+    "market.pool": "Pool",
+    "market.poolTotal": "Total staked {amount}",
+    "market.poolOption": "{option} staked {amount}",
     "market.continue": "Continue",
     "market.submitting": "Submitting…",
     "orders.title": "My orders",
@@ -144,6 +157,7 @@ const translations = {
     "error.launch": "Open this page from the merchant site's Launch URL.",
     "error.load": "Unable to load the hosted page.",
     "order.amountPrompt": "Enter shares (up to 6 decimals)",
+    "order.stakePrompt": "Enter stake amount ({currency}, up to 2 decimals)",
     "order.noQuote": "No tradable quote for this outcome yet. Please try again later.",
     "order.failed": "Order failed.",
     "deadline.tbd": "TBD",
@@ -213,6 +227,7 @@ const state = {
   markets: [],
   orders: [],
   selectedOutcome: null,
+  marketPools: {},
   loading: true,
   error: "",
   submitting: false,
@@ -413,26 +428,35 @@ function marketPage(market) {
   if (!market) return notFoundPage();
   const event = events.find((item) => item.id === market.eventId);
   const selected = state.selectedOutcome?.marketId === market.id ? state.selectedOutcome : null;
+  const isPool = market.type === "parimutuel";
+  const pools = state.marketPools[market.id];
+  const odds = poolOdds(market);
+  const poolSummary = isPool && pools && !pools.error ? `
+        <section class="info-card"><h2>${t("market.pool")}</h2>
+          <p>${t("market.poolTotal", { amount: pools.total_stake ?? "0.00" })}${pools.currency ? ` · ${escapeHTML(pools.currency)}` : ""}</p>
+          <ul>${(pools.options ?? []).map((row) => `<li>${t("market.poolOption", { option: row.option, amount: formatPoolAmount(row.stake) })}</li>`).join("")}</ul>
+        </section>` : "";
   return shell(`
     <section class="page">
       <div class="breadcrumb"><button type="button" data-route="/event/${market.eventId}">${escapeHTML(event?.title ?? t("event.title"))}</button><span>/</span><span>${t("market.details")}</span></div>
       <article class="market-hero">
         <p class="event-kicker">${escapeHTML(marketCategoryLabel(market))}</p>
         <h1>${escapeHTML(market.question)}</h1>
-        <p class="market-hero__meta"><span>◷ ${deadlineLabel(market.resolutionTime)}</span><span>${t("volume", { volume: market.volume })}</span><span class="status">${escapeHTML(marketStatusLabel(market))}</span></p>
+        <p class="market-hero__meta"><span>◷ ${deadlineLabel(market.resolutionTime)}</span><span>${t("volume", { volume: market.volume })}</span><span class="badge">${isPool ? t("market.modeParimutuel") : t("market.modeOrderbook")}</span><span class="status">${escapeHTML(marketStatusLabel(market))}</span></p>
       </article>
       <section aria-labelledby="outcomes-title">
         <div class="section-heading"><h2 id="outcomes-title">${t("market.chooseOutcome")}</h2><span class="label">${t("market.currentOdds")}</span></div>
         <div class="outcome-grid">${market.outcomes.map((outcome, index) => `
           <button class="outcome" type="button" data-outcome="${market.id}:${index}" aria-pressed="${selected?.index === index}">
-            <strong>${escapeHTML(outcome.label)}</strong><span>${outcome.price == null ? t("market.noQuote") : `${outcome.price}¢`}</span>
+            <strong>${escapeHTML(outcome.label)}</strong><span>${odds[outcome.label] == null ? t("market.noQuote") : `${odds[outcome.label]}¢`}</span>
           </button>`).join("")}</div>
       </section>
+      ${poolSummary}
       <section class="info-card"><h2>${t("market.rules")}</h2><p>${t("market.rulesNote")}</p></section>
       <div class="notice"><span aria-hidden="true">ⓘ</span><span>${t("market.notice")}</span></div>
       ${selected ? `
         <div class="ticket" role="status">
-          <div class="ticket__summary"><div class="ticket__choice"><strong>${escapeHTML(market.question)}</strong><span>${t("market.choice", { label: market.outcomes[selected.index].label })}</span></div><span class="ticket__price">${t("market.liveBook")}</span></div>
+          <div class="ticket__summary"><div class="ticket__choice"><strong>${escapeHTML(market.question)}</strong><span>${t("market.choice", { label: market.outcomes[selected.index].label })}</span></div><span class="ticket__price">${isPool ? t("market.poolStake") : t("market.liveBook")}</span></div>
           <button class="primary-button" type="button" data-action="place-order" ${state.submitting ? "disabled" : ""}>${state.submitting ? t("market.submitting") : t("market.continue")}</button>
         </div>` : ""}
     </section>
@@ -475,6 +499,7 @@ function render() {
     return;
   }
   const [root, identifier] = parseRoute();
+  if (root === "market") ensureMarketPools(identifier);
   if (root === "category") app.innerHTML = categoryPage(categories.some((category) => category.id === identifier) ? identifier : "all");
   else if (root === "event") app.innerHTML = eventPage(events.find((event) => event.id === identifier));
   else if (root === "market") app.innerHTML = marketPage(markets.find((market) => market.id === identifier));
@@ -599,6 +624,40 @@ function normalizeMarket(value) {
   };
 }
 
+// Parimutuel markets have no order book; their per-outcome odds are implied
+// by the share of active stake each option holds in the pool.
+function poolOdds(market) {
+  const pools = state.marketPools[market.id];
+  const total = Number(pools?.total_stake ?? 0);
+  if (!(total > 0) || !Array.isArray(pools?.options)) return {};
+  const odds = {};
+  for (const row of pools.options) {
+    odds[row.option] = Math.max(1, Math.round((Number(row.stake) / total) * 100));
+  }
+  return odds;
+}
+
+function formatPoolAmount(value) {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount.toFixed(2) : "0.00";
+}
+
+async function ensureMarketPools(marketId) {
+  if (state.marketPools[marketId] !== undefined) return;
+  const market = markets.find((item) => item.id === marketId);
+  if (!market || market.type !== "parimutuel") {
+    state.marketPools[marketId] = { error: true };
+    return;
+  }
+  state.marketPools[marketId] = null; // in flight
+  try {
+    state.marketPools[marketId] = await apiFetch(`/api/user/markets/${encodeURIComponent(marketId)}/pools`);
+  } catch {
+    state.marketPools[marketId] = { error: true };
+  }
+  render();
+}
+
 // Display helpers derive locale-dependent strings at render time so a
 // language switch re-renders everything without refetching.
 function marketCategoryLabel(market) {
@@ -665,6 +724,33 @@ async function placeOrder() {
   const selected = state.selectedOutcome;
   const market = markets.find((item) => item.id === selected?.marketId);
   if (!market || state.submitting) return;
+  if (market.type === "parimutuel") {
+    const amount = window.prompt(t("order.stakePrompt", { currency: state.me?.currency ?? "" }), "1");
+    if (!amount || !/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) return;
+    state.submitting = true;
+    render();
+    try {
+      const option = market.outcomes[selected.index];
+      const result = await apiFetch("/api/user/bets", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ market_id: market.id, option: option.label, amount: Number(amount) }),
+        envelope: true,
+      });
+      const bet = result.data;
+      state.orders.unshift({ ...bet, type: "bet", amount: bet.stake });
+      state.selectedOutcome = null;
+      applyBalance(result.meta);
+      emit("pm:bet_placed", { market_id: market.id, order_id: bet.id, outcome: option.label });
+    } catch (error) {
+      applyBalance(error?.meta);
+      state.error = error instanceof Error ? error.message : t("order.failed");
+    } finally {
+      state.submitting = false;
+      render();
+    }
+    return;
+  }
   const amount = window.prompt(t("order.amountPrompt"), "1");
   if (!amount || !/^\d+(\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) return;
   state.submitting = true;

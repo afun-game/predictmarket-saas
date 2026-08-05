@@ -56,3 +56,7 @@ func (s *implementation) ListBets(ctx context.Context, filters ListFilters) ([]B
 func (s *implementation) GetPools(ctx context.Context, marketID string) ([]Pool, error) {
 	return s.repository.GetPools(ctx, strings.TrimSpace(marketID))
 }
+
+func (s *implementation) OptionStakes(ctx context.Context, marketID string) ([]OptionStake, error) {
+	return s.repository.OptionStakes(ctx, strings.TrimSpace(marketID))
+}
