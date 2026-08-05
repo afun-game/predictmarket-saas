@@ -43,10 +43,12 @@ Generate the two secrets with `openssl rand -base64 32 | tr '+/' '-_' | tr -d '=
 Set `hosted_ui_url` to the dev environment's public `/launch` address (the
 embedded hosted UI is served by the API at `GET /launch` when V3 is enabled).
 
-The dev environment is currently exposed at `https://market.afx-game.dev`
-(registered via Route 53, TLS via an ap-east-1 ACM certificate, ALB Ingress in
-`k8s/overlays/dev/ingress.yaml`), so `hosted_ui_url` is
-`https://market.afx-game.dev/launch`.
+The dev API is exposed at `https://market.afx-game.dev` (registered via Route
+53, TLS via an ap-east-1 ACM certificate, ALB Ingress in
+`k8s/overlays/dev/ingress.yaml`). The hosted frontend is exposed separately at
+`https://pm.afx-game.dev`, so `hosted_ui_url` is
+`https://pm.afx-game.dev/launch`. Session creation responses use this frontend
+URL for their `launch_url`.
 
 Redis and NATS data are disposable in this environment. The workflow runs the
 versioned migration Job before it waits for the API rollout. AWS resources and
