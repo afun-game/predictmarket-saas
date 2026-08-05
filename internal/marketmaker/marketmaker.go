@@ -297,7 +297,15 @@ func (s *implementation) makeMarket(ctx context.Context, marketValue *types.Mark
 	if err != nil {
 		return 0, fmt.Errorf("get maker order book: %w", err)
 	}
-	bestBid, bestAsk, hasBid, hasAsk := yesEquivalentLevels(book)
+	// The maker quotes the first option (the "reference" side) and folds
+	// the second option's book into it: buying option B at p is selling
+	// option A at 1-p. Markets with other than two options are skipped.
+	if len(marketValue.Options) != 2 {
+		return 0, nil
+	}
+	reference := marketValue.Options[0]
+	other := marketValue.Options[1]
+	bestBid, bestAsk, hasBid, hasAsk := equivalentLevels(book, reference, other)
 	mid := 0.5
 	if hasBid && hasAsk {
 		mid = (bestBid + bestAsk) / 2
@@ -327,11 +335,11 @@ func (s *implementation) makeMarket(ctx context.Context, marketValue *types.Mark
 
 	actions := 0
 	quotes := []order.CreateRequest{
-		{MerchantID: marketValue.MerchantID, UserID: MakerUserID, MarketID: marketValue.ID, Type: "buy", Option: "Yes", Amount: levelSize, Currency: currency, Price: bidLevel, TimeInForce: "gtc", Channel: "mm"},
-		{MerchantID: marketValue.MerchantID, UserID: MakerUserID, MarketID: marketValue.ID, Type: "sell", Option: "Yes", Amount: levelSize, Currency: currency, Price: askLevel, TimeInForce: "gtc", Channel: "mm"},
+		{MerchantID: marketValue.MerchantID, UserID: MakerUserID, MarketID: marketValue.ID, Type: "buy", Option: reference, Amount: levelSize, Currency: currency, Price: bidLevel, TimeInForce: "gtc", Channel: "mm"},
+		{MerchantID: marketValue.MerchantID, UserID: MakerUserID, MarketID: marketValue.ID, Type: "sell", Option: reference, Amount: levelSize, Currency: currency, Price: askLevel, TimeInForce: "gtc", Channel: "mm"},
 	}
 	for _, quote := range quotes {
-		if hasMakerQuote(existing, quote.Type, quote.Price) {
+		if hasMakerQuote(existing, quote.Type, quote.Price, reference) {
 			continue
 		}
 		if _, err := s.orders.Create(ctx, &quote); err != nil {
@@ -344,9 +352,9 @@ func (s *implementation) makeMarket(ctx context.Context, marketValue *types.Mark
 }
 
 // hasMakerQuote reports whether the maker already rests at the level.
-func hasMakerQuote(existing []*types.Order, side string, price float64) bool {
+func hasMakerQuote(existing []*types.Order, side string, price float64, option string) bool {
 	for _, value := range existing {
-		if value.UserID != MakerUserID || value.Type != side || value.Status == "cancelled" {
+		if value.UserID != MakerUserID || value.Type != side || value.Status == "cancelled" || value.Option != option {
 			continue
 		}
 		if value.Price == price {
@@ -356,34 +364,35 @@ func hasMakerQuote(existing []*types.Order, side string, price float64) bool {
 	return false
 }
 
-// yesEquivalentLevels folds both options' books into YES-side best bid/ask.
-// A NO ask at p is a YES bid at 1-p; a NO bid at p is a YES ask at 1-p.
-func yesEquivalentLevels(book *market.OrderBook) (bestBid, bestAsk float64, hasBid, hasAsk bool) {
+// equivalentLevels folds both options' books into reference-side best
+// bid/ask. A non-reference ask at p is a reference bid at 1-p; a
+// non-reference bid at p is a reference ask at 1-p.
+func equivalentLevels(book *market.OrderBook, reference, other string) (bestBid, bestAsk float64, hasBid, hasAsk bool) {
 	bestBid, bestAsk = 0.0, 1.0
 	for _, entry := range book.Bids {
-		if entry.Option == "No" {
-			// Buying NO is selling YES.
+		if entry.Option == other {
+			// Buying the other option is selling the reference option.
 			if price := 1 - entry.Price; price < bestAsk {
 				bestAsk = price
 				hasAsk = true
 			}
 			continue
 		}
-		if entry.Price > bestBid {
+		if entry.Option == reference && entry.Price > bestBid {
 			bestBid = entry.Price
 			hasBid = true
 		}
 	}
 	for _, entry := range book.Asks {
-		if entry.Option == "No" {
-			// Selling NO is buying YES.
+		if entry.Option == other {
+			// Selling the other option is buying the reference option.
 			if price := 1 - entry.Price; price > bestBid {
 				bestBid = price
 				hasBid = true
 			}
 			continue
 		}
-		if entry.Price < bestAsk {
+		if entry.Option == reference && entry.Price < bestAsk {
 			bestAsk = entry.Price
 			hasAsk = true
 		}

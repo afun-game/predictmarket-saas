@@ -251,12 +251,12 @@ func abs(value float64) float64 {
 	return value
 }
 
-func TestYesEquivalentLevelsFoldsNoSide(t *testing.T) {
+func TestEquivalentLevelsFoldsOtherOption(t *testing.T) {
 	book := &market.OrderBook{
 		Bids: []market.OrderBookEntry{{Option: "Yes", Price: 0.40}, {Option: "No", Price: 0.45}},
 		Asks: []market.OrderBookEntry{{Option: "Yes", Price: 0.70}, {Option: "No", Price: 0.55}},
 	}
-	bestBid, bestAsk, hasBid, hasAsk := yesEquivalentLevels(book)
+	bestBid, bestAsk, hasBid, hasAsk := equivalentLevels(book, "Yes", "No")
 	// NO ask 0.55 = YES bid 0.45; NO bid 0.45 = YES ask 0.55.
 	const eps = 1e-9
 	if !hasBid || abs(bestBid-0.45) > eps {
@@ -264,5 +264,41 @@ func TestYesEquivalentLevelsFoldsNoSide(t *testing.T) {
 	}
 	if !hasAsk || abs(bestAsk-0.55) > eps {
 		t.Errorf("bestAsk = %v (has=%v), want 0.55 (true)", bestAsk, hasAsk)
+	}
+}
+
+// TestTickQuotesCustomOptionsMarket pins the hard-coded "Yes" regression:
+// a binary market whose options are not Yes/No (e.g. "A"/"B") must still
+// receive two-sided maker quotes on its own reference option.
+func TestTickQuotesCustomOptionsMarket(t *testing.T) {
+	fixture := newMakerFixture(t)
+	custom, err := fixture.markets.Create(fixture.ctx, &market.CreateRequest{
+		MerchantID: fixture.merchantID, EventID: fixture.eventID, Type: "binary",
+		Question: "自定义选项市场", Options: []string{"A", "B"}, LiquidityPool: 200,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actions, err := fixture.maker.Tick(fixture.ctx); err != nil || actions != 4 {
+		t.Fatalf("tick actions = %d, err = %v; want 4 (2 quotes per market)", actions, err)
+	}
+	items, _, err := fixture.orders.List(fixture.ctx, &order.ListFilters{MerchantID: fixture.merchantID, MarketID: custom.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("custom market orders = %d, want 2", len(items))
+	}
+	for _, value := range items {
+		if value.Option != "A" {
+			t.Errorf("custom market quote option = %q, want A", value.Option)
+		}
+		if value.UserID != MakerUserID {
+			t.Errorf("custom market quote user = %q, want %q", value.UserID, MakerUserID)
+		}
+	}
+	// The second tick is idempotent: no duplicate quotes on option A.
+	if actions, err := fixture.maker.Tick(fixture.ctx); err != nil || actions != 0 {
+		t.Fatalf("second tick actions = %d, err = %v; want 0", actions, err)
 	}
 }
