@@ -259,7 +259,10 @@ func (s *implementation) makeMarket(ctx context.Context, marketValue *types.Mark
 	}
 	if marketValue.LiquidityPool > committed {
 		topUp := marketValue.LiquidityPool - committed
-		if _, err := s.wallets.Create(ctx, marketValue.MerchantID, MakerUserID, currency); err != nil {
+		if _, err := s.wallets.Create(ctx, marketValue.MerchantID, MakerUserID, currency); err != nil && !errors.Is(err, wallet.ErrAlreadyExists) {
+			// The maker wallet is shared per merchant+currency across every
+			// binary market; an existing wallet is the normal case for a
+			// second market, not a failure.
 			return 0, fmt.Errorf("create market maker wallet: %w", err)
 		}
 		if err := s.wallets.Credit(ctx, marketValue.MerchantID, MakerUserID, currency, topUp, defaultFundingTxType); err != nil {

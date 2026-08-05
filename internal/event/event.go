@@ -150,6 +150,13 @@ func (s *implementation) Create(ctx context.Context, req *CreateRequest) (*types
 		return nil, fmt.Errorf("generate event ID: %w", err)
 	}
 	now := s.now().UTC()
+	// A market whose resolution time already passed can never be traded:
+	// the market maker stops quoting near resolution and the hosted UI
+	// cannot fill an order. Reject it at creation instead of silently
+	// producing a dead market.
+	if resolutionTime.Before(now) {
+		return nil, &ValidationError{Field: "resolution_time", Message: "must not be in the past"}
+	}
 	value := &types.Event{
 		ID:             eventID,
 		SourceType:     input.SourceType,
@@ -275,6 +282,9 @@ func (s *implementation) Update(
 		resolutionTime, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(*req.ResolutionTime))
 		if parseErr != nil {
 			return nil, &ValidationError{Field: "resolution_time", Message: "must be an RFC3339 timestamp"}
+		}
+		if resolutionTime.Before(s.now().UTC()) {
+			return nil, &ValidationError{Field: "resolution_time", Message: "must not be in the past"}
 		}
 		value.ResolutionTime = resolutionTime
 	}

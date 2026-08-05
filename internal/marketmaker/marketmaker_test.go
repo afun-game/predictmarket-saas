@@ -204,6 +204,46 @@ func TestTickSkipsParimutuelMarkets(t *testing.T) {
 	}
 }
 
+// TestTickFundsSecondMarketWhenMakerWalletExists pins the shared maker
+// wallet regression: the wallet is created once per merchant+currency, so a
+// second market must treat "wallet already exists" as success and still get
+// funded and quoted. Before the fix the maker aborted the market with
+// "create market maker wallet: wallet already exists" and the book stayed
+// empty forever.
+func TestTickFundsSecondMarketWhenMakerWalletExists(t *testing.T) {
+	fixture := newMakerFixture(t)
+	second, err := fixture.markets.Create(fixture.ctx, &market.CreateRequest{
+		MerchantID: fixture.merchantID, EventID: fixture.eventID, Type: "binary",
+		Question: "第二个做市市场", Options: []string{"Yes", "No"}, LiquidityPool: 300,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A single tick now funds and quotes both markets: the second market
+	// treats the already-existing shared wallet as success.
+	if actions, err := fixture.maker.Tick(fixture.ctx); err != nil || actions != 4 {
+		t.Fatalf("first tick actions = %d, err = %v; want 4 (2 quotes per market)", actions, err)
+	}
+	// A follow-up tick is idempotent.
+	if actions, err := fixture.maker.Tick(fixture.ctx); err != nil || actions != 0 {
+		t.Fatalf("second tick actions = %d, err = %v; want 0", actions, err)
+	}
+	committed, err := fixture.funds.GetCommitted(fixture.ctx, second.ID)
+	if err != nil {
+		t.Fatalf("committed funds for second market: %v", err)
+	}
+	if committed != 300 {
+		t.Fatalf("committed = %v, want 300", committed)
+	}
+	book, err := fixture.orders.GetOrderBook(fixture.ctx, second.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(book.Bids) == 0 || len(book.Asks) == 0 {
+		t.Fatalf("second market book = %+v, want two-sided quotes", book)
+	}
+}
+
 func abs(value float64) float64 {
 	if value < 0 {
 		return -value

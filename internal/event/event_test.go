@@ -66,7 +66,20 @@ func TestCreateRejectsInvalidInput(t *testing.T) {
 			name: "resolution before end",
 			req: func() *CreateRequest {
 				request := validCreateRequest("source-1", "sports")
-				request.ResolutionTime = "2026-08-01T11:00:00Z"
+				end, err := time.Parse(time.RFC3339, request.EndTime)
+				if err != nil {
+					t.Fatal(err)
+				}
+				request.ResolutionTime = end.Add(-time.Hour).Format(time.RFC3339)
+				return request
+			}(),
+			field: "resolution_time",
+		},
+		{
+			name: "resolution in the past",
+			req: func() *CreateRequest {
+				request := validCreateRequest("source-1", "sports")
+				request.ResolutionTime = time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 				return request
 			}(),
 			field: "resolution_time",
@@ -175,10 +188,11 @@ func TestListEventsWithFiltersAndPagination(t *testing.T) {
 	t.Parallel()
 
 	service := newService(newMemoryRepository())
+	base := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Hour)
 	for index, category := range []string{"sports", "politics", "sports"} {
 		request := validCreateRequest(fmt.Sprintf("source-%d", index), category)
-		request.EndTime = fmt.Sprintf("2026-08-0%dT12:00:00Z", index+1)
-		request.ResolutionTime = fmt.Sprintf("2026-08-0%dT13:00:00Z", index+1)
+		request.EndTime = base.Add(time.Duration(index) * time.Hour).Format(time.RFC3339)
+		request.ResolutionTime = base.Add(time.Duration(index+1) * time.Hour).Format(time.RFC3339)
 		if _, err := service.Create(context.Background(), request); err != nil {
 			t.Fatalf("Create(%d) error = %v", index, err)
 		}
@@ -247,26 +261,44 @@ func TestSyncSourceRejectsInvalidStatus(t *testing.T) {
 	}
 }
 
+func TestUpdateRejectsPastResolutionTime(t *testing.T) {
+	t.Parallel()
+
+	service := newService(newMemoryRepository())
+	created, err := service.Create(context.Background(), validCreateRequest("update-past", "sports"))
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	past := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339)
+	_, err = service.Update(context.Background(), created.ID, &UpdateRequest{ResolutionTime: &past})
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) || validationErr.Field != "resolution_time" {
+		t.Errorf("Update() error = %v, want resolution_time ValidationError", err)
+	}
+}
+
 func validCreateRequest(sourceID, category string) *CreateRequest {
+	start := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Minute)
 	return &CreateRequest{
 		SourceType:     "polymarket",
 		SourceID:       sourceID,
 		Title:          "Will the event happen?",
 		Description:    "An event used by unit tests.",
 		Category:       category,
-		EndTime:        "2026-08-01T12:00:00Z",
-		ResolutionTime: "2026-08-01T13:00:00Z",
+		EndTime:        start.Format(time.RFC3339),
+		ResolutionTime: start.Add(time.Hour).Format(time.RFC3339),
 	}
 }
 
 func validSyncRequest(sourceID string) *SyncRequest {
+	start := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Minute)
 	return &SyncRequest{
 		SourceID:       sourceID,
 		Title:          "Synced event",
 		Description:    "Synced from Polymarket.",
 		Category:       "politics",
-		EndTime:        "2026-08-01T12:00:00Z",
-		ResolutionTime: "2026-08-01T12:00:00Z",
+		EndTime:        start.Format(time.RFC3339),
+		ResolutionTime: start.Format(time.RFC3339),
 		Status:         "active",
 	}
 }
