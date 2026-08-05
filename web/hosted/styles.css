@@ -322,6 +322,10 @@ a:focus-visible {
 .info-card { margin: 16px 0; padding: 15px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .info-card h2 { margin: 0 0 9px; font-size: 15px; }
 .info-card p { margin: 0; color: var(--muted); font-size: 13px; }
+.info-card ul { margin: 0; padding: 0; list-style: none; }
+.info-card li { padding: 7px 0; border-top: 1px solid var(--line); color: var(--text); font-size: 14px; }
+.info-card li:first-child { border-top: 0; }
+.info-card li span { color: var(--muted); font-size: 12px; }
 
 .ticket {
   position: sticky;

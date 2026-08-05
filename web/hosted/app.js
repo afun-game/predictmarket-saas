@@ -64,6 +64,11 @@ const translations = {
     "market.pool": "奖池",
     "market.poolTotal": "累计投注 {amount}",
     "market.poolOption": "{option} 投注 {amount}",
+    "market.orderbook": "盘口报价",
+    "market.noQuotes": "暂无报价，做市商将在数秒内自动挂单，请稍候刷新",
+    "market.livePrice": "可成交价 {price}¢",
+    "orderbook.bid": "买",
+    "orderbook.ask": "卖",
     "market.continue": "继续",
     "market.submitting": "提交中…",
     "orders.title": "我的订单",
@@ -143,6 +148,11 @@ const translations = {
     "market.pool": "Pool",
     "market.poolTotal": "Total staked {amount}",
     "market.poolOption": "{option} staked {amount}",
+    "market.orderbook": "Order book",
+    "market.noQuotes": "No quotes yet. The market maker will place quotes shortly; refresh later.",
+    "market.livePrice": "Executable at {price}¢",
+    "orderbook.bid": "Buy",
+    "orderbook.ask": "Sell",
     "market.continue": "Continue",
     "market.submitting": "Submitting…",
     "orders.title": "My orders",
@@ -228,6 +238,7 @@ const state = {
   orders: [],
   selectedOutcome: null,
   marketPools: {},
+  orderBooks: {},
   loading: true,
   error: "",
   submitting: false,
@@ -430,12 +441,20 @@ function marketPage(market) {
   const selected = state.selectedOutcome?.marketId === market.id ? state.selectedOutcome : null;
   const isPool = market.type === "parimutuel";
   const pools = state.marketPools[market.id];
+  const book = state.orderBooks[market.id];
   const odds = poolOdds(market);
+  const quoteFor = (label) => (isPool ? odds[label] : askQuote(book, label));
   const poolSummary = isPool && pools && !pools.error ? `
         <section class="info-card"><h2>${t("market.pool")}</h2>
           <p>${t("market.poolTotal", { amount: pools.total_stake ?? "0.00" })}${pools.currency ? ` · ${escapeHTML(pools.currency)}` : ""}</p>
           <ul>${(pools.options ?? []).map((row) => `<li>${t("market.poolOption", { option: row.option, amount: formatPoolAmount(row.stake) })}</li>`).join("")}</ul>
         </section>` : "";
+  const bookSummary = !isPool ? `
+        <section class="info-card"><h2>${t("market.orderbook")}</h2>${orderBookSummary(market, book)}</section>` : "";
+  const ticketPrice = isPool ? t("market.poolStake") : (() => {
+    const price = selected ? askQuote(book, market.outcomes[selected.index].label) : undefined;
+    return price == null ? t("market.liveBook") : t("market.livePrice", { price });
+  })();
   return shell(`
     <section class="page">
       <div class="breadcrumb"><button type="button" data-route="/event/${market.eventId}">${escapeHTML(event?.title ?? t("event.title"))}</button><span>/</span><span>${t("market.details")}</span></div>
@@ -448,15 +467,16 @@ function marketPage(market) {
         <div class="section-heading"><h2 id="outcomes-title">${t("market.chooseOutcome")}</h2><span class="label">${t("market.currentOdds")}</span></div>
         <div class="outcome-grid">${market.outcomes.map((outcome, index) => `
           <button class="outcome" type="button" data-outcome="${market.id}:${index}" aria-pressed="${selected?.index === index}">
-            <strong>${escapeHTML(outcome.label)}</strong><span>${odds[outcome.label] == null ? t("market.noQuote") : `${odds[outcome.label]}¢`}</span>
+            <strong>${escapeHTML(outcome.label)}</strong><span>${quoteFor(outcome.label) == null ? t("market.noQuote") : `${quoteFor(outcome.label)}¢`}</span>
           </button>`).join("")}</div>
       </section>
       ${poolSummary}
+      ${bookSummary}
       <section class="info-card"><h2>${t("market.rules")}</h2><p>${t("market.rulesNote")}</p></section>
       <div class="notice"><span aria-hidden="true">ⓘ</span><span>${t("market.notice")}</span></div>
       ${selected ? `
         <div class="ticket" role="status">
-          <div class="ticket__summary"><div class="ticket__choice"><strong>${escapeHTML(market.question)}</strong><span>${t("market.choice", { label: market.outcomes[selected.index].label })}</span></div><span class="ticket__price">${isPool ? t("market.poolStake") : t("market.liveBook")}</span></div>
+          <div class="ticket__summary"><div class="ticket__choice"><strong>${escapeHTML(market.question)}</strong><span>${t("market.choice", { label: market.outcomes[selected.index].label })}</span></div><span class="ticket__price">${ticketPrice}</span></div>
           <button class="primary-button" type="button" data-action="place-order" ${state.submitting ? "disabled" : ""}>${state.submitting ? t("market.submitting") : t("market.continue")}</button>
         </div>` : ""}
     </section>
@@ -499,7 +519,10 @@ function render() {
     return;
   }
   const [root, identifier] = parseRoute();
-  if (root === "market") ensureMarketPools(identifier);
+  if (root === "market") {
+    ensureMarketPools(identifier);
+    ensureOrderBook(identifier);
+  }
   if (root === "category") app.innerHTML = categoryPage(categories.some((category) => category.id === identifier) ? identifier : "all");
   else if (root === "event") app.innerHTML = eventPage(events.find((event) => event.id === identifier));
   else if (root === "market") app.innerHTML = marketPage(markets.find((market) => market.id === identifier));
@@ -642,6 +665,46 @@ function formatPoolAmount(value) {
   return Number.isFinite(amount) ? amount.toFixed(2) : "0.00";
 }
 
+// Order-book markets quote a per-option price from resting orders. The best
+// executable buy price is the lowest ask (the sell side of the book); the
+// best bid is the highest resting buy.
+function askQuote(book, optionLabel) {
+  const asks = (book?.asks ?? []).filter((entry) => entry.option === optionLabel && Number(entry.price) > 0);
+  return asks.length ? asks[0].price : undefined;
+}
+
+function bidQuote(book, optionLabel) {
+  const bids = (book?.bids ?? []).filter((entry) => entry.option === optionLabel && Number(entry.price) > 0);
+  return bids.length ? bids[0].price : undefined;
+}
+
+async function ensureOrderBook(marketId) {
+  if (state.orderBooks[marketId] !== undefined) return;
+  const market = markets.find((item) => item.id === marketId);
+  if (!market || market.type === "parimutuel") {
+    state.orderBooks[marketId] = { error: true };
+    return;
+  }
+  state.orderBooks[marketId] = null; // in flight
+  try {
+    state.orderBooks[marketId] = await apiFetch(`/api/user/markets/${encodeURIComponent(marketId)}/orderbook`);
+  } catch {
+    state.orderBooks[marketId] = { error: true };
+  }
+  render();
+}
+
+// orderBookSummary renders per-option bid/ask rows for an order-book market.
+function orderBookSummary(market, book) {
+  if (!book || book.error) return `<p>${t("market.noQuotes")}</p>`;
+  const rows = market.outcomes.map((outcome) => {
+    const bid = bidQuote(book, outcome.label);
+    const ask = askQuote(book, outcome.label);
+    return `<li>${escapeHTML(outcome.label)} · ${t("orderbook.bid")} ${bid == null ? "—" : `${bid}¢`} · ${t("orderbook.ask")} ${ask == null ? "—" : `${ask}¢`}</li>`;
+  }).join("");
+  return rows ? `<ul>${rows}</ul>` : `<p>${t("market.noQuotes")}</p>`;
+}
+
 async function ensureMarketPools(marketId) {
   if (state.marketPools[marketId] !== undefined) return;
   const market = markets.find((item) => item.id === marketId);
@@ -756,10 +819,12 @@ async function placeOrder() {
   state.submitting = true;
   render();
   try {
-    const book = await apiFetch(`/api/user/markets/${encodeURIComponent(market.id)}/orderbook`);
     const option = market.outcomes[selected.index];
-    const entries = [...(book?.asks ?? []), ...(book?.bids ?? [])].filter((entry) => entry.option === option.label && Number(entry.price) > 0);
-    const price = entries[0]?.price;
+    // Refresh the book so the executable price is current, then cache it for
+    // the page display.
+    const book = await apiFetch(`/api/user/markets/${encodeURIComponent(market.id)}/orderbook`);
+    state.orderBooks[market.id] = book;
+    const price = askQuote(book, option.label);
     if (price === undefined) throw new Error(t("order.noQuote"));
     const result = await apiFetch("/api/user/orders", {
       method: "POST",
