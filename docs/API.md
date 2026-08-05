@@ -918,14 +918,212 @@ Supported currencies:
 - GBP (British Pound)
 - MXN (Mexican Peso)
 
-## Settlement webhooks
+## Settlement webhooks（结算 Webhook 事件推送）
 
-Configured merchants receive at-least-once `order.settled`,
-`market.settled`, `order.voided`, and `market.voided` notifications through the
-webhook outbox (filtered by the merchant's `webhook_events` mask). Delivery is
-signed with the callback secret and can be retried from the administrator
-dead-letter replay endpoint. The pull APIs
-above remain the source of truth for reconciliation.
+配置了 `webhook_url`（或 `callback_url`）的商户会收到 at-least-once 的
+`order.settled`、`market.settled`、`order.voided`、`market.voided` 通知，
+事件经 webhook outbox 投递，受 `webhook_events` 掩码过滤（空数组 = 全部）。
+投递使用 callback secret 签名，失败可经管理员死信重放接口重试。
+
+### 配置
+
+```http
+PUT /api/v1/merchants/{merchant_id}/integration
+```
+
+- `webhook_url`：接收事件的 HTTPS 地址；未配置时回退到 `callback_url`。
+- `webhook_events`：订阅的事件列表，可选 `order.settled` / `order.voided` /
+  `market.settled` / `market.voided`；留空表示订阅全部。
+- 签名密钥：与无缝钱包回调共用 `callback_secret`（平台不单独下发 webhook
+  secret；密钥由管理员配置集成时生成/更新，仅展示一次）。
+
+### 投递协议
+
+平台以 `POST` 发送 JSON 载荷，请求头：
+
+| Header | 说明 |
+|--------|------|
+| `Content-Type` | `application/json` |
+| `X-PM-Timestamp` | 签名时间戳（Unix 秒） |
+| `X-PM-Signature` | HMAC-SHA256 签名，hex 小写 |
+| `X-PM-Merchant-Id` | 商户 ID |
+
+验签方式与商户侧签名一致：`hex(HMAC_SHA256(callback_secret, timestamp + "." + raw_body))`，
+其中 `raw_body` 为收到的原始请求体字节（不可重新序列化后再验）。
+
+**投递语义：**
+
+- **at-least-once**：同一事件可能重试投递，重试时 `webhook_id` 不变，商户必须以
+  `webhook_id` 幂等去重。
+- **应答**：任何 `2xx` 视为成功。`4xx`（`429` 除外）视为永久失败，直接进入死信队列
+  （不再重试）；`5xx` / `429` / 超时按指数退避重试（1s 起、每次翻倍、上限 5 分钟），
+  最多 5 次后进入死信队列。死信可由管理员通过
+  `POST /api/v1/admin/callback-dead-letters/webhook/{outbox_id}/replay` 重放。
+- **事件粒度**：`order.*` 按订单逐条发送；`market.*` 对持有该市场订单的每个商户各发一条。
+- **奖池（parimutuel）市场**：注单不是订单，只发送 `market.settled` / `market.voided`，
+  不发送 `order.*` 事件。
+
+### 事件载荷
+
+所有事件共用外层结构：
+
+```json
+{
+  "webhook_id": "a1b2c3d4-…（UUID，重试不变，用于幂等）",
+  "type": "order.settled",
+  "data": { …事件明细… }
+}
+```
+
+#### order.settled —— 订单结算（订单簿市场，每笔订单一条）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `market_id` | string (UUID) | 市场 ID |
+| `event_id` | string (UUID) | 所属事件 ID |
+| `winning_option` | string | 胜出选项 |
+| `order_id` | string (UUID) | 订单 ID |
+| `user_id` | string | 商户侧用户标识 |
+| `stake` | string（十进制） | 已成交部分的本金（抵押） |
+| `payout` | string（十进制） | 中奖订单派彩；未中奖为 `"0.00"` |
+| `currency` | string | 币种（USD/EUR/CNY/JPY/GBP/MXN） |
+| `settled_at` | string (RFC3339 UTC) | 结算时间 |
+
+```json
+{
+  "webhook_id": "f1e2d3c4-b5a6-…",
+  "type": "order.settled",
+  "data": {
+    "market_id": "11111111-…",
+    "event_id": "22222222-…",
+    "winning_option": "Yes",
+    "order_id": "33333333-…",
+    "user_id": "user-10086",
+    "stake": "12.50",
+    "payout": "10.00",
+    "currency": "USD",
+    "settled_at": "2026-08-05T08:00:00Z"
+  }
+}
+```
+
+字段语义：`stake` 为已成交份额对应的抵押金额（买入 = 份额×价格，卖出 =
+份额×(1−价格)）；`payout` 为按已成交份额面额（1 份 = 1 元）计算的派彩，
+未中奖订单为 `0.00`。订单未成交部分的抵押由平台在结算时退还（transfer
+模式直接退回用户钱包；seamless 模式随 `refund_cancel` credit 回调下发），
+不体现在本事件中。
+
+#### market.settled —— 市场结算完成
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `market_id` | string (UUID) | 市场 ID |
+| `event_id` | string (UUID) | 所属事件 ID |
+| `winning_option` | string | 胜出选项 |
+| `settled_at` | string (RFC3339 UTC) | 结算时间 |
+
+```json
+{
+  "webhook_id": "a1b2c3d4-…",
+  "type": "market.settled",
+  "data": {
+    "market_id": "11111111-…",
+    "event_id": "22222222-…",
+    "winning_option": "Yes",
+    "settled_at": "2026-08-05T08:00:00Z"
+  }
+}
+```
+
+#### order.voided —— 订单作废退款（订单簿市场，每笔订单一条）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `market_id` | string (UUID) | 市场 ID |
+| `event_id` | string (UUID) | 所属事件 ID |
+| `winning_option` | null | 作废市场无胜出选项 |
+| `order_id` | string (UUID) | 订单 ID |
+| `user_id` | string | 商户侧用户标识 |
+| `stake` | string（十进制） | 全额本金（= `refund`） |
+| `payout` | string（十进制） | 恒为 `"0.00"` |
+| `refund` | string（十进制） | 全额退款金额 |
+| `currency` | string | 币种 |
+| `settled_at` | string (RFC3339 UTC) | 作废时间 |
+
+```json
+{
+  "webhook_id": "c3d4e5f6-…",
+  "type": "order.voided",
+  "data": {
+    "market_id": "11111111-…",
+    "event_id": "22222222-…",
+    "winning_option": null,
+    "order_id": "33333333-…",
+    "user_id": "user-10086",
+    "stake": "12.50",
+    "payout": "0.00",
+    "refund": "12.50",
+    "currency": "USD",
+    "settled_at": "2026-08-05T09:30:00Z"
+  }
+}
+```
+
+#### market.voided —— 市场作废完成
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `market_id` | string (UUID) | 市场 ID |
+| `event_id` | string (UUID) | 所属事件 ID |
+| `winning_option` | null | 作废市场无胜出选项 |
+| `settled_at` | string (RFC3339 UTC) | 作废时间 |
+
+```json
+{
+  "webhook_id": "d4e5f6a7-…",
+  "type": "market.voided",
+  "data": {
+    "market_id": "11111111-…",
+    "event_id": "22222222-…",
+    "winning_option": null,
+    "settled_at": "2026-08-05T09:30:00Z"
+  }
+}
+```
+
+### 收到事件后的处理建议
+
+1. **验签**：用 `callback_secret` 按 `HMAC-SHA256(timestamp + "." + raw_body)`
+   重算并比对 `X-PM-Signature`，同时校验 `X-PM-Timestamp` 新鲜度（建议 ±5 分钟）
+   防重放。验签失败直接丢弃并告警，不要处理。
+2. **幂等去重**：以 `webhook_id` 为唯一键记录已处理事件；重复投递（重试或
+   at-least-once 语义下的重发）直接返回 `2xx`。
+3. **快速应答**：先返回 `2xx` 再异步处理业务；不要在处理器内做慢操作，避免
+   平台超时重试造成重复处理。
+4. **更新用户资金视图**：
+   - transfer（平台记账）模式：平台已把派彩/退款记入用户钱包，商户仅需同步
+     业务状态（订单/市场状态、用户可提现余额展示）；
+   - seamless 模式：**资金变更以同步 credit 回调为准**（`reason = payout` /
+     `refund_cancel` / `void` 及回调内 `amount`），webhook 只用于业务状态通知，
+     不能作为入账依据。
+5. **`order.settled`**：按中奖判定更新订单为已结算——`buy` 且
+   `option == winning_option`，或 `sell` 且 `option != winning_option`；
+   `stake` 是本金、`payout` 是派彩，未成交部分随结算退还（seamless 场景见
+   `refund_cancel` 回调）。
+6. **`order.voided`**：按 `refund` 全额退款，将订单标记为作废，解锁/退回用户
+   资金。
+7. **`market.settled` / `market.voided`**：推进商户侧市场状态机（关闭交易入口、
+   展示结算结果），按 `winning_option` 更新市场结果。
+8. **对账**：webhook 用于实时通知，**对账以拉取 API 为准**：
+   `GET /api/v2/settlements`（含 `settlement_type: settle|void`）、
+   `GET /api/v2/settlements/{market_id}/payouts`（逐笔 stake/payout）、
+   `GET /api/v2/transactions`（资金流水）。建议每日拉取全量对账，差异按
+   `transaction_id` / `webhook_id` 逐笔核对。
+9. **错误返回策略**：处理失败时返回 `5xx` 或 `429`（平台会退避重试，最多 5
+   次）；**不要返回 `4xx`**——`4xx`（除 429）被平台视为永久失败直接进死信
+   队列，需要联系平台管理员重放。
+10. **奖池市场**：只收到 `market.*` 事件；注单（`parimutuel_bets`）不产生
+    `order.*` 事件，逐笔结算金额以拉取 API 与用户钱包流水为准。
 
 Use the [V3 acceptance checklist](V3_ACCEPTANCE_CHECKLIST.md) and
 `go run ./cmd/merchant-sim` to exercise the callback contract before requesting
