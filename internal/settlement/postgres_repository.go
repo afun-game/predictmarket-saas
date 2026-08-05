@@ -212,7 +212,8 @@ WHERE id = $1 AND locked_balance >= $2::numeric`
 	for _, order := range orders {
 		if order.walletKind == "shadow" {
 			if err := enqueueSettlementShadowCredit(
-				ctx, databaseTx, order, marketID, eventID, order.refund, "void", voidedAt,
+				ctx, databaseTx, order.merchantID, order.userID, order.currency, order.id, order.walletID,
+				marketID, eventID, order.refund, "void", voidedAt,
 			); err != nil {
 				return err
 			}
@@ -757,14 +758,16 @@ WHERE id = $1 AND locked_balance >= $4::numeric`
 	if order.walletKind == "shadow" {
 		if order.refund.Sign() > 0 {
 			if err := enqueueSettlementShadowCredit(
-				ctx, databaseTx, order, marketID, eventID, order.refund, "refund_cancel", settledAt,
+				ctx, databaseTx, order.merchantID, order.userID, order.currency, order.id, order.walletID,
+				marketID, eventID, order.refund, "refund_cancel", settledAt,
 			); err != nil {
 				return err
 			}
 		}
 		if order.payout.Sign() > 0 {
 			if err := enqueueSettlementShadowCredit(
-				ctx, databaseTx, order, marketID, eventID, order.payout, "payout", settledAt,
+				ctx, databaseTx, order.merchantID, order.userID, order.currency, order.id, order.walletID,
+				marketID, eventID, order.payout, "payout", settledAt,
 			); err != nil {
 				return err
 			}
@@ -815,10 +818,18 @@ INSERT INTO settlement_payouts (
 	return nil
 }
 
+// enqueueSettlementShadowCredit pays a seamless settlement out of the
+// merchant-mirrored shadow wallet: it debits the shadow wallet and enqueues a
+// signed credit callback for the merchant. orderID may be empty for
+// parimutuel bets, which have no order row (both columns are nullable).
 func enqueueSettlementShadowCredit(
 	ctx context.Context,
 	databaseTx *sql.Tx,
-	order *settlementOrder,
+	merchantID string,
+	userID string,
+	currency string,
+	orderID string,
+	walletID string,
 	marketID string,
 	eventID string,
 	amount *big.Int,
@@ -832,16 +843,16 @@ WHERE id = $1 AND balance >= $2::numeric`
 	result, err := databaseTx.ExecContext(
 		ctx,
 		debitQuery,
-		order.walletID,
+		walletID,
 		formatCents(amount),
 		settledAt,
 	)
 	if err != nil {
-		return fmt.Errorf("reserve settlement shadow credit for order %s: %w", order.id, err)
+		return fmt.Errorf("reserve settlement shadow credit: %w", err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil || rowsAffected != 1 {
-		return fmt.Errorf("settlement shadow credit for order %s exceeds available balance", order.id)
+		return fmt.Errorf("settlement shadow credit exceeds available balance")
 	}
 	const outboxQuery = `
 WITH transaction AS (
@@ -850,7 +861,7 @@ WITH transaction AS (
         order_id, status, created_at, updated_at
     ) VALUES (
         gen_random_uuid(), $1, $2, $3, 'credit', $4, $5::numeric,
-        $6, 'pending_delivery', $7, $7
+        NULLIF($6, '')::uuid, 'pending_delivery', $7, $7
     )
     RETURNING transaction_id
 )
@@ -859,22 +870,22 @@ INSERT INTO callback_outbox (
     order_id, market_id, event_id, status, next_attempt_at, created_at, updated_at
 )
 SELECT $1, transaction_id, $2, $3, 'credit', $4, $5::numeric,
-       $6, $8, $9, 'pending', $7, $7, $7
+       NULLIF($6, '')::uuid, $8, $9, 'pending', $7, $7, $7
 FROM transaction`
 	if _, err := databaseTx.ExecContext(
 		ctx,
 		outboxQuery,
-		order.merchantID,
-		order.userID,
-		order.currency,
+		merchantID,
+		userID,
+		currency,
 		reason,
 		formatCents(amount),
-		order.id,
+		orderID,
 		settledAt,
 		marketID,
 		eventID,
 	); err != nil {
-		return fmt.Errorf("enqueue settlement shadow credit for order %s: %w", order.id, err)
+		return fmt.Errorf("enqueue settlement shadow credit: %w", err)
 	}
 	return nil
 }

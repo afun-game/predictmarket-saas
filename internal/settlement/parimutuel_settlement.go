@@ -30,6 +30,7 @@ type parimutuelBetRow struct {
 	userID     string
 	option     string
 	stakeCents *big.Int
+	walletKind string
 }
 
 // settleParimutuelMarket splits the whole pool among winning bets in
@@ -73,7 +74,7 @@ func settleParimutuelMarket(
 			)
 		}
 		if err := applyParimutuelBetSettlement(
-			ctx, databaseTx, marketID, eventID, merchantID, bet, payout, currency, settledAt,
+			ctx, databaseTx, marketID, eventID, merchantID, bet, payout, currency, settlementType, settledAt,
 		); err != nil {
 			return err
 		}
@@ -107,7 +108,7 @@ WHERE market_id = $1 FOR UPDATE`
 	}
 
 	const betQuery = `
-SELECT id, user_id, option, stake::text
+SELECT id, user_id, option, stake::text, wallet_kind
 FROM parimutuel_bets
 WHERE market_id = $1 AND status = 'active'
 ORDER BY id
@@ -122,7 +123,7 @@ FOR UPDATE`
 	for rows.Next() {
 		bet := &parimutuelBetRow{}
 		var stakeText string
-		if err := rows.Scan(&bet.id, &bet.userID, &bet.option, &stakeText); err != nil {
+		if err := rows.Scan(&bet.id, &bet.userID, &bet.option, &stakeText, &bet.walletKind); err != nil {
 			return nil, "", nil, fmt.Errorf("scan parimutuel bet: %w", err)
 		}
 		bet.stakeCents, err = parseFixed(stakeText, 2)
@@ -146,6 +147,8 @@ FOR UPDATE`
 
 // applyParimutuelBetSettlement credits a bet's wallet (when it won) and marks
 // the bet settled. The pool already holds the stake; only the payout moves.
+// Shadow (seamless) bets are paid through credit callbacks instead of the
+// platform wallet.
 func applyParimutuelBetSettlement(
 	ctx context.Context,
 	databaseTx *sql.Tx,
@@ -155,9 +158,33 @@ func applyParimutuelBetSettlement(
 	bet *parimutuelBetRow,
 	payout *big.Int,
 	currency string,
+	settlementType string,
 	settledAt time.Time,
 ) error {
-	if payout.Sign() > 0 {
+	if payout.Sign() > 0 && bet.walletKind == "shadow" {
+		var walletID string
+		const walletQuery = `
+SELECT id FROM wallets
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = 'shadow'
+FOR UPDATE`
+		err := databaseTx.QueryRowContext(ctx, walletQuery, merchantID, bet.userID, currency).Scan(&walletID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: parimutuel bet %s", ErrOrderWalletNotFound, bet.id)
+		}
+		if err != nil {
+			return fmt.Errorf("lock parimutuel shadow bet wallet: %w", err)
+		}
+		reason := "payout"
+		if settlementType == "refund" {
+			reason = "refund_cancel"
+		}
+		if err := enqueueSettlementShadowCredit(
+			ctx, databaseTx, merchantID, bet.userID, currency, "", walletID,
+			marketID, eventID, payout, reason, settledAt,
+		); err != nil {
+			return err
+		}
+	} else if payout.Sign() > 0 {
 		var walletID string
 		const walletQuery = `
 SELECT id FROM wallets
@@ -241,29 +268,52 @@ func voidParimutuelMarket(
 		return err
 	}
 	for _, bet := range bets {
-		var walletID string
-		const walletQuery = `
+		if bet.walletKind == "shadow" {
+			var walletID string
+			const shadowWalletQuery = `
+SELECT id FROM wallets
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = 'shadow'
+FOR UPDATE`
+			err := databaseTx.QueryRowContext(ctx, shadowWalletQuery, merchantID, bet.userID, currency).Scan(&walletID)
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: parimutuel bet %s", ErrOrderWalletNotFound, bet.id)
+			}
+			if err != nil {
+				return fmt.Errorf("lock parimutuel void shadow wallet: %w", err)
+			}
+			// Seamless stakes are refunded to the merchant wallet through a
+			// signed credit callback (reason void).
+			if err := enqueueSettlementShadowCredit(
+				ctx, databaseTx, merchantID, bet.userID, currency, "", walletID,
+				marketID, eventID, bet.stakeCents, "void", voidedAt,
+			); err != nil {
+				return err
+			}
+		} else {
+			var walletID string
+			const walletQuery = `
 SELECT id FROM wallets
 WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = 'user'
 FOR UPDATE`
-		err := databaseTx.QueryRowContext(ctx, walletQuery, merchantID, bet.userID, currency).Scan(&walletID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: parimutuel bet %s", ErrOrderWalletNotFound, bet.id)
-		}
-		if err != nil {
-			return fmt.Errorf("lock parimutuel void wallet: %w", err)
-		}
-		if _, err := databaseTx.ExecContext(
-			ctx,
-			"UPDATE wallets SET balance = balance + $2::numeric, updated_at = $3 WHERE id = $1",
-			walletID, formatCents(bet.stakeCents), voidedAt,
-		); err != nil {
-			return fmt.Errorf("refund parimutuel void wallet: %w", err)
-		}
-		if err := insertSettlementTransaction(
-			ctx, databaseTx, walletID, "bet_refund", bet.stakeCents, currency, "", voidedAt,
-		); err != nil {
-			return err
+			err := databaseTx.QueryRowContext(ctx, walletQuery, merchantID, bet.userID, currency).Scan(&walletID)
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: parimutuel bet %s", ErrOrderWalletNotFound, bet.id)
+			}
+			if err != nil {
+				return fmt.Errorf("lock parimutuel void wallet: %w", err)
+			}
+			if _, err := databaseTx.ExecContext(
+				ctx,
+				"UPDATE wallets SET balance = balance + $2::numeric, updated_at = $3 WHERE id = $1",
+				walletID, formatCents(bet.stakeCents), voidedAt,
+			); err != nil {
+				return fmt.Errorf("refund parimutuel void wallet: %w", err)
+			}
+			if err := insertSettlementTransaction(
+				ctx, databaseTx, walletID, "bet_refund", bet.stakeCents, currency, "", voidedAt,
+			); err != nil {
+				return err
+			}
 		}
 		const updateBet = `
 UPDATE parimutuel_bets SET status = 'voided', settled_at = $2 WHERE id = $1`

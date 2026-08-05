@@ -159,3 +159,48 @@ func TestOptionStakesAggregatesActiveBets(t *testing.T) {
 		t.Errorf("binary market stakes = %v, want empty", empty)
 	}
 }
+
+func TestPlaceBetPersistsWalletKind(t *testing.T) {
+	service, repo := newFixture(t)
+	// Defaults to the platform wallet when unset.
+	placed, err := service.PlaceBet(context.Background(), Bet{
+		MarketID: "m-1", MerchantID: "merchant-1", UserID: "user-1",
+		Option: "Yes", Stake: 10, Currency: "USD",
+	})
+	if err != nil {
+		t.Fatalf("place default bet: %v", err)
+	}
+	if placed.WalletKind != WalletKindPlatform {
+		t.Errorf("default wallet kind = %q, want %q", placed.WalletKind, WalletKindPlatform)
+	}
+	// Seamless path records the shadow kind.
+	shadow, err := service.PlaceBet(context.Background(), Bet{
+		MarketID: "m-1", MerchantID: "merchant-1", UserID: "user-2",
+		Option: "No", Stake: 20, Currency: "USD", WalletKind: WalletKindShadow,
+	})
+	if err != nil {
+		t.Fatalf("place shadow bet: %v", err)
+	}
+	if shadow.WalletKind != WalletKindShadow {
+		t.Errorf("shadow wallet kind = %q, want %q", shadow.WalletKind, WalletKindShadow)
+	}
+	// Unsupported kinds are rejected.
+	if _, err := service.PlaceBet(context.Background(), Bet{
+		MarketID: "m-1", MerchantID: "merchant-1", UserID: "user-3",
+		Option: "Yes", Stake: 1, Currency: "USD", WalletKind: "other",
+	}); !errors.Is(err, ErrInvalidBet) {
+		t.Errorf("invalid wallet kind error = %v, want ErrInvalidBet", err)
+	}
+	// The repository keeps both rows with their kinds.
+	items, _, err := repo.ListBets(context.Background(), ListFilters{MerchantID: "merchant-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]bool{}
+	for _, bet := range items {
+		kinds[bet.WalletKind] = true
+	}
+	if !kinds[WalletKindPlatform] || !kinds[WalletKindShadow] {
+		t.Errorf("stored wallet kinds = %v, want platform and shadow", kinds)
+	}
+}

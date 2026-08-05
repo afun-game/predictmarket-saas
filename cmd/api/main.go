@@ -306,7 +306,8 @@ func configuredV3(resources resourceEndpoints) (httpapi.V3Config, func(), bool, 
 		_ = database.Close()
 		return httpapi.V3Config{}, func() {}, false, err
 	}
-	seamless, err := callback.NewSeamlessCoordinator(database, protector, callbackService, allowPrivateCallbackURLs)
+	parimutuelService := parimutuel.NewServiceWithRepository(parimutuel.NewPostgresRepository(database))
+	seamless, err := callback.NewSeamlessCoordinator(database, protector, callbackService, allowPrivateCallbackURLs, parimutuelService)
 	if err != nil {
 		_ = redisStore.Close()
 		_ = database.Close()
@@ -340,7 +341,7 @@ func configuredV3(resources resourceEndpoints) (httpapi.V3Config, func(), bool, 
 		Queries:              v2query.New(database),
 		Callbacks:            callbackService,
 		Seamless:             seamless,
-		Parimutuel:           parimutuel.NewServiceWithRepository(parimutuel.NewPostgresRepository(database)),
+		Parimutuel:           parimutuelService,
 		HostedLaunchURL:      hostedLaunchURL,
 		Audit:                audit.NewPostgresStore(database),
 		MerchantOrderLimiter: orderLimiter,

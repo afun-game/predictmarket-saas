@@ -127,12 +127,12 @@ SELECT currency FROM parimutuel_pools WHERE market_id = $1 FOR UPDATE`
 	}
 
 	const insertBet = `
-INSERT INTO parimutuel_bets (market_id, merchant_id, user_id, option, stake, currency, status)
-VALUES ($1, $2, $3, $4, $5, $6, 'active')
+INSERT INTO parimutuel_bets (market_id, merchant_id, user_id, option, stake, currency, wallet_kind, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
 RETURNING id, created_at`
 	if err := databaseTx.QueryRowContext(
 		ctx, insertBet,
-		bet.MarketID, bet.MerchantID, bet.UserID, bet.Option, bet.Stake, bet.Currency,
+		bet.MarketID, bet.MerchantID, bet.UserID, bet.Option, bet.Stake, bet.Currency, bet.WalletKind,
 	).Scan(&bet.ID, &bet.CreatedAt); err != nil {
 		return nil, fmt.Errorf("insert parimutuel bet: %w", err)
 	}

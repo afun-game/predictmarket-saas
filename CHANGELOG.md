@@ -52,6 +52,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   订单簿市场对二者分别拒绝 400。
 - `internal/parimutuel` 新增 `OptionStakes` 聚合（内存/Postgres 双实现），
   为前端提供分选项隐含概率数据。
+- 修复 seamless 商户奖池下注报 `could not debit wallet`：seamless 商户
+  余额在商户侧，平台钱包无余额。现 `/api/user/bets` 对 seamless 商户走
+  签名回调扣款（与订单簿下单同路径）：同步 debit 回调 → 影子钱包入账
+  （`parimutuel_bets.wallet_kind='shadow'`，迁移 018）→ 入池；结算/作废
+  时通过 `credit` 回调（`payout`/`refund_cancel`/`void`）回款，订单式
+  seamless 结算回调逻辑泛化支持无订单 ID 的注单。
+- 新增 chaos 集成用例：seamless 奖池下注扣款/入池/余额不足拒绝。
 
 ### Added (V3 hardening)
 - Per-merchant seamless circuit breaker: five consecutive callback/webhook

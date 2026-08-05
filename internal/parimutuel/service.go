@@ -42,6 +42,12 @@ func (s *implementation) PlaceBet(ctx context.Context, bet Bet) (*Bet, error) {
 	if bet.MarketID == "" || bet.MerchantID == "" || bet.UserID == "" || len(bet.UserID) > 255 {
 		return nil, ErrInvalidBet
 	}
+	if bet.WalletKind == "" {
+		bet.WalletKind = WalletKindPlatform
+	}
+	if bet.WalletKind != WalletKindPlatform && bet.WalletKind != WalletKindShadow {
+		return nil, ErrInvalidBet
+	}
 	placed, err := s.repository.PlaceBet(ctx, bet)
 	if err != nil {
 		return nil, err

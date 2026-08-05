@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/afun-game/predictmarket-saas/internal/order"
+	"github.com/afun-game/predictmarket-saas/internal/parimutuel"
 	"github.com/afun-game/predictmarket-saas/pkg/fixed"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 )
@@ -63,6 +64,7 @@ type SeamlessCoordinator struct {
 	client    *Client
 	protector secretDecryptor
 	worker    rollbackEnqueuer
+	bets      parimutuel.Service
 	now       func() time.Time
 	random    io.Reader
 }
@@ -84,12 +86,26 @@ type rollbackEnqueuer interface {
 	) error
 }
 
-// NewSeamlessCoordinator wires the synchronous debit + place path.
+// seamlessDebit is the synchronous merchant debit context shared by the
+// order and parimutuel paths. Parimutuel bets have no order row, so orderID
+// stays empty and the transaction_id is the authoritative idempotency key.
+type seamlessDebit struct {
+	MerchantID  string
+	UserID      string
+	Currency    string
+	AmountCents int64
+	OrderID     string
+	MarketID    string
+}
+
+// NewSeamlessCoordinator wires the synchronous debit + place path. The
+// parimutuel service powers seamless pool betting (PlaceBetWithBalance).
 func NewSeamlessCoordinator(
 	database *sql.DB,
 	protector secretDecryptor,
 	worker rollbackEnqueuer,
 	allowPrivateURLs bool,
+	bets parimutuel.Service,
 ) (*SeamlessCoordinator, error) {
 	if database == nil {
 		return nil, errors.New("seamless coordinator database is not configured")
@@ -107,6 +123,7 @@ func NewSeamlessCoordinator(
 		client:    newClient(defaultTimeout, allowPrivateURLs),
 		protector: protector,
 		worker:    worker,
+		bets:      bets,
 		now:       time.Now,
 		random:    rand.Reader,
 	}, nil
@@ -138,70 +155,212 @@ func (c *SeamlessCoordinator) PlaceWithBalance(
 		balance, _ := newRepository(c.database).GetLatestBalance(ctx, request.MerchantID, request.UserID, request.Currency)
 		return prepared.Order, balance, nil
 	}
-	endpoint, err := newRepository(c.database).MerchantEndpoint(ctx, request.MerchantID)
+	debit := seamlessDebit{
+		MerchantID:  prepared.Order.MerchantID,
+		UserID:      prepared.Order.UserID,
+		Currency:    prepared.Order.Currency,
+		AmountCents: prepared.CollateralCents,
+		OrderID:     prepared.Order.ID,
+		MarketID:    prepared.Order.MarketID,
+	}
+	transactionID, balance, err := c.debit(ctx, debit)
 	if err != nil {
 		return nil, "", err
 	}
+	if err := c.placer.Place(ctx, prepared); err != nil {
+		_ = c.enqueueRollback(ctx, debit, transactionID)
+		return nil, "", err
+	}
+	_ = c.attachDebitOrder(ctx, transactionID, prepared.Order.ID, c.now().UTC())
+	return prepared.Order, balance, nil
+}
+
+// PlaceBetWithBalance places a parimutuel stake through the seamless wallet:
+// the merchant wallet is debited synchronously, the stake mirrors into the
+// shadow wallet, and the bet joins the pool. On a rejected or unknown debit
+// the merchant is refunded through the rollback outbox, exactly like orders.
+// The merchant's post-debit balance is returned for the hosted UI meta.
+func (c *SeamlessCoordinator) PlaceBetWithBalance(
+	ctx context.Context,
+	bet parimutuel.Bet,
+) (*parimutuel.Bet, string, error) {
+	bet.MarketID = strings.TrimSpace(bet.MarketID)
+	bet.MerchantID = strings.TrimSpace(bet.MerchantID)
+	bet.UserID = strings.TrimSpace(bet.UserID)
+	bet.Currency = strings.ToUpper(strings.TrimSpace(bet.Currency))
+	if bet.MarketID == "" || bet.MerchantID == "" || bet.UserID == "" || bet.Currency == "" || bet.Stake < 0.01 {
+		return nil, "", errors.New("seamless bet request is invalid")
+	}
+	amountCents, err := fixed.CentsFromFloat(bet.Stake)
+	if err != nil {
+		return nil, "", errors.New("seamless bet amount is invalid")
+	}
+	debit := seamlessDebit{
+		MerchantID:  bet.MerchantID,
+		UserID:      bet.UserID,
+		Currency:    bet.Currency,
+		AmountCents: amountCents,
+		OrderID:     "",
+		MarketID:    bet.MarketID,
+	}
+	transactionID, balance, err := c.debit(ctx, debit)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := c.fundShadowBetWallet(ctx, bet, amountCents); err != nil {
+		_ = c.enqueueRollback(ctx, debit, transactionID)
+		return nil, "", err
+	}
+	bet.WalletKind = parimutuel.WalletKindShadow
+	placed, err := c.bets.PlaceBet(ctx, bet)
+	if err != nil {
+		// Compensate the mirror: pull the stake back out of the shadow wallet
+		// and refund the merchant through the rollback outbox.
+		_ = c.refundShadowBetWallet(ctx, bet, amountCents)
+		_ = c.enqueueRollback(ctx, debit, transactionID)
+		return nil, "", err
+	}
+	return placed, balance, nil
+}
+
+// fundShadowBetWallet mirrors a seamless debit into the user's shadow wallet
+// so settlement can pay out (or refund) from it through credit callbacks.
+func (c *SeamlessCoordinator) fundShadowBetWallet(
+	ctx context.Context,
+	bet parimutuel.Bet,
+	amountCents int64,
+) error {
+	databaseTx, err := c.database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin shadow bet funding: %w", err)
+	}
+	defer func() { _ = databaseTx.Rollback() }()
+	const ensureQuery = `
+INSERT INTO wallets (
+    id, merchant_id, user_id, currency, kind, balance, locked_balance, updated_at
+) VALUES (gen_random_uuid(), $1, $2, $3, 'shadow', 0, 0, $4)
+ON CONFLICT (merchant_id, user_id, currency, kind) DO NOTHING`
+	if _, err := databaseTx.ExecContext(ctx, ensureQuery, bet.MerchantID, bet.UserID, bet.Currency, c.now().UTC()); err != nil {
+		return fmt.Errorf("ensure shadow bet wallet: %w", err)
+	}
+	const creditQuery = `
+UPDATE wallets
+SET balance = balance + $4::numeric, updated_at = $5
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = 'shadow'`
+	result, err := databaseTx.ExecContext(
+		ctx,
+		creditQuery,
+		bet.MerchantID,
+		bet.UserID,
+		bet.Currency,
+		fixed.FormatCents(amountCents),
+		c.now().UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("credit shadow bet wallet: %w", err)
+	}
+	if rows, err := result.RowsAffected(); err != nil || rows != 1 {
+		return errors.New("shadow bet wallet is unavailable")
+	}
+	return databaseTx.Commit()
+}
+
+// refundShadowBetWallet pulls a mirrored stake back out of the shadow wallet
+// when the bet could not join the pool.
+func (c *SeamlessCoordinator) refundShadowBetWallet(
+	ctx context.Context,
+	bet parimutuel.Bet,
+	amountCents int64,
+) error {
+	const query = `
+UPDATE wallets
+SET balance = balance - $4::numeric, updated_at = $5
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = 'shadow' AND balance >= $4::numeric`
+	result, err := c.database.ExecContext(
+		ctx,
+		query,
+		bet.MerchantID,
+		bet.UserID,
+		bet.Currency,
+		fixed.FormatCents(amountCents),
+		c.now().UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("refund shadow bet wallet: %w", err)
+	}
+	if rows, err := result.RowsAffected(); err != nil || rows != 1 {
+		return errors.New("shadow bet wallet refund is unavailable")
+	}
+	return nil
+}
+
+// debit performs the synchronous seamless merchant debit: endpoint
+// verification, transaction insert, signed callback delivery, and status
+// bookkeeping. It returns the transaction id (the idempotency key for the
+// merchant) and the merchant's post-debit balance.
+func (c *SeamlessCoordinator) debit(
+	ctx context.Context,
+	debit seamlessDebit,
+) (string, string, error) {
+	endpoint, err := newRepository(c.database).MerchantEndpoint(ctx, debit.MerchantID)
+	if err != nil {
+		return "", "", err
+	}
 	if endpoint.WalletMode != "seamless" {
-		return nil, "", ErrSeamlessDisabled
+		return "", "", ErrSeamlessDisabled
 	}
 	if strings.TrimSpace(endpoint.CallbackURL) == "" || strings.TrimSpace(endpoint.CallbackSecretEnc) == "" {
-		return nil, "", ErrSeamlessDisabled
+		return "", "", ErrSeamlessDisabled
 	}
 	if endpoint.SeamlessDegraded {
-		return nil, "", ErrMerchantDegraded
+		return "", "", ErrMerchantDegraded
 	}
 	if endpoint.CallbackVerifiedAt == nil {
-		return nil, "", ErrCallbackUnverified
+		return "", "", ErrCallbackUnverified
 	}
 	secret, err := c.protector.Decrypt(endpoint.CallbackSecretEnc)
 	if err != nil {
-		return nil, "", fmt.Errorf("decrypt merchant callback secret: %w", err)
+		return "", "", fmt.Errorf("decrypt merchant callback secret: %w", err)
 	}
 	transactionID, err := generateUUID(c.random)
 	if err != nil {
-		return nil, "", fmt.Errorf("generate seamless transaction ID: %w", err)
+		return "", "", fmt.Errorf("generate seamless transaction ID: %w", err)
 	}
 	now := c.now().UTC()
-	if err := c.insertDebitTransaction(ctx, transactionID, prepared, now); err != nil {
-		return nil, "", err
+	if err := c.insertDebitTransaction(ctx, transactionID, debit, now); err != nil {
+		return "", "", err
 	}
 	callbackID, err := generateUUID(c.random)
 	if err != nil {
-		return nil, "", fmt.Errorf("generate callback ID: %w", err)
+		return "", "", fmt.Errorf("generate callback ID: %w", err)
 	}
-	response, deliverErr := c.client.DeliverCallback(ctx, endpoint.CallbackURL, request.MerchantID, secret, CallbackRequest{
+	response, deliverErr := c.client.DeliverCallback(ctx, endpoint.CallbackURL, debit.MerchantID, secret, CallbackRequest{
 		CallbackID:    callbackID,
 		Type:          "debit",
 		TransactionID: transactionID,
-		UserID:        prepared.Order.UserID,
-		Currency:      prepared.Order.Currency,
-		Amount:        fixed.FormatCents(prepared.CollateralCents),
+		UserID:        debit.UserID,
+		Currency:      debit.Currency,
+		Amount:        fixed.FormatCents(debit.AmountCents),
 		Reason:        "bet",
 		Ref: map[string]any{
-			"order_id":  prepared.Order.ID,
-			"market_id": prepared.Order.MarketID,
+			"order_id":  debit.OrderID,
+			"market_id": debit.MarketID,
 		},
 		CreatedAt: now,
 	})
 	if deliverErr != nil {
-		return nil, "", c.handleDebitFailure(ctx, prepared, transactionID, response, deliverErr)
+		return "", "", c.handleDebitFailure(ctx, debit, transactionID, response, deliverErr)
 	}
 	if err := c.markDebitAccepted(ctx, transactionID, response, now); err != nil {
-		_ = c.enqueueRollback(ctx, prepared, transactionID)
-		return nil, "", err
+		_ = c.enqueueRollback(ctx, debit, transactionID)
+		return "", "", err
 	}
-	if err := c.placer.Place(ctx, prepared); err != nil {
-		_ = c.enqueueRollback(ctx, prepared, transactionID)
-		return nil, "", err
-	}
-	_ = c.attachDebitOrder(ctx, transactionID, prepared.Order.ID, c.now().UTC())
-	return prepared.Order, response.Balance, nil
+	return transactionID, response.Balance, nil
 }
 
 func (c *SeamlessCoordinator) handleDebitFailure(
 	ctx context.Context,
-	prepared *order.PreparedSeamlessOrder,
+	debit seamlessDebit,
 	transactionID string,
 	response *CallbackResponse,
 	deliverErr error,
@@ -232,13 +391,13 @@ func (c *SeamlessCoordinator) handleDebitFailure(
 		}
 		return deliverErr
 	}
-	_ = c.enqueueRollback(ctx, prepared, transactionID)
+	_ = c.enqueueRollback(ctx, debit, transactionID)
 	return fmt.Errorf("%w: %v", ErrDebitUnknown, deliverErr)
 }
 
 func (c *SeamlessCoordinator) enqueueRollback(
 	ctx context.Context,
-	prepared *order.PreparedSeamlessOrder,
+	debit seamlessDebit,
 	transactionID string,
 ) error {
 	if c.worker == nil {
@@ -249,20 +408,20 @@ func (c *SeamlessCoordinator) enqueueRollback(
 	// The transaction_id is the authoritative idempotency key for the merchant.
 	return c.worker.EnqueueRollback(
 		ctx,
-		prepared.Order.MerchantID,
-		prepared.Order.UserID,
-		prepared.Order.Currency,
-		prepared.CollateralCents,
+		debit.MerchantID,
+		debit.UserID,
+		debit.Currency,
+		debit.AmountCents,
 		transactionID,
 		"",
-		prepared.Order.MarketID,
+		debit.MarketID,
 	)
 }
 
 func (c *SeamlessCoordinator) insertDebitTransaction(
 	ctx context.Context,
 	transactionID string,
-	prepared *order.PreparedSeamlessOrder,
+	debit seamlessDebit,
 	now time.Time,
 ) error {
 	const query = `
@@ -277,10 +436,10 @@ INSERT INTO seamless_transactions (
 		ctx,
 		query,
 		transactionID,
-		prepared.Order.MerchantID,
-		prepared.Order.UserID,
-		prepared.Order.Currency,
-		fixed.FormatCents(prepared.CollateralCents),
+		debit.MerchantID,
+		debit.UserID,
+		debit.Currency,
+		fixed.FormatCents(debit.AmountCents),
 		now,
 	); err != nil {
 		return fmt.Errorf("insert seamless debit transaction: %w", err)

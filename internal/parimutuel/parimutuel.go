@@ -18,6 +18,11 @@ const (
 	StatusSettled = "settled"
 	// StatusVoided bets were refunded because the market was voided.
 	StatusVoided = "voided"
+
+	// WalletKindPlatform bets are funded from the platform user wallet.
+	WalletKindPlatform = "platform"
+	// WalletKindShadow bets are debited from the seamless merchant wallet.
+	WalletKindShadow = "shadow"
 )
 
 var (
@@ -42,6 +47,10 @@ type Bet struct {
 	Status     string     `json:"status"`
 	CreatedAt  time.Time  `json:"created_at"`
 	SettledAt  *time.Time `json:"settled_at,omitempty"`
+	// WalletKind records the funding path: "platform" bets debit the
+	// platform user wallet, "shadow" bets are debited from the seamless
+	// merchant wallet through callbacks. Internal only.
+	WalletKind string `json:"-"`
 }
 
 // Pool is one market's stake totals per option.

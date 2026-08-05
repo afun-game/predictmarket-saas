@@ -793,11 +793,15 @@ POST /api/user/bets
 `currency`) plus per-option active stakes (`options: [{option, stake}]`),
 which the hosted UI renders as implied odds. `POST /api/user/bets` takes
 `{market_id, option, amount}` and requires `Idempotency-Key`; the stake is
-debited from the wallet (type `bet`) and joins the pool, and a rejected bet
-is refunded (type `bet_refund`). Both endpoints refuse order-book markets
-with `400` and are scoped to the session's merchant. Parimutuel stakes use
-the platform wallet (`transfer` mode); seamless merchants are not yet
-supported for pool betting.
+debited from the wallet and joins the pool, and a rejected bet is refunded.
+Both endpoints refuse order-book markets with `400` and are scoped to the
+session's merchant. Both wallet modes are supported: `transfer` bets debit
+the platform user wallet (transaction type `bet`, refund `bet_refund`);
+`seamless` bets debit the merchant wallet through the signed callback path
+(exactly like order placement), mirror the stake into the shadow wallet, and
+pay out/refund through `credit` callbacks (`payout` / `refund_cancel` /
+`void`). Parimutuel bets carry an internal `wallet_kind` column so
+settlement routes each payout to the right wallet.
 
 ## Merchant integration hardening
 

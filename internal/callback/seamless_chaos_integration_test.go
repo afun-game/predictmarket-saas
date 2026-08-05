@@ -14,6 +14,7 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/credentials"
 	"github.com/afun-game/predictmarket-saas/internal/merchantsim"
 	"github.com/afun-game/predictmarket-saas/internal/order"
+	"github.com/afun-game/predictmarket-saas/internal/parimutuel"
 	"github.com/afun-game/predictmarket-saas/internal/settlement"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 
@@ -33,6 +34,7 @@ type chaosFixture struct {
 	service     callback.Service
 	coordinator *callback.SeamlessCoordinator
 	settler     settlement.Service
+	bets        parimutuel.Service
 	protector   *credentials.Protector
 	merchantID  string
 	eventID     string
@@ -96,10 +98,12 @@ func newChaosFixture(t *testing.T, simOptions merchantsim.Options) *chaosFixture
 	if err != nil {
 		t.Fatalf("callback.NewWithDB() error = %v", err)
 	}
-	fixture.coordinator, err = callback.NewSeamlessCoordinator(database, protector, fixture.service, true)
+	fakeBets := parimutuel.NewServiceWithRepository(parimutuel.NewPostgresRepository(database))
+	fixture.coordinator, err = callback.NewSeamlessCoordinator(database, protector, fixture.service, true, fakeBets)
 	if err != nil {
 		t.Fatalf("NewSeamlessCoordinator() error = %v", err)
 	}
+	fixture.bets = fakeBets
 	fixture.settler = settlement.NewPostgresService(database)
 	return fixture
 }
@@ -258,6 +262,121 @@ WHERE merchant_id = $1 AND kind = 'shadow'`, fixture.merchantID).Scan(&balance, 
 	}
 	if balance != "0.00" || locked != "5.00" {
 		t.Fatalf("shadow wallet = (balance %s, locked %s), want (0.00, 5.00)", balance, locked)
+	}
+}
+
+// TestSeamlessChaosPlaceBetDebitsMerchantAndJoinsPool pins the seamless
+// parimutuel path: the merchant wallet is debited synchronously, the stake
+// mirrors into the shadow wallet, and the bet joins the pool with wallet_kind
+// 'shadow' so settlement pays it out through credit callbacks.
+func TestSeamlessChaosPlaceBetDebitsMerchantAndJoinsPool(t *testing.T) {
+	fixture := newChaosFixture(t, merchantsim.Options{})
+	ctx := context.Background()
+	poolMarketID := integrationUUID(t)
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO markets (id, merchant_id, event_id, type, question, options, status)
+VALUES ($1, $2, $3, 'parimutuel', 'Chaos pool market', '["Yes","No"]', 'active')`,
+		poolMarketID, fixture.merchantID, fixture.eventID); err != nil {
+		t.Fatalf("insert parimutuel market: %v", err)
+	}
+	defer func() {
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM parimutuel_bets WHERE market_id = $1", poolMarketID)
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM parimutuel_pools WHERE market_id = $1", poolMarketID)
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM markets WHERE id = $1", poolMarketID)
+	}()
+	if _, err := fixture.database.ExecContext(ctx,
+		"INSERT INTO parimutuel_pools (market_id, currency) VALUES ($1, 'USD') ON CONFLICT (market_id) DO NOTHING",
+		poolMarketID); err != nil {
+		t.Fatalf("seed parimutuel pool: %v", err)
+	}
+	// The fixture event is resolved for settlement tests; parimutuel bets
+	// require an active or pending event.
+	if _, err := fixture.database.ExecContext(ctx,
+		"UPDATE events SET status = 'active' WHERE id = $1", fixture.eventID); err != nil {
+		t.Fatalf("activate fixture event: %v", err)
+	}
+
+	placed, balance, err := fixture.coordinator.PlaceBetWithBalance(ctx, parimutuel.Bet{
+		MarketID:   poolMarketID,
+		MerchantID: fixture.merchantID,
+		UserID:     "chaos-user",
+		Option:     "Yes",
+		Stake:      5,
+		Currency:   "USD",
+	})
+	if err != nil {
+		t.Fatalf("PlaceBetWithBalance() error = %v", err)
+	}
+	if placed.ID == "" || placed.WalletKind != parimutuel.WalletKindShadow {
+		t.Fatalf("placed bet = %+v, want shadow wallet kind", placed)
+	}
+	if balance != "95.00" {
+		t.Errorf("post-debit balance = %q, want 95.00", balance)
+	}
+	if simBalance := fixture.sim.BalanceFor("chaos-user"); simBalance != 9500 {
+		t.Fatalf("sim balance = %d, want 9500 after 5.00 debit", simBalance)
+	}
+	var storedKind string
+	if err := fixture.database.QueryRowContext(ctx,
+		"SELECT wallet_kind FROM parimutuel_bets WHERE id = $1", placed.ID).Scan(&storedKind); err != nil {
+		t.Fatalf("query stored bet: %v", err)
+	}
+	if storedKind != "shadow" {
+		t.Errorf("stored wallet_kind = %q, want shadow", storedKind)
+	}
+	var shadowBalance string
+	if err := fixture.database.QueryRowContext(ctx, `
+SELECT balance::text FROM wallets
+WHERE merchant_id = $1 AND user_id = 'chaos-user' AND kind = 'shadow'`, fixture.merchantID).Scan(&shadowBalance); err != nil {
+		t.Fatalf("query shadow wallet: %v", err)
+	}
+	if shadowBalance != "5.00" {
+		t.Errorf("shadow wallet balance = %s, want 5.00", shadowBalance)
+	}
+}
+
+// TestSeamlessChaosPlaceBetInsufficientFundsRejects pins the rejected-debit
+// path for pool bets: no bet row is created and no rollback is needed because
+// the merchant refused the debit.
+func TestSeamlessChaosPlaceBetInsufficientFundsRejects(t *testing.T) {
+	fixture := newChaosFixture(t, merchantsim.Options{InitialBalance: "2.00"})
+	ctx := context.Background()
+	poolMarketID := integrationUUID(t)
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO markets (id, merchant_id, event_id, type, question, options, status)
+VALUES ($1, $2, $3, 'parimutuel', 'Chaos pool market', '["Yes","No"]', 'active')`,
+		poolMarketID, fixture.merchantID, fixture.eventID); err != nil {
+		t.Fatalf("insert parimutuel market: %v", err)
+	}
+	defer func() {
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM parimutuel_bets WHERE market_id = $1", poolMarketID)
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM parimutuel_pools WHERE market_id = $1", poolMarketID)
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM markets WHERE id = $1", poolMarketID)
+	}()
+	if _, err := fixture.database.ExecContext(ctx,
+		"INSERT INTO parimutuel_pools (market_id, currency) VALUES ($1, 'USD') ON CONFLICT (market_id) DO NOTHING",
+		poolMarketID); err != nil {
+		t.Fatalf("seed parimutuel pool: %v", err)
+	}
+
+	_, _, err := fixture.coordinator.PlaceBetWithBalance(ctx, parimutuel.Bet{
+		MarketID:   poolMarketID,
+		MerchantID: fixture.merchantID,
+		UserID:     "chaos-user",
+		Option:     "Yes",
+		Stake:      5,
+		Currency:   "USD",
+	})
+	if !errors.Is(err, callback.ErrInsufficientFunds) {
+		t.Fatalf("PlaceBetWithBalance() error = %v, want ErrInsufficientFunds", err)
+	}
+	var betCount int
+	if err := fixture.database.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM parimutuel_bets WHERE market_id = $1", poolMarketID).Scan(&betCount); err != nil {
+		t.Fatal(err)
+	}
+	if betCount != 0 {
+		t.Errorf("parimutuel bets = %d, want 0 on rejected debit", betCount)
 	}
 }
 

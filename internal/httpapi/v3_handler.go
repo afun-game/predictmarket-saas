@@ -546,6 +546,32 @@ func (h *v3Handler) createUserBet(w http.ResponseWriter, r *http.Request) {
 	if currency == "" {
 		currency = "USD"
 	}
+	// Seamless merchants hold their balance at the merchant wallet: debit it
+	// through the synchronous callback path and mirror the stake into the
+	// shadow wallet, exactly like order placement.
+	if browserSession.WalletMode == "seamless" {
+		if h.seamless == nil {
+			writeError(w, http.StatusServiceUnavailable, "seamless_unavailable", "seamless betting is not configured")
+			return
+		}
+		bet, balance, err := h.seamless.PlaceBetWithBalance(r.Context(), parimutuel.Bet{
+			MarketID:   request.MarketID,
+			MerchantID: browserSession.MerchantID,
+			UserID:     browserSession.UserID,
+			Option:     request.Option,
+			Stake:      request.Amount,
+			Currency:   currency,
+		})
+		if err != nil {
+			writeSeamlessOrderError(w, err, currency)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{
+			"data": bet,
+			"meta": balanceMeta(balance, currency),
+		})
+		return
+	}
 	if err := h.wallets.Debit(r.Context(), browserSession.MerchantID, browserSession.UserID, currency, request.Amount, "bet"); err != nil {
 		if errors.Is(err, wallet.ErrInsufficientBalance) {
 			writeError(w, http.StatusBadRequest, "insufficient_balance", "insufficient available balance")
