@@ -141,7 +141,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - N/A
 
 ### Fixed
-- N/A
+- seamless 奖池下注/结算回调的 `order_id` 引用缺失导致商户拒收（400
+  invalid_request / 502 debit_unknown）：下注扣款前预生成注单 ID 并作为
+  回调 `ref.order_id` 随注单落库，奖池 payout/refund/void 的 credit 回调
+  同样携带注单 ID，rollback 回调携带扣款引用的 order_id；迁移 019 移除
+  `callback_outbox.order_id` 外键（回滚引用的订单/注单在扣款失败时未落库，
+  奖池 credit 引用 `parimutuel_bets`），merchant-sim 对齐真实商户契约
+  （回调必须携带非空 order_id，否则 400）。
+- 市场创建允许挂在已过结算时间的事件上（做市商永不报价导致盘口为空、
+  前端无法下单）：创建校验事件 `resolution_time` 必须晚于当前时间，
+  否则返回 422 `event_expired`。
+- 开发环境 RDS 主密码被自动轮换后凭据未同步：部署工作流改用
+  `predictmarket/dev/database` secret，并关闭 RDS 托管轮换。
 
 ### Security
 - Merchant API keys are bcrypt-hashed and located by a non-secret prefix
