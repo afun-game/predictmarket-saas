@@ -866,7 +866,8 @@ func TestV3UserParimutuelBetFlow(t *testing.T) {
 		t.Errorf("binary pools status = %d, want %d; body = %s", binaryPools.Code, http.StatusBadRequest, binaryPools.Body.String())
 	}
 
-	// Bets never leak into the order-book order history.
+	// Parimutuel bets join the user's order history as type "bet" items so a
+	// refresh shows everything the user participated in.
 	orders := v3Request(t, handler, http.MethodGet, "/api/user/orders?limit=500", nil, "Bearer "+accessToken)
 	orderList := struct {
 		Data []map[string]any `json:"data"`
@@ -874,8 +875,22 @@ func TestV3UserParimutuelBetFlow(t *testing.T) {
 	if err := json.Unmarshal(orders.Body.Bytes(), &orderList); err != nil {
 		t.Fatalf("decode order list: %v", err)
 	}
-	if len(orderList.Data) != 0 {
-		t.Errorf("order list = %#v, want empty", orderList.Data)
+	if len(orderList.Data) != 3 {
+		t.Fatalf("order list length = %d, want 3 bets; data = %#v", len(orderList.Data), orderList.Data)
+	}
+	betCount := 0
+	for _, item := range orderList.Data {
+		if item["type"] != "bet" {
+			t.Errorf("order list item type = %v, want bet; item = %#v", item["type"], item)
+			continue
+		}
+		betCount++
+		if item["amount"] != 5.0 && item["amount"] != 7.5 && item["amount"] != 2.5 {
+			t.Errorf("bet amount = %v, want one of 5/7.5/2.5", item["amount"])
+		}
+	}
+	if betCount != 3 {
+		t.Errorf("bet items = %d, want 3", betCount)
 	}
 }
 

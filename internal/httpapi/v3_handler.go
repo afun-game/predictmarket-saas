@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,6 +33,10 @@ import (
 const (
 	defaultUserMarketLimit = 20
 	maxUserMarketLimit     = 100
+	// userBetHistoryLimit bounds the bets merged into /api/user/orders;
+	// parimutuel ListBets caps at 100 per page.
+	userBetHistoryLimit = 100
+	defaultUserOrderLimit = 20
 
 	merchantOrderPool   = "merchant:order"
 	merchantQueryPool   = "merchant:query"
@@ -738,7 +743,73 @@ func (h *v3Handler) listUserOrders(w http.ResponseWriter, r *http.Request) {
 		writeOrderServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": page.Orders, "meta": map[string]any{"next_cursor": page.NextCursor}})
+	// Parimutuel stakes are part of the user's activity: merge their bets
+	// into the order history so a refresh shows everything the user
+	// participated in. Bets normalize to order-shaped items with
+	// type "bet" and amount = stake, matching the hosted UI's bet rendering.
+	items := make([]any, 0, len(page.Orders)+userBetHistoryLimit)
+	for _, order := range page.Orders {
+		items = append(items, order)
+	}
+	if h.parimutuel != nil {
+		bets, _, betErr := h.parimutuel.ListBets(r.Context(), parimutuel.ListFilters{
+			MerchantID: browserSession.MerchantID,
+			UserID:     browserSession.UserID,
+			MarketID:   filters.MarketID,
+			Page:       1,
+			Limit:      userBetHistoryLimit,
+		})
+		if betErr != nil {
+			slog.WarnContext(r.Context(), "user bet history unavailable", "error", betErr)
+		} else {
+			for _, bet := range bets {
+				if filters.Status != "" && bet.Status != filters.Status {
+					continue
+				}
+				items = append(items, userBetOrderView(bet))
+			}
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return userOrderCreatedAt(items[i]).After(userOrderCreatedAt(items[j]))
+	})
+	limit := filters.Limit
+	if limit <= 0 {
+		limit = defaultUserOrderLimit
+	}
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{"next_cursor": page.NextCursor}})
+}
+
+// userBetOrderView renders a parimutuel bet in the /api/user/orders shape.
+func userBetOrderView(bet parimutuel.Bet) map[string]any {
+	return map[string]any{
+		"id":          bet.ID,
+		"merchant_id": bet.MerchantID,
+		"user_id":     bet.UserID,
+		"market_id":   bet.MarketID,
+		"type":        "bet",
+		"option":      bet.Option,
+		"amount":      bet.Stake,
+		"currency":    bet.Currency,
+		"status":      bet.Status,
+		"created_at":  bet.CreatedAt,
+		"settled_at":  bet.SettledAt,
+	}
+}
+
+func userOrderCreatedAt(value any) time.Time {
+	if order, ok := value.(*types.Order); ok {
+		return order.CreatedAt
+	}
+	if bet, ok := value.(map[string]any); ok {
+		if createdAt, ok := bet["created_at"].(time.Time); ok {
+			return createdAt
+		}
+	}
+	return time.Time{}
 }
 
 func (h *v3Handler) listUserOrderTrades(w http.ResponseWriter, r *http.Request) {
