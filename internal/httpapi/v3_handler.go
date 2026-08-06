@@ -35,7 +35,7 @@ const (
 	maxUserMarketLimit     = 100
 	// userBetHistoryLimit bounds the bets merged into /api/user/orders;
 	// parimutuel ListBets caps at 100 per page.
-	userBetHistoryLimit = 100
+	userBetHistoryLimit   = 100
 	defaultUserOrderLimit = 20
 
 	merchantOrderPool   = "merchant:order"
