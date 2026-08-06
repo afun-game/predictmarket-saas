@@ -230,6 +230,40 @@ function applyLocale(next) {
 }
 
 const app = document.querySelector("#app");
+// The exchanged access token outlives the one-time launch token, which is
+// stripped from the URL after exchange. Persist it per tab (sessionStorage) so
+// a page reload resumes the browser session instead of failing; a revoked or
+// expired session is cleared and the user relaunches from the merchant site.
+const SESSION_STORAGE_KEY = "pm_hosted_session";
+
+function loadStoredSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.accessToken !== "string" || parsed.accessToken === "") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function storeSession(accessToken, expiresAt) {
+  try {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ accessToken, expiresAt: expiresAt ?? null }));
+  } catch {
+    // Storage unavailable (private mode): the session lives in memory only.
+  }
+}
+
+function clearStoredSession() {
+  try {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures; the in-memory token is cleared by callers.
+  }
+}
+
 const state = {
   accessToken: "",
   me: null,
@@ -588,6 +622,7 @@ async function apiFetch(path, options = {}) {
   try { payload = await response.json(); } catch { /* 204/no body */ }
   if (response.status === 401) {
     state.accessToken = "";
+    clearStoredSession();
     emit("pm:session_expired");
     throw new Error(t("error.session"));
   }
@@ -740,18 +775,35 @@ async function bootstrap() {
   try {
     let sessionUser = null;
     const token = launchToken();
-    if (!state.accessToken && !token) throw new Error(t("error.launch"));
+    const stored = loadStoredSession();
+    if (!state.accessToken && !token && !stored) throw new Error(t("error.launch"));
     if (!state.accessToken) {
-      const exchanged = await apiFetch("/api/user/session/exchange", {
-        method: "POST",
-        body: JSON.stringify({ token }),
-      });
-      state.accessToken = exchanged.access_token;
-      sessionUser = exchanged.user?.available_balance ? exchanged.user : null;
-      // A one-time token must not remain in browser history or referrers.
-      const cleanURL = new URL(window.location.href);
-      cleanURL.searchParams.delete("token");
-      window.history.replaceState({}, document.title, cleanURL.toString());
+      if (token) {
+        const exchanged = await apiFetch("/api/user/session/exchange", {
+          method: "POST",
+          body: JSON.stringify({ token }),
+        });
+        state.accessToken = exchanged.access_token;
+        storeSession(exchanged.access_token, exchanged.expires_at);
+        sessionUser = exchanged.user?.available_balance ? exchanged.user : null;
+        // A one-time token must not remain in browser history or referrers.
+        const cleanURL = new URL(window.location.href);
+        cleanURL.searchParams.delete("token");
+        window.history.replaceState({}, document.title, cleanURL.toString());
+      } else {
+        // Reload: resume the persisted browser session. Refresh rotates the
+        // token and extends the two-hour TTL; an expired or revoked session
+        // is rejected here so the page asks for a fresh Launch URL.
+        state.accessToken = stored.accessToken;
+        try {
+          const refreshed = await apiFetch("/api/user/session/refresh", { method: "POST" });
+          state.accessToken = refreshed.access_token;
+          storeSession(refreshed.access_token, refreshed.expires_at);
+        } catch {
+          clearStoredSession();
+          throw new Error(t("error.session"));
+        }
+      }
     }
     const [me, eventPage, marketPage, orderPage] = await Promise.all([
       sessionUser ?? apiFetch("/api/user/me"),

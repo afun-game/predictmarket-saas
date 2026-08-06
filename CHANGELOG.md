@@ -153,6 +153,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   否则返回 422 `event_expired`。
 - 开发环境 RDS 主密码被自动轮换后凭据未同步：部署工作流改用
   `predictmarket/dev/database` secret，并关闭 RDS 托管轮换。
+- 托管页刷新即丢失会话（一次性 Launch token 换出 access token 后仅存
+  内存）：access token 持久化到 sessionStorage，刷新页面时调用
+  `POST /api/user/session/refresh` 续期并重新拉取数据；会话过期/被吊销
+  时清除本地会话并提示从商户站点重新进入。
 
 ### Security
 - Merchant API keys are bcrypt-hashed and located by a non-secret prefix
