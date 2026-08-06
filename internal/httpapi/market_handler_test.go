@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/afun-game/predictmarket-saas/internal/currency"
@@ -385,5 +386,27 @@ func assertEmptyOrderBook(t *testing.T, body []byte, marketID string) {
 	emptyBook := response.Data.Bids != nil && response.Data.Asks != nil
 	if !validBook || !emptyBook || len(response.Data.Bids) != 0 || len(response.Data.Asks) != 0 {
 		t.Errorf("order book = %#v", response.Data)
+	}
+}
+
+func TestWriteMarketServiceErrorMapsExpiredEvent(t *testing.T) {
+	t.Parallel()
+
+	recorder := httptest.NewRecorder()
+	writeMarketServiceError(recorder, market.ErrEventExpired)
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnprocessableEntity)
+	}
+	var payload struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if payload.Error.Code != "event_expired" {
+		t.Errorf("code = %q, want event_expired", payload.Error.Code)
 	}
 }

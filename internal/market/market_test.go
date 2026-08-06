@@ -85,6 +85,16 @@ func TestCreateRejectsInvalidReferences(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsExpiredEvent(t *testing.T) {
+	t.Parallel()
+
+	repository := &expiredEventRepository{Repository: newMemoryRepository()}
+	_, err := newService(repository).Create(context.Background(), validCreateRequest())
+	if !errors.Is(err, ErrEventExpired) {
+		t.Fatalf("Create() error = %v, want ErrEventExpired", err)
+	}
+}
+
 func TestListFiltersAndPagination(t *testing.T) {
 	service := newService(newMemoryRepository())
 	first := createMarket(t, service, validCreateRequest())
@@ -236,6 +246,14 @@ type invalidReferenceRepository struct {
 
 func (r *invalidReferenceRepository) ValidateReferences(context.Context, string, string) error {
 	return ErrInvalidReference
+}
+
+type expiredEventRepository struct {
+	Repository
+}
+
+func (r *expiredEventRepository) ValidateReferences(context.Context, string, string) error {
+	return ErrEventExpired
 }
 
 func validCreateRequest() *CreateRequest {

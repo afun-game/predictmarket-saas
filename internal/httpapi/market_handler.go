@@ -216,6 +216,13 @@ func writeMarketServiceError(w http.ResponseWriter, err error) {
 			"invalid_reference",
 			"merchant and event must exist and be active",
 		)
+	case errors.Is(err, market.ErrEventExpired):
+		writeError(
+			w,
+			http.StatusUnprocessableEntity,
+			"event_expired",
+			"event resolution time has already passed; a market cannot be created on an expired event",
+		)
 	case errors.Is(err, market.ErrInvalidTransition):
 		writeError(w, http.StatusConflict, "invalid_transition", "market operation is not allowed")
 	default:

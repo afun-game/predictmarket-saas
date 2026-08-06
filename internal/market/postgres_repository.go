@@ -45,18 +45,26 @@ SELECT EXISTS (
        ),
        EXISTS (
            SELECT 1 FROM events WHERE id = $2 AND status = 'active'
+       ),
+       EXISTS (
+           SELECT 1 FROM events WHERE id = $2 AND resolution_time > now()
        )`
 
 	var merchantActive bool
 	var eventActive bool
+	var eventNotExpired bool
 	if err := r.database.QueryRowContext(ctx, query, merchantID, eventID).Scan(
 		&merchantActive,
 		&eventActive,
+		&eventNotExpired,
 	); err != nil {
 		return fmt.Errorf("query market references: %w", err)
 	}
 	if !merchantActive || !eventActive {
 		return ErrInvalidReference
+	}
+	if !eventNotExpired {
+		return ErrEventExpired
 	}
 	return nil
 }

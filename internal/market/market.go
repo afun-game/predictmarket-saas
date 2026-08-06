@@ -28,6 +28,7 @@ const (
 var (
 	ErrNotFound          = errors.New("market not found")
 	ErrInvalidReference  = errors.New("merchant or event is not active")
+	ErrEventExpired      = errors.New("event resolution time has already passed")
 	ErrInvalidTransition = errors.New("invalid market status transition")
 )
 

@@ -112,7 +112,7 @@ jobs:
       ECR_REPOSITORY: predictmarket-saas-dev
       DB_HOST: predictmarket-dev-postgres.c5a0y6ayuhqy.ap-east-1.rds.amazonaws.com
       DB_NAME: predictmarket
-      RDS_SECRET_ID: arn:aws:secretsmanager:ap-east-1:042831095537:secret:rds!db-e57f672e-1daa-4f8f-a221-72b4f75ef3e2-QelHqX
+      RDS_SECRET_ID: arn:aws:secretsmanager:ap-east-1:042831095537:secret:predictmarket/dev/database-QpkGAP
       APPLICATION_SECRET_ID: predictmarket/dev/application
 
     steps:
