@@ -28,6 +28,12 @@ type Service interface {
 	// TopOfBook returns the best resting bid and ask per option for each
 	// market, used to render compact list summaries without full books.
 	TopOfBook(ctx context.Context, marketIDs []string) (map[string][]BookQuote, error)
+	// MarketEventDetails returns the owning event context (settlement time,
+	// title, description, sports league) for each market in one pass.
+	MarketEventDetails(ctx context.Context, marketIDs []string) (map[string]MarketEventInfo, error)
+	// MarketHistory returns a compact price series per market: the leading
+	// outcome's hourly closing prices over the last 24 hours.
+	MarketHistory(ctx context.Context, marketIDs []string) (map[string]*MarketHistory, error)
 }
 
 // BookQuote is the best executable bid/ask for one market option.
@@ -35,6 +41,28 @@ type BookQuote struct {
 	Option string   `json:"option"`
 	Bid    *float64 `json:"bid,omitempty"`
 	Ask    *float64 `json:"ask,omitempty"`
+}
+
+// MarketEventInfo is the event context embedded in market list items:
+// settlement time, the owning theme/event, and the sports league when the
+// event is a synced game.
+type MarketEventInfo struct {
+	Title          string     `json:"title"`
+	Description    string     `json:"description"`
+	ResolutionTime time.Time  `json:"resolution_time"`
+	League         string     `json:"league,omitempty"`
+	GameID         string     `json:"game_id,omitempty"`
+	StartTime      *time.Time `json:"start_time,omitempty"`
+}
+
+// MarketHistory is a compact price series for a binary market: the leading
+// outcome's hourly closing prices over the last 24 hours plus the latest
+// trade and period changes, so list pages can draw a sparkline.
+type MarketHistory struct {
+	Last      *float64  `json:"last,omitempty"`
+	Change1h  *float64  `json:"change_1h,omitempty"`
+	Change24h *float64  `json:"change_24h,omitempty"`
+	Points    []float64 `json:"points,omitempty"`
 }
 
 // TransactionFilters scopes the platform wallet ledger to one merchant.

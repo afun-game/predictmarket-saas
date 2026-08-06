@@ -135,6 +135,15 @@ type v3UserMarket struct {
 	// Book carries the best bid/ask per option for binary markets, so list
 	// cards render quotes without fetching the full order book.
 	Book []v2query.BookQuote `json:"book,omitempty"`
+	// Event context embedded so list pages render the owning theme, the
+	// settlement time, and the sports league without joining events.
+	ResolutionTime   time.Time `json:"resolution_time"`
+	EventTitle       string    `json:"event_title"`
+	EventDescription string    `json:"event_description,omitempty"`
+	League           string    `json:"league,omitempty"`
+	// History carries the leading outcome's price sparkline and period
+	// changes for binary markets (absent without trades).
+	History *v2query.MarketHistory `json:"history,omitempty"`
 }
 
 type v3UserEvent struct {
@@ -669,15 +678,19 @@ func (h *v3Handler) poolSnapshot(ctx context.Context, marketID string) (map[stri
 	return formatMarketPool(marketID, pool), nil
 }
 
-// marketSummaries batches parimutuel pool snapshots and top-of-book quotes
-// for the given markets so list/detail responses carry display-ready行情
-// without per-market queries. Failures degrade to missing summaries; the
-// frontend falls back to the dedicated endpoints.
-func (h *v3Handler) marketSummaries(ctx context.Context, markets []*types.Market) (map[string]map[string]any, map[string][]v2query.BookQuote) {
-	pools := map[string]map[string]any{}
-	book := map[string][]v2query.BookQuote{}
+// marketSummaries batches every display-ready detail for the given markets:
+// parimutuel pool snapshots, top-of-book quotes, owning event context, and
+// the leading outcome's price history. Failures degrade to missing fields;
+// the frontend falls back to the dedicated endpoints.
+func (h *v3Handler) marketSummaries(ctx context.Context, markets []*types.Market) (pools map[string]map[string]any, book map[string][]v2query.BookQuote, events map[string]v2query.MarketEventInfo, history map[string]*v2query.MarketHistory) {
+	pools = map[string]map[string]any{}
+	book = map[string][]v2query.BookQuote{}
+	events = map[string]v2query.MarketEventInfo{}
+	history = map[string]*v2query.MarketHistory{}
+	ids := make([]string, 0, len(markets))
 	var poolIDs, bookIDs []string
 	for _, value := range markets {
+		ids = append(ids, value.ID)
 		switch value.Type {
 		case "parimutuel":
 			poolIDs = append(poolIDs, value.ID)
@@ -695,15 +708,27 @@ func (h *v3Handler) marketSummaries(ctx context.Context, markets []*types.Market
 			}
 		}
 	}
-	if len(bookIDs) > 0 && h.queries != nil {
+	if h.queries != nil && len(ids) > 0 {
 		values, err := h.queries.TopOfBook(ctx, bookIDs)
 		if err != nil {
 			slog.WarnContext(ctx, "market book summaries unavailable", "error", err)
 		} else {
 			book = values
 		}
+		eventValues, err := h.queries.MarketEventDetails(ctx, ids)
+		if err != nil {
+			slog.WarnContext(ctx, "market event details unavailable", "error", err)
+		} else {
+			events = eventValues
+		}
+		historyValues, err := h.queries.MarketHistory(ctx, bookIDs)
+		if err != nil {
+			slog.WarnContext(ctx, "market price history unavailable", "error", err)
+		} else {
+			history = historyValues
+		}
 	}
-	return pools, book
+	return pools, book, events, history
 }
 
 // getUserMarketPools exposes a parimutuel market's pool totals and per-option
@@ -1546,9 +1571,9 @@ func (h *v3Handler) listMarkets(w http.ResponseWriter, r *http.Request) {
 	}
 	result := make([]v3UserMarket, 0, len(values))
 	if len(values) > 0 {
-		pools, book := h.marketSummaries(r.Context(), values)
+		pools, book, events, history := h.marketSummaries(r.Context(), values)
 		for _, value := range values {
-			result = append(result, userMarketFrom(value, pools[value.ID], book[value.ID]))
+			result = append(result, userMarketFrom(value, pools[value.ID], book[value.ID], events[value.ID], history[value.ID]))
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -1562,8 +1587,8 @@ func (h *v3Handler) getMarket(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pools, book := h.marketSummaries(r.Context(), []*types.Market{value})
-	writeJSON(w, http.StatusOK, map[string]any{"data": userMarketFrom(value, pools[value.ID], book[value.ID])})
+	pools, book, events, history := h.marketSummaries(r.Context(), []*types.Market{value})
+	writeJSON(w, http.StatusOK, map[string]any{"data": userMarketFrom(value, pools[value.ID], book[value.ID], events[value.ID], history[value.ID])})
 }
 
 func (h *v3Handler) getOrderBook(w http.ResponseWriter, r *http.Request) {
@@ -1772,8 +1797,14 @@ func sessionUserResponse(value session.BrowserSession) map[string]any {
 	}
 }
 
-func userMarketFrom(value *types.Market, pool map[string]any, book []v2query.BookQuote) v3UserMarket {
-	return v3UserMarket{
+func userMarketFrom(
+	value *types.Market,
+	pool map[string]any,
+	book []v2query.BookQuote,
+	event v2query.MarketEventInfo,
+	history *v2query.MarketHistory,
+) v3UserMarket {
+	item := v3UserMarket{
 		ID:          value.ID,
 		EventID:     value.EventID,
 		Type:        value.Type,
@@ -1786,7 +1817,15 @@ func userMarketFrom(value *types.Market, pool map[string]any, book []v2query.Boo
 		SettledAt:   value.SettledAt,
 		Pool:        pool,
 		Book:        book,
+		History:     history,
 	}
+	if event.Title != "" {
+		item.ResolutionTime = event.ResolutionTime
+		item.EventTitle = event.Title
+		item.EventDescription = event.Description
+		item.League = event.League
+	}
+	return item
 }
 
 func userEventFrom(value *types.Event) v3UserEvent {

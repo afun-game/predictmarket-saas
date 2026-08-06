@@ -168,6 +168,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- 市场列表/详情接口补充事件上下文与行情（参考 Polymarket Gamma）：
+  `resolution_time`（结算时间）、`event_title`/`event_description`（所属
+  主题）、`league`/`game_id`/`start_time`（体育联赛，来自 sports_events），
+  以及 binary 市场 `history`（领先选项近 24 小时每小时收盘价 sparkline +
+  `last`/`change_1h`/`change_24h`）；全部批量查询，托管页卡片展示联赛、
+  截止时间、价格曲线与 24h 涨跌。
 - `GET /api/user/orders` 并入用户的奖池注单：注单以 `type: "bet"`、
   `amount: stake` 的订单形态混排返回（按时间倒序），刷新后前端历史页
   能完整展示用户参与过的订单与注单；支持 `market_id`/`status` 过滤。

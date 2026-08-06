@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"fmt"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -243,6 +244,7 @@ func (f *integrationFixture) cleanup() {
 	_, _ = f.database.ExecContext(ctx, "DELETE FROM settlement_payouts WHERE market_id = $1", f.marketID)
 	_, _ = f.database.ExecContext(ctx, "DELETE FROM market_settlements WHERE market_id = $1", f.marketID)
 	_, _ = f.database.ExecContext(ctx, "DELETE FROM transactions WHERE wallet_id IN (SELECT id FROM wallets WHERE merchant_id = $1)", f.merchantID)
+	_, _ = f.database.ExecContext(ctx, "DELETE FROM trades WHERE market_id = $1", f.marketID)
 	_, _ = f.database.ExecContext(ctx, "DELETE FROM orders WHERE merchant_id = $1", f.merchantID)
 	_, _ = f.database.ExecContext(ctx, "DELETE FROM wallets WHERE merchant_id = $1", f.merchantID)
 	_, _ = f.database.ExecContext(ctx, "DELETE FROM markets WHERE merchant_id = $1", f.merchantID)
@@ -337,5 +339,97 @@ INSERT INTO orders (
 	empty, err := service.TopOfBook(ctx, nil)
 	if err != nil || len(empty) != 0 {
 		t.Fatalf("TopOfBook(nil) = %#v, %v", empty, err)
+	}
+}
+
+func TestMarketEventDetailsAndHistoryIntegration(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "1" {
+		t.Skip("set INTEGRATION_TEST=1 to run PostgreSQL integration tests")
+	}
+	fixture := newIntegrationFixture(t)
+	ctx := context.Background()
+	service := New(fixture.database)
+
+	details, err := service.MarketEventDetails(ctx, []string{fixture.marketID})
+	if err != nil {
+		t.Fatalf("MarketEventDetails() error = %v", err)
+	}
+	info, exists := details[fixture.marketID]
+	if !exists || info.Title != "V2 query event" || info.ResolutionTime.IsZero() {
+		t.Fatalf("event details = %#v", info)
+	}
+	// The fixture event is not a synced game.
+	if info.League != "" {
+		t.Errorf("league = %q, want empty before seeding sports_events", info.League)
+	}
+
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO sports_events (event_id, league, game_id, start_time)
+VALUES ((SELECT event_id FROM markets WHERE id = $1), 'NBA', 'game-1', $2)`,
+		fixture.marketID, fixture.now); err != nil {
+		t.Fatalf("seed sports event: %v", err)
+	}
+	details, err = service.MarketEventDetails(ctx, []string{fixture.marketID})
+	if err != nil {
+		t.Fatalf("MarketEventDetails() after seed error = %v", err)
+	}
+	if info := details[fixture.marketID]; info.League != "NBA" || info.GameID != "game-1" || info.StartTime == nil {
+		t.Fatalf("sports event details = %#v", info)
+	}
+
+	// Seed trades at distinct hours and verify the sparkline + changes.
+	makerID := fixture.newID(t)
+	takerID := fixture.newID(t)
+	for _, orderID := range []string{makerID, takerID} {
+		if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO orders (
+    id, merchant_id, user_id, market_id, type, option, amount, filled_amount,
+    currency, price, time_in_force, status, created_at
+) VALUES ($1, $2, $3, $4, 'buy', 'Yes', 10, 10, 'USD', 0.5, 'gtc', 'filled', $5)`,
+			orderID, fixture.merchantID, fixture.userID, fixture.marketID, fixture.now); err != nil {
+			t.Fatalf("insert trade order: %v", err)
+		}
+	}
+	trades := []struct {
+		hour  int
+		price float64
+	}{
+		{hour: 3, price: 0.50},
+		{hour: 2, price: 0.55},
+		{hour: 1, price: 0.60},
+		{hour: 0, price: 0.65},
+	}
+	for index, trade := range trades {
+		if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO trades (market_id, maker_order_id, taker_order_id, shares, matched_price, created_at)
+VALUES ($1, $2, $3, 1, $4, $5)`,
+			fixture.marketID, makerID, takerID, trade.price, fixture.now.Add(-time.Duration(trade.hour)*time.Hour)); err != nil {
+			t.Fatalf("insert trade %d: %v", index, err)
+		}
+	}
+
+	history, err := service.MarketHistory(ctx, []string{fixture.marketID})
+	if err != nil {
+		t.Fatalf("MarketHistory() error = %v", err)
+	}
+	series := history[fixture.marketID]
+	if series == nil {
+		t.Fatal("market history missing")
+	}
+	if series.Last == nil || *series.Last != 0.65 {
+		t.Errorf("last = %v, want 0.65", series.Last)
+	}
+	if series.Change24h == nil || math.Abs(*series.Change24h-0.15) > 1e-9 {
+		t.Errorf("change_24h = %v, want 0.15", *series.Change24h)
+	}
+	if series.Change1h == nil || math.Abs(*series.Change1h-0.05) > 1e-9 {
+		t.Errorf("change_1h = %v, want 0.05", *series.Change1h)
+	}
+	if len(series.Points) < 3 || series.Points[len(series.Points)-1] != 0.65 || series.Points[0] != 0.50 {
+		t.Errorf("points = %#v, want hourly closes ending at 0.65", series.Points)
+	}
+	empty, err := service.MarketEventDetails(ctx, nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("MarketEventDetails(nil) = %#v, %v", empty, err)
 	}
 }

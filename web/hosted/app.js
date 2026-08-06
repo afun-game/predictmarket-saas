@@ -395,6 +395,22 @@ function marketCard(market) {
           const odds = Number(row.odds) > 0 ? `${Number(row.odds).toFixed(2)}x` : t("market.noQuote");
           return `${escapeHTML(row.option)} ${formatPoolAmount(row.stake)} · ${odds}`;
         }).join(" · ")}</span>` : "";
+  // Sparkline: the leading outcome's hourly closes over the last 24 hours,
+  // normalized to bar heights, plus the period change badge.
+  const points = market.history?.points ?? [];
+  const sparkline = !isPool && points.length > 1
+    ? (() => {
+        const min = Math.min(...points);
+        const max = Math.max(...points);
+        const range = max - min || 1;
+        const bars = points.map((point) => Math.max(6, Math.round(((point - min) / range) * 100)));
+        const change = Number(market.history?.change_24h);
+        const delta = Number.isFinite(change) && change !== 0 ? (change > 0 ? "▲" : "▼") : "";
+        const deltaText = Number.isFinite(change) ? `${delta}${Math.abs(change).toFixed(2)}` : "";
+        return `<span class="market-card__sparkline"><span class="sparkline__bars">${bars.map((height) => `<i style="height:${height}%"></i>`).join("")}</span>${deltaText ? `<em class="sparkline__delta${change > 0 ? " up" : change < 0 ? " down" : ""}">${deltaText} 24h</em>` : ""}</span>`;
+      })()
+    : "";
+  const metaBits = [market.league, market.resolutionTime ? deadlineLabel(market.resolutionTime) : ""].filter(Boolean);
   return `
     <button class="market-card" type="button" data-route="/market/${market.id}">
       <span class="market-card__top">
@@ -403,7 +419,9 @@ function marketCard(market) {
       </span>
       <h3>${escapeHTML(market.question)}</h3>
       ${market.eventTitle ? `<span class="market-card__event">${escapeHTML(market.eventTitle)}</span>` : ""}
+      ${metaBits.length ? `<span class="market-card__meta">${metaBits.map((bit) => `<span>${escapeHTML(bit)}</span>`).join('<span class="dot">·</span>')}</span>` : ""}
       ${poolLine}
+      ${sparkline}
       <span class="probability" aria-label="${t("quote.aria", { label: leading?.label ?? "" })}">
         <span class="probability__bar"><span class="probability__fill" style="width:${implied ?? 0}%"></span></span>
         <strong class="probability__value">${price}</strong>
@@ -695,8 +713,8 @@ function normalizeMarket(value) {
     ...value,
     eventId: value.event_id,
     categoryId: value.category || event?.category,
-    eventTitle: event?.title,
-    resolutionTime: event?.resolution_time,
+    eventTitle: value.event_title || event?.title,
+    resolutionTime: value.resolution_time || event?.resolution_time,
     outcomes: (value.options ?? []).map((label) => ({ label, price: null })),
     volume: value.total_volume ?? "0.000000",
     status: value.status,

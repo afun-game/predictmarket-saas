@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -250,6 +251,145 @@ GROUP BY market_id, option`
 		result[marketID] = append(result[marketID], quote)
 	}
 	return result, rows.Err()
+}
+
+// MarketEventDetails returns each market's owning event context in one
+// batched query: settlement time, theme title/description, and the sports
+// league/game when the event is a synced game.
+func (s *implementation) MarketEventDetails(ctx context.Context, marketIDs []string) (map[string]MarketEventInfo, error) {
+	result := make(map[string]MarketEventInfo, len(marketIDs))
+	if len(marketIDs) == 0 {
+		return result, nil
+	}
+	const query = `
+SELECT m.id, e.title, COALESCE(e.description, ''), e.resolution_time,
+       COALESCE(se.league, ''), COALESCE(se.game_id, ''), se.start_time
+FROM markets m
+JOIN events e ON e.id = m.event_id
+LEFT JOIN sports_events se ON se.event_id = e.id
+WHERE m.id::text = ANY($1)`
+	rows, err := s.database.QueryContext(ctx, query, marketIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query market event details: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var marketID string
+		info := MarketEventInfo{}
+		var startTime sql.NullTime
+		if err := rows.Scan(
+			&marketID, &info.Title, &info.Description, &info.ResolutionTime,
+			&info.League, &info.GameID, &startTime,
+		); err != nil {
+			return nil, fmt.Errorf("scan market event details: %w", err)
+		}
+		if startTime.Valid {
+			info.StartTime = &startTime.Time
+		}
+		result[marketID] = info
+	}
+	return result, rows.Err()
+}
+
+// MarketHistory returns a compact price series per binary market: the last
+// trade, the hourly closing prices over the previous 24 hours (oldest first,
+// at most 24 points), and the change against the series start and the
+// previous hour. The series uses all market trades; for binary markets the
+// complementary outcome is 1 - price.
+func (s *implementation) MarketHistory(ctx context.Context, marketIDs []string) (map[string]*MarketHistory, error) {
+	result := make(map[string]*MarketHistory, len(marketIDs))
+	if len(marketIDs) == 0 {
+		return result, nil
+	}
+	const pointsQuery = `
+WITH hourly AS (
+    SELECT DISTINCT ON (market_id, date_trunc('hour', created_at))
+           market_id, matched_price,
+           date_trunc('hour', created_at) AS bucket
+    FROM trades
+    WHERE market_id::text = ANY($1) AND created_at >= NOW() - INTERVAL '24 hours'
+    ORDER BY market_id, bucket, created_at DESC
+)
+SELECT market_id, array_agg(matched_price ORDER BY bucket)::text
+FROM hourly
+GROUP BY market_id`
+	pointsRows, err := s.database.QueryContext(ctx, pointsQuery, marketIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query market price points: %w", err)
+	}
+	for pointsRows.Next() {
+		var marketID string
+		var pointsText string
+		if err := pointsRows.Scan(&marketID, &pointsText); err != nil {
+			_ = pointsRows.Close()
+			return nil, fmt.Errorf("scan market price points: %w", err)
+		}
+		history := &MarketHistory{}
+		if err := decodeFloatArray(pointsText, &history.Points); err != nil {
+			_ = pointsRows.Close()
+			return nil, fmt.Errorf("decode market price points: %w", err)
+		}
+		result[marketID] = history
+	}
+	if err := pointsRows.Close(); err != nil {
+		return nil, fmt.Errorf("close market price points: %w", err)
+	}
+
+	const lastQuery = `
+SELECT DISTINCT ON (market_id) market_id, matched_price
+FROM trades
+WHERE market_id::text = ANY($1)
+ORDER BY market_id, created_at DESC`
+	lastRows, err := s.database.QueryContext(ctx, lastQuery, marketIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query last trade prices: %w", err)
+	}
+	defer func() { _ = lastRows.Close() }()
+	for lastRows.Next() {
+		var marketID string
+		var price float64
+		if err := lastRows.Scan(&marketID, &price); err != nil {
+			return nil, fmt.Errorf("scan last trade price: %w", err)
+		}
+		history, exists := result[marketID]
+		if !exists {
+			history = &MarketHistory{}
+			result[marketID] = history
+		}
+		history.Last = &price
+		points := history.Points
+		if len(points) > 0 {
+			first := points[0]
+			history.Change24h = &[]float64{price - first}[0]
+			// The last point closes the current hour, so the previous hour's
+			// close is the second-to-last point.
+			if len(points) > 1 {
+				previous := points[len(points)-2]
+				history.Change1h = &[]float64{price - previous}[0]
+			}
+		}
+	}
+	return result, lastRows.Err()
+}
+
+func decodeFloatArray(value string, target *[]float64) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || trimmed == "{}" {
+		*target = []float64{}
+		return nil
+	}
+	inner := strings.TrimSuffix(strings.TrimPrefix(trimmed, "{"), "}")
+	parts := strings.Split(inner, ",")
+	points := make([]float64, 0, len(parts))
+	for _, part := range parts {
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(part), 64)
+		if err != nil {
+			return err
+		}
+		points = append(points, parsed)
+	}
+	*target = points
+	return nil
 }
 
 func (s *implementation) DailyReport(
