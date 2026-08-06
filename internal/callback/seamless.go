@@ -195,12 +195,19 @@ func (c *SeamlessCoordinator) PlaceBetWithBalance(
 	if err != nil {
 		return nil, "", errors.New("seamless bet amount is invalid")
 	}
+	// The bet ID is generated before the debit so the wallet callback ref
+	// carries a well-formed order_id; merchants reject callbacks whose
+	// order_id is missing or empty. The same ID is persisted with the bet.
+	betID, err := generateUUID(c.random)
+	if err != nil {
+		return nil, "", fmt.Errorf("generate parimutuel bet ID: %w", err)
+	}
 	debit := seamlessDebit{
 		MerchantID:  bet.MerchantID,
 		UserID:      bet.UserID,
 		Currency:    bet.Currency,
 		AmountCents: amountCents,
-		OrderID:     "",
+		OrderID:     betID,
 		MarketID:    bet.MarketID,
 	}
 	transactionID, balance, err := c.debit(ctx, debit)
@@ -211,6 +218,7 @@ func (c *SeamlessCoordinator) PlaceBetWithBalance(
 		_ = c.enqueueRollback(ctx, debit, transactionID)
 		return nil, "", err
 	}
+	bet.ID = betID
 	bet.WalletKind = parimutuel.WalletKindShadow
 	placed, err := c.bets.PlaceBet(ctx, bet)
 	if err != nil {
@@ -403,9 +411,11 @@ func (c *SeamlessCoordinator) enqueueRollback(
 	if c.worker == nil {
 		return errors.New("rollback enqueuer is not configured")
 	}
-	// The order is never persisted for an unknown/failed debit, so it must not
-	// be referenced by the rollback outbox row (FK would reject the insert).
-	// The transaction_id is the authoritative idempotency key for the merchant.
+	// The order (or bet) is never persisted for an unknown/failed debit, so it
+	// must not be referenced by the rollback outbox row (FK would reject the
+	// insert). The order_id reference is still carried in the callback ref so
+	// merchants that require a well-formed order_id accept the rollback; the
+	// transaction_id is the authoritative idempotency key for the merchant.
 	return c.worker.EnqueueRollback(
 		ctx,
 		debit.MerchantID,
@@ -413,7 +423,7 @@ func (c *SeamlessCoordinator) enqueueRollback(
 		debit.Currency,
 		debit.AmountCents,
 		transactionID,
-		"",
+		debit.OrderID,
 		debit.MarketID,
 	)
 }

@@ -179,7 +179,7 @@ FOR UPDATE`
 			reason = "refund_cancel"
 		}
 		if err := enqueueSettlementShadowCredit(
-			ctx, databaseTx, merchantID, bet.userID, currency, "", walletID,
+			ctx, databaseTx, merchantID, bet.userID, currency, bet.id, walletID,
 			marketID, eventID, payout, reason, settledAt,
 		); err != nil {
 			return err
@@ -284,7 +284,7 @@ FOR UPDATE`
 			// Seamless stakes are refunded to the merchant wallet through a
 			// signed credit callback (reason void).
 			if err := enqueueSettlementShadowCredit(
-				ctx, databaseTx, merchantID, bet.userID, currency, "", walletID,
+				ctx, databaseTx, merchantID, bet.userID, currency, bet.id, walletID,
 				marketID, eventID, bet.stakeCents, "void", voidedAt,
 			); err != nil {
 				return err

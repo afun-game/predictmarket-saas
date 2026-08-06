@@ -126,13 +126,16 @@ SELECT currency FROM parimutuel_pools WHERE market_id = $1 FOR UPDATE`
 		return nil, &ValidationError{Field: "currency", Message: "does not match the pool currency"}
 	}
 
+	// A preset ID is honored (the seamless coordinator generates it before
+	// the merchant debit so the wallet callback ref references the bet);
+	// platform-mode bets fall back to a database-generated UUID.
 	const insertBet = `
-INSERT INTO parimutuel_bets (market_id, merchant_id, user_id, option, stake, currency, wallet_kind, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
+INSERT INTO parimutuel_bets (id, market_id, merchant_id, user_id, option, stake, currency, wallet_kind, status)
+VALUES (COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, 'active')
 RETURNING id, created_at`
 	if err := databaseTx.QueryRowContext(
 		ctx, insertBet,
-		bet.MarketID, bet.MerchantID, bet.UserID, bet.Option, bet.Stake, bet.Currency, bet.WalletKind,
+		bet.ID, bet.MarketID, bet.MerchantID, bet.UserID, bet.Option, bet.Stake, bet.Currency, bet.WalletKind,
 	).Scan(&bet.ID, &bet.CreatedAt); err != nil {
 		return nil, fmt.Errorf("insert parimutuel bet: %w", err)
 	}

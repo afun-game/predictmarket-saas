@@ -232,6 +232,10 @@ func (s *Simulator) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status, balance := s.Apply(request, amount)
+	if status == "invalid_request" {
+		writeJSON(w, http.StatusBadRequest, CallbackResponse{Status: status})
+		return
+	}
 	writeJSON(w, http.StatusOK, CallbackResponse{Status: status, Balance: FormatCents(balance)})
 }
 
@@ -299,6 +303,17 @@ func (s *Simulator) Apply(request CallbackRequest, amount int64) (string, int64)
 		if request.Type != "rollback" || previous.rolledBack {
 			return "duplicate", balance
 		}
+	}
+	// Real merchant wallets require a well-formed order_id (UUID) in the
+	// callback ref; missing or empty references are rejected with
+	// invalid_request. The simulator mirrors that contract so platform tests
+	// catch payload regressions.
+	if request.Ref == nil {
+		return "invalid_request", balance
+	}
+	orderID, _ := request.Ref["order_id"].(string)
+	if strings.TrimSpace(orderID) == "" {
+		return "invalid_request", balance
 	}
 	switch request.Type {
 	case "debit":

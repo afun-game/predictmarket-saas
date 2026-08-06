@@ -39,6 +39,21 @@ func TestPlaceBetJoinsPool(t *testing.T) {
 	}
 }
 
+func TestPlaceBetHonorsPresetID(t *testing.T) {
+	service, _ := newFixture(t)
+	bet, err := service.PlaceBet(context.Background(), Bet{
+		ID:       "11111111-2222-4333-8444-555555555555",
+		MarketID: "m-1", MerchantID: "merchant-1", UserID: "user-1",
+		Option: "Yes", Stake: 50, Currency: "USD",
+	})
+	if err != nil {
+		t.Fatalf("place bet: %v", err)
+	}
+	if bet.ID != "11111111-2222-4333-8444-555555555555" {
+		t.Fatalf("bet ID = %q, want the preset ID", bet.ID)
+	}
+}
+
 func TestPlaceBetRejectsInvalidMarkets(t *testing.T) {
 	service, _ := newFixture(t)
 	cases := []struct {

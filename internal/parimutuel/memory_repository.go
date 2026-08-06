@@ -110,8 +110,10 @@ func (r *MemoryRepository) PlaceBet(ctx context.Context, bet Bet) (*Bet, error) 
 	if pool.Currency != bet.Currency {
 		return nil, &ValidationError{Field: "currency", Message: "does not match the pool currency"}
 	}
-	r.nextID++
-	bet.ID = "bet-" + string(rune('a'+r.nextID-1))
+	if bet.ID == "" {
+		r.nextID++
+		bet.ID = "bet-" + string(rune('a'+r.nextID-1))
+	}
 	bet.Status = StatusActive
 	bet.CreatedAt = time.Now().UTC()
 	r.bets[bet.ID] = bet
