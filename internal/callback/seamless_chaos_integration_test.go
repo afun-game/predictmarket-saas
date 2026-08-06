@@ -659,6 +659,7 @@ VALUES ($1, $2, $3, 'parimutuel', 'Chaos settle pool', '["Yes","No"]', 'active')
 		t.Fatalf("insert parimutuel market: %v", err)
 	}
 	defer func() {
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM settlement_payouts WHERE market_id = $1", poolMarketID)
 		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM parimutuel_bets WHERE market_id = $1", poolMarketID)
 		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM parimutuel_pools WHERE market_id = $1", poolMarketID)
 		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM market_settlements WHERE market_id = $1", poolMarketID)
@@ -729,6 +730,26 @@ VALUES ($1, $2, $3, 'parimutuel', 'Chaos settle pool', '["Yes","No"]', 'active')
 	_ = noBetStatus
 	if yesBetStatus != "settled" {
 		t.Fatalf("yes bet status = %q, want settled", yesBetStatus)
+	}
+
+	// Settlement records one audit row per bet so the merchant payouts
+	// endpoint reflects winners and losers alike.
+	var payoutRows int
+	if err := fixture.database.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM settlement_payouts WHERE market_id = $1", poolMarketID).Scan(&payoutRows); err != nil {
+		t.Fatalf("count settlement payouts: %v", err)
+	}
+	if payoutRows != 2 {
+		t.Fatalf("settlement payout rows = %d, want 2 (winner and loser)", payoutRows)
+	}
+	var winnerPayout string
+	if err := fixture.database.QueryRowContext(ctx, `
+SELECT payout::text FROM settlement_payouts WHERE market_id = $1 AND order_id = $2`,
+		poolMarketID, yesBet.ID).Scan(&winnerPayout); err != nil {
+		t.Fatalf("query winner payout: %v", err)
+	}
+	if winnerPayout != "8.00" {
+		t.Fatalf("winner payout = %s, want 8.00", winnerPayout)
 	}
 
 	// Pool 8.00 with Yes winning: the Yes stake of 5.00 collects the whole

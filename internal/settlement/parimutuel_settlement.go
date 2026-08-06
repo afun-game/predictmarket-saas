@@ -161,19 +161,40 @@ func applyParimutuelBetSettlement(
 	settlementType string,
 	settledAt time.Time,
 ) error {
-	if payout.Sign() > 0 && bet.walletKind == "shadow" {
-		var walletID string
-		const walletQuery = `
+	walletKind := "user"
+	if bet.walletKind == "shadow" {
+		walletKind = "shadow"
+	}
+	var walletID string
+	const walletQuery = `
 SELECT id FROM wallets
-WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = 'shadow'
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = $4
 FOR UPDATE`
-		err := databaseTx.QueryRowContext(ctx, walletQuery, merchantID, bet.userID, currency).Scan(&walletID)
-		if errors.Is(err, sql.ErrNoRows) {
+	err := databaseTx.QueryRowContext(ctx, walletQuery, merchantID, bet.userID, currency, walletKind).Scan(&walletID)
+	if errors.Is(err, sql.ErrNoRows) {
+		if payout.Sign() > 0 {
 			return fmt.Errorf("%w: parimutuel bet %s", ErrOrderWalletNotFound, bet.id)
 		}
-		if err != nil {
-			return fmt.Errorf("lock parimutuel shadow bet wallet: %w", err)
+	} else if err != nil {
+		return fmt.Errorf("lock parimutuel bet wallet: %w", err)
+	}
+	// One audit row per settled bet, mirroring order-book settlement_payouts:
+	// winning and losing bets both appear so GET /api/v2/settlements/{id}/payouts
+	// reflects the whole settlement. order_id carries the bet ID (migration 033
+	// removed the orders FK for this reference).
+	if walletID != "" {
+		const payoutQuery = `
+INSERT INTO settlement_payouts (
+    market_id, order_id, wallet_id, currency, stake, payout, created_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7)`
+		if _, err := databaseTx.ExecContext(
+			ctx, payoutQuery, marketID, bet.id, walletID, currency,
+			formatCents(bet.stakeCents), formatCents(payout), settledAt,
+		); err != nil {
+			return fmt.Errorf("insert parimutuel settlement payout: %w", err)
 		}
+	}
+	if payout.Sign() > 0 && bet.walletKind == "shadow" {
 		reason := "payout"
 		if settlementType == "refund" {
 			reason = "refund_cancel"
@@ -185,18 +206,6 @@ FOR UPDATE`
 			return err
 		}
 	} else if payout.Sign() > 0 {
-		var walletID string
-		const walletQuery = `
-SELECT id FROM wallets
-WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = 'user'
-FOR UPDATE`
-		err := databaseTx.QueryRowContext(ctx, walletQuery, merchantID, bet.userID, currency).Scan(&walletID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: parimutuel bet %s", ErrOrderWalletNotFound, bet.id)
-		}
-		if err != nil {
-			return fmt.Errorf("lock parimutuel bet wallet: %w", err)
-		}
 		if _, err := databaseTx.ExecContext(
 			ctx,
 			"UPDATE wallets SET balance = balance + $2::numeric, updated_at = $3 WHERE id = $1",
