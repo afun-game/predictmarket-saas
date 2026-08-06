@@ -738,7 +738,12 @@ func validCurrency(currency string) bool {
 
 func validStatus(status string) bool {
 	switch status {
+	// Order statuses.
 	case "pending", "partial", "filled", "cancelled", "voided":
+		return true
+	// Bet statuses: /api/user/orders merges parimutuel stakes into the
+	// same history, so the filter must accept their statuses too.
+	case "active", "settled":
 		return true
 	default:
 		return false

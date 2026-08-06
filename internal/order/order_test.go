@@ -490,7 +490,7 @@ func TestListFiltersAcceptAllStoredStatuses(t *testing.T) {
 
 	// voided is written by market settlement; the list filter must accept
 	// every status that can exist in storage.
-	for _, status := range []string{"pending", "partial", "filled", "cancelled", "voided"} {
+	for _, status := range []string{"pending", "partial", "filled", "cancelled", "voided", "active", "settled"} {
 		normalized, err := normalizeFilters(&ListFilters{Status: status})
 		if err != nil {
 			t.Fatalf("normalizeFilters(status=%q) error = %v", status, err)
