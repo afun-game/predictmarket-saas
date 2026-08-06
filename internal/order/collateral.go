@@ -1,6 +1,11 @@
 package order
 
-import "github.com/afun-game/predictmarket-saas/pkg/fixed"
+import (
+	"math"
+
+	"github.com/afun-game/predictmarket-saas/pkg/fixed"
+	"github.com/afun-game/predictmarket-saas/pkg/types"
+)
 
 // requiredCollateral returns the currency collateral for an order's shares.
 // In the binary model, a sell order represents the complementary outcome.
@@ -33,4 +38,18 @@ func priceImprovementRefundCents(side string, shares, limitPrice, matchedPrice f
 		panic(err)
 	}
 	return cents
+}
+
+func enrichTrade(value *types.Trade) {
+	value.MakerTradeAmount = fixed.FormatCents(
+		requiredCollateralCents(value.MakerType, value.Shares, value.MatchedPrice),
+	)
+	value.TakerTradeAmount = fixed.FormatCents(
+		requiredCollateralCents(value.TakerType, value.Shares, value.MatchedPrice),
+	)
+	if value.MatchedPrice == 0 {
+		return
+	}
+	const oddsPrecision = 1_000_000
+	value.ImpliedDecimalOdds = math.Round(oddsPrecision/value.MatchedPrice) / oddsPrecision
 }

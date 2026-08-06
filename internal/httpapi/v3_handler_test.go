@@ -529,6 +529,43 @@ func TestV3HostedAndServerOrderAPIs(t *testing.T) {
 	if merchantTrades.Code != http.StatusOK {
 		t.Fatalf("v2 trades status = %d, body = %s", merchantTrades.Code, merchantTrades.Body.String())
 	}
+	crossingCreate := httptest.NewRequest(
+		http.MethodPost,
+		"/api/user/orders",
+		bytes.NewBufferString(`{"market_id":"`+marketID+`","type":"buy","option":"Yes","amount":5,"price":0.65}`),
+	)
+	crossingCreate.Header.Set("Authorization", "Bearer "+accessToken)
+	crossingCreate.Header.Set("Idempotency-Key", "hosted-order-002")
+	crossingRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(crossingRecorder, crossingCreate)
+	if crossingRecorder.Code != http.StatusCreated {
+		t.Fatalf("crossing hosted create status = %d, body = %s", crossingRecorder.Code, crossingRecorder.Body.String())
+	}
+	crossingOrder := struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}{}
+	if err := json.Unmarshal(crossingRecorder.Body.Bytes(), &crossingOrder); err != nil {
+		t.Fatalf("decode crossing hosted order: %v", err)
+	}
+	userTrades := v3Request(
+		t,
+		handler,
+		http.MethodGet,
+		"/api/user/orders/"+crossingOrder.Data.ID+"/trades?limit=500",
+		nil,
+		"Bearer "+accessToken,
+	)
+	if userTrades.Code != http.StatusOK {
+		t.Fatalf("hosted matched trades status = %d, body = %s", userTrades.Code, userTrades.Body.String())
+	}
+	assertEnrichedTradeResponse(t, userTrades.Body.Bytes(), "server-user", "hosted-user")
+	merchantTrades = signedV3Request(t, handler, http.MethodGet, "/api/v2/trades?limit=500", nil, "")
+	if merchantTrades.Code != http.StatusOK {
+		t.Fatalf("v2 matched trades status = %d, body = %s", merchantTrades.Code, merchantTrades.Body.String())
+	}
+	assertEnrichedTradeResponse(t, merchantTrades.Body.Bytes(), "server-user", "hosted-user")
 
 	foreignLaunch, _, err := manager.CreateLaunch(
 		context.Background(),
@@ -562,6 +599,27 @@ func TestV3HostedAndServerOrderAPIs(t *testing.T) {
 	handler.ServeHTTP(cancelRecorder, cancel)
 	if cancelRecorder.Code != http.StatusOK {
 		t.Fatalf("hosted cancel status = %d, body = %s", cancelRecorder.Code, cancelRecorder.Body.String())
+	}
+}
+
+func assertEnrichedTradeResponse(t *testing.T, body []byte, makerUserID, takerUserID string) {
+	t.Helper()
+	page := struct {
+		Data []*types.Trade `json:"data"`
+	}{}
+	if err := json.Unmarshal(body, &page); err != nil {
+		t.Fatalf("decode trade response: %v", err)
+	}
+	if len(page.Data) != 1 {
+		t.Fatalf("trades = %#v, want one execution", page.Data)
+	}
+	trade := page.Data[0]
+	validParticipants := trade.MakerUserID == makerUserID && trade.MakerType == "sell" &&
+		trade.TakerUserID == takerUserID && trade.TakerType == "buy"
+	validAmounts := trade.MakerTradeAmount == "2.00" && trade.TakerTradeAmount == "3.00"
+	if trade.Option != "Yes" || trade.Currency != "USD" || !validParticipants || !validAmounts ||
+		trade.ImpliedDecimalOdds != 1.666667 {
+		t.Errorf("enriched trade = %#v", trade)
 	}
 }
 

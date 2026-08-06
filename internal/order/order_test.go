@@ -50,6 +50,101 @@ func TestPriceTimePriorityMatching(t *testing.T) {
 	if ask.Option != "Yes" || ask.Price != 0.60 || ask.Amount != 20 || ask.Orders != 1 {
 		t.Errorf("ask level = %#v", ask)
 	}
+
+	trades, err := fixture.service.ListTrades(context.Background(), &TradeListFilters{
+		MerchantID: testMerchantID,
+		OrderID:    incoming.ID,
+		Limit:      10,
+	})
+	if err != nil {
+		t.Fatalf("ListTrades() error = %v", err)
+	}
+	if len(trades.Trades) != 2 {
+		t.Fatalf("trades = %#v, want two executions", trades.Trades)
+	}
+	assertTradeDetails(t, trades.Trades, tradeDetailsExpectation{
+		MakerUserID: "maker-best",
+		MakerAmount: "20.00",
+		TakerAmount: "20.00",
+		ImpliedOdds: 2,
+	})
+	assertTradeDetails(t, trades.Trades, tradeDetailsExpectation{
+		MakerUserID: "maker-first",
+		MakerAmount: "4.00",
+		TakerAmount: "6.00",
+		ImpliedOdds: 1.666667,
+	})
+}
+
+type tradeDetailsExpectation struct {
+	MakerUserID string
+	MakerAmount string
+	TakerAmount string
+	ImpliedOdds float64
+}
+
+func assertTradeDetails(
+	t *testing.T,
+	trades []*types.Trade,
+	want tradeDetailsExpectation,
+) {
+	t.Helper()
+	for _, trade := range trades {
+		if trade.MakerUserID != want.MakerUserID {
+			continue
+		}
+		validMarket := trade.Option == "Yes" && trade.Currency == "USD"
+		validParties := trade.MakerType == "sell" &&
+			trade.TakerUserID == "taker" && trade.TakerType == "buy"
+		validAmounts := trade.MakerTradeAmount == want.MakerAmount &&
+			trade.TakerTradeAmount == want.TakerAmount
+		if !validMarket || !validParties || !validAmounts ||
+			trade.ImpliedDecimalOdds != want.ImpliedOdds {
+			t.Errorf("trade details = %#v", trade)
+		}
+		return
+	}
+	t.Errorf("trade for maker %q not found in %#v", want.MakerUserID, trades)
+}
+
+func TestEnrichTradeComputesBothParticipantAmounts(t *testing.T) {
+	tests := []struct {
+		name        string
+		makerType   string
+		takerType   string
+		makerAmount string
+		takerAmount string
+	}{
+		{
+			name:        "maker buys selected option",
+			makerType:   "buy",
+			takerType:   "sell",
+			makerAmount: "6.00",
+			takerAmount: "4.00",
+		},
+		{
+			name:        "maker sells selected option",
+			makerType:   "sell",
+			takerType:   "buy",
+			makerAmount: "4.00",
+			takerAmount: "6.00",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			trade := &types.Trade{
+				MakerType:    test.makerType,
+				TakerType:    test.takerType,
+				Shares:       10,
+				MatchedPrice: 0.6,
+			}
+			enrichTrade(trade)
+			if trade.MakerTradeAmount != test.makerAmount ||
+				trade.TakerTradeAmount != test.takerAmount || trade.ImpliedDecimalOdds != 1.666667 {
+				t.Errorf("enriched trade = %#v", trade)
+			}
+		})
+	}
 }
 
 func TestSamePriceUsesCreationTime(t *testing.T) {

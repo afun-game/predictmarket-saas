@@ -744,6 +744,37 @@ GET /api/v2/settlements/{market_id}/payouts?cursor=&limit=100
 GET /api/v2/reports/daily?date=2026-07-30&currency=USD
 ```
 
+Each execution returned by `/api/v2/trades` and
+`/api/user/orders/{order_id}/trades` includes both participants without an
+additional order lookup:
+
+```json
+{
+  "id": "uuid",
+  "market_id": "uuid",
+  "option": "Yes",
+  "currency": "USD",
+  "maker_order_id": "uuid",
+  "maker_user_id": "seller-42",
+  "maker_type": "sell",
+  "maker_trade_amount": "4.00",
+  "taker_order_id": "uuid",
+  "taker_user_id": "buyer-17",
+  "taker_type": "buy",
+  "taker_trade_amount": "6.00",
+  "shares": 10,
+  "matched_price": 0.6,
+  "implied_decimal_odds": 1.666667,
+  "created_at": "2026-07-30T10:00:00Z"
+}
+```
+
+Trade amounts are exact two-decimal strings. A buy amount is
+`shares × matched_price`; because a binary sell covers the complementary
+outcome, its amount is `shares × (1 - matched_price)`. Both are rounded
+half-up to cents. `implied_decimal_odds` is `1 / matched_price`, rounded to six
+decimal places.
+
 `/api/v2/transactions` includes both platform wallet ledger rows and seamless
 callback transactions. Seamless rows use the platform `transaction_id` as the
 stable reconciliation key and expose the callback delivery status. Transaction,

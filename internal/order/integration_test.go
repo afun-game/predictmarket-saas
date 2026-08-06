@@ -51,6 +51,24 @@ func TestOrderPostgresIntegration(t *testing.T) {
 	fixture.assertBalance(t, "seller-two", 85, 15)
 	fixture.assertBalance(t, "buyer", 79, 21)
 	fixture.assertBalance(t, "ioc-buyer", 100, 0)
+	matchedTrades, err := fixture.service.ListTrades(ctx, &TradeListFilters{
+		MerchantID: fixture.merchantID,
+		OrderID:    incoming.ID,
+		Limit:      10,
+	})
+	if err != nil {
+		t.Fatalf("ListTrades(incoming order) error = %v", err)
+	}
+	if len(matchedTrades.Trades) != 2 {
+		t.Fatalf("incoming trades = %#v, want two executions", matchedTrades.Trades)
+	}
+	for _, trade := range matchedTrades.Trades {
+		if trade.Option != "Yes" || trade.Currency != "USD" || trade.MakerUserID == "" ||
+			trade.MakerType != "sell" || trade.TakerUserID != "buyer" || trade.TakerType != "buy" ||
+			trade.MakerTradeAmount == "" || trade.TakerTradeAmount == "" || trade.ImpliedDecimalOdds == 0 {
+			t.Errorf("incomplete enriched trade = %#v", trade)
+		}
+	}
 
 	book, err := fixture.service.GetOrderBook(ctx, fixture.marketID)
 	if err != nil {

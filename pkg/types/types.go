@@ -109,13 +109,22 @@ type Order struct {
 type Trade struct {
 	twill.AutoMarshal
 
-	ID           string    `json:"id"`
-	MarketID     string    `json:"market_id"`
-	MakerOrderID string    `json:"maker_order_id"`
-	TakerOrderID string    `json:"taker_order_id"`
-	Shares       float64   `json:"shares"`
-	MatchedPrice float64   `json:"matched_price"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID                 string    `json:"id"`
+	MarketID           string    `json:"market_id"`
+	Option             string    `json:"option"`
+	Currency           string    `json:"currency"`
+	MakerOrderID       string    `json:"maker_order_id"`
+	MakerUserID        string    `json:"maker_user_id"`
+	MakerType          string    `json:"maker_type"`
+	MakerTradeAmount   string    `json:"maker_trade_amount"`
+	TakerOrderID       string    `json:"taker_order_id"`
+	TakerUserID        string    `json:"taker_user_id"`
+	TakerType          string    `json:"taker_type"`
+	TakerTradeAmount   string    `json:"taker_trade_amount"`
+	Shares             float64   `json:"shares"`
+	MatchedPrice       float64   `json:"matched_price"`
+	ImpliedDecimalOdds float64   `json:"implied_decimal_odds"`
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 // Wallet represents a virtual credit wallet (Play Money)

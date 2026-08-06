@@ -457,9 +457,11 @@ func (r *postgresRepository) ListTrades(
 	}
 	const query = `
 SELECT t.id, t.market_id, t.maker_order_id, t.taker_order_id,
-       t.shares, t.matched_price, t.created_at
+       maker.user_id, maker.type, taker.user_id, taker.type,
+       maker.option, maker.currency, t.shares, t.matched_price, t.created_at
 FROM trades AS t
 JOIN orders AS maker ON maker.id = t.maker_order_id
+JOIN orders AS taker ON taker.id = t.taker_order_id
 WHERE ($1 = '' OR maker.merchant_id = $1::uuid)
   AND ($2 = '' OR t.maker_order_id = $2::uuid OR t.taker_order_id = $2::uuid)
   AND ($3::timestamp IS NULL OR t.created_at >= $3)
@@ -728,6 +730,12 @@ func scanTrade(row rowScanner) (*types.Trade, error) {
 		&value.MarketID,
 		&value.MakerOrderID,
 		&value.TakerOrderID,
+		&value.MakerUserID,
+		&value.MakerType,
+		&value.TakerUserID,
+		&value.TakerType,
+		&value.Option,
+		&value.Currency,
 		&value.Shares,
 		&value.MatchedPrice,
 		&value.CreatedAt,
@@ -736,6 +744,7 @@ func scanTrade(row rowScanner) (*types.Trade, error) {
 	}
 	value.Shares = fixed.SharesToFloat(storedShareUnits(value.Shares))
 	value.MatchedPrice = fixed.PriceToFloat(storedPriceUnits(value.MatchedPrice))
+	enrichTrade(value)
 	return value, nil
 }
 

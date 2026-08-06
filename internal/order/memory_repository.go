@@ -9,11 +9,13 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/pkg/fixed"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
+	"github.com/google/uuid"
 )
 
 type memoryRepository struct {
-	mu   sync.RWMutex
-	byID map[string]*types.Order
+	mu     sync.RWMutex
+	byID   map[string]*types.Order
+	trades []*types.Trade
 }
 
 type bookLevelKey struct {
@@ -22,7 +24,10 @@ type bookLevelKey struct {
 }
 
 func newMemoryRepository() *memoryRepository {
-	return &memoryRepository{byID: map[string]*types.Order{}}
+	return &memoryRepository{
+		byID:   map[string]*types.Order{},
+		trades: []*types.Trade{},
+	}
 }
 
 func (r *memoryRepository) Place(ctx context.Context, incoming *types.Order) (float64, error) {
@@ -59,6 +64,23 @@ func (r *memoryRepository) Place(ctx context.Context, incoming *types.Order) (fl
 			stored.Price,
 			maker.Price,
 		)
+		trade := &types.Trade{
+			ID:           uuid.NewString(),
+			MarketID:     stored.MarketID,
+			Option:       stored.Option,
+			Currency:     stored.Currency,
+			MakerOrderID: maker.ID,
+			MakerUserID:  maker.UserID,
+			MakerType:    maker.Type,
+			TakerOrderID: stored.ID,
+			TakerUserID:  stored.UserID,
+			TakerType:    stored.Type,
+			Shares:       fixed.SharesToFloat(fillAmount),
+			MatchedPrice: maker.Price,
+			CreatedAt:    stored.CreatedAt,
+		}
+		enrichTrade(trade)
+		r.trades = append(r.trades, trade)
 		maker.FilledAmount = fixed.SharesToFloat(storedShareUnits(maker.FilledAmount) + fillAmount)
 		stored.FilledAmount = fixed.SharesToFloat(storedShareUnits(stored.FilledAmount) + fillAmount)
 		updateOrderFillStatus(maker, stored.CreatedAt)
@@ -168,13 +190,48 @@ func (r *memoryRepository) ListAfter(
 
 func (r *memoryRepository) ListTrades(
 	ctx context.Context,
-	_ TradeListFilters,
-	_ *Cursor,
+	filters TradeListFilters,
+	cursor *Cursor,
 ) ([]*types.Trade, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return []*types.Trade{}, nil
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	values := make([]*types.Trade, 0, filters.Limit+1)
+	for _, value := range r.trades {
+		maker := r.byID[value.MakerOrderID]
+		matchesMerchant := filters.MerchantID == "" || maker.MerchantID == filters.MerchantID
+		matchesOrder := filters.OrderID == "" ||
+			value.MakerOrderID == filters.OrderID || value.TakerOrderID == filters.OrderID
+		matchesFrom := filters.From == nil || !value.CreatedAt.Before(*filters.From)
+		matchesTo := filters.To == nil || !value.CreatedAt.After(*filters.To)
+		if !matchesMerchant || !matchesOrder || !matchesFrom || !matchesTo || !tradeAfterCursor(value, cursor) {
+			continue
+		}
+		values = append(values, cloneTrade(value))
+	}
+	sort.Slice(values, func(i, j int) bool {
+		if values[i].CreatedAt.Equal(values[j].CreatedAt) {
+			return values[i].ID > values[j].ID
+		}
+		return values[i].CreatedAt.After(values[j].CreatedAt)
+	})
+	if len(values) > filters.Limit+1 {
+		values = values[:filters.Limit+1]
+	}
+	return values, nil
+}
+
+func tradeAfterCursor(value *types.Trade, cursor *Cursor) bool {
+	if cursor == nil {
+		return true
+	}
+	if value.CreatedAt.Equal(cursor.CreatedAt) {
+		return value.ID < cursor.ID
+	}
+	return value.CreatedAt.Before(cursor.CreatedAt)
 }
 
 func afterCursor(value *types.Order, cursor *Cursor) bool {
@@ -329,5 +386,13 @@ func cloneOrder(value *types.Order) *types.Order {
 		filledAt := *value.FilledAt
 		clone.FilledAt = &filledAt
 	}
+	return &clone
+}
+
+func cloneTrade(value *types.Trade) *types.Trade {
+	if value == nil {
+		return nil
+	}
+	clone := *value
 	return &clone
 }

@@ -426,13 +426,22 @@ var _ codegen.AutoMarshal = (*Trade)(nil)
 
 type __is_Trade[T ~struct {
 	twill.AutoMarshal
-	ID           string    "json:\"id\""
-	MarketID     string    "json:\"market_id\""
-	MakerOrderID string    "json:\"maker_order_id\""
-	TakerOrderID string    "json:\"taker_order_id\""
-	Shares       float64   "json:\"shares\""
-	MatchedPrice float64   "json:\"matched_price\""
-	CreatedAt    time.Time "json:\"created_at\""
+	ID                 string    "json:\"id\""
+	MarketID           string    "json:\"market_id\""
+	Option             string    "json:\"option\""
+	Currency           string    "json:\"currency\""
+	MakerOrderID       string    "json:\"maker_order_id\""
+	MakerUserID        string    "json:\"maker_user_id\""
+	MakerType          string    "json:\"maker_type\""
+	MakerTradeAmount   string    "json:\"maker_trade_amount\""
+	TakerOrderID       string    "json:\"taker_order_id\""
+	TakerUserID        string    "json:\"taker_user_id\""
+	TakerType          string    "json:\"taker_type\""
+	TakerTradeAmount   string    "json:\"taker_trade_amount\""
+	Shares             float64   "json:\"shares\""
+	MatchedPrice       float64   "json:\"matched_price\""
+	ImpliedDecimalOdds float64   "json:\"implied_decimal_odds\""
+	CreatedAt          time.Time "json:\"created_at\""
 }] struct{}
 
 var _ __is_Trade[Trade]
@@ -443,10 +452,19 @@ func (x *Trade) WeaverMarshal(enc *codegen.Encoder) {
 	}
 	enc.String(x.ID)
 	enc.String(x.MarketID)
+	enc.String(x.Option)
+	enc.String(x.Currency)
 	enc.String(x.MakerOrderID)
+	enc.String(x.MakerUserID)
+	enc.String(x.MakerType)
+	enc.String(x.MakerTradeAmount)
 	enc.String(x.TakerOrderID)
+	enc.String(x.TakerUserID)
+	enc.String(x.TakerType)
+	enc.String(x.TakerTradeAmount)
 	enc.Float64(x.Shares)
 	enc.Float64(x.MatchedPrice)
+	enc.Float64(x.ImpliedDecimalOdds)
 	enc.EncodeBinaryMarshaler(&x.CreatedAt)
 }
 
@@ -456,10 +474,19 @@ func (x *Trade) WeaverUnmarshal(dec *codegen.Decoder) {
 	}
 	x.ID = dec.String()
 	x.MarketID = dec.String()
+	x.Option = dec.String()
+	x.Currency = dec.String()
 	x.MakerOrderID = dec.String()
+	x.MakerUserID = dec.String()
+	x.MakerType = dec.String()
+	x.MakerTradeAmount = dec.String()
 	x.TakerOrderID = dec.String()
+	x.TakerUserID = dec.String()
+	x.TakerType = dec.String()
+	x.TakerTradeAmount = dec.String()
 	x.Shares = dec.Float64()
 	x.MatchedPrice = dec.Float64()
+	x.ImpliedDecimalOdds = dec.Float64()
 	dec.DecodeBinaryUnmarshaler(&x.CreatedAt)
 }
 
