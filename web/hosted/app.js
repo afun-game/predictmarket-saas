@@ -694,7 +694,7 @@ function normalizeMarket(value) {
   return {
     ...value,
     eventId: value.event_id,
-    categoryId: event?.category,
+    categoryId: value.category || event?.category,
     eventTitle: event?.title,
     resolutionTime: event?.resolution_time,
     outcomes: (value.options ?? []).map((label) => ({ label, price: null })),

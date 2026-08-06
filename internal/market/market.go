@@ -21,6 +21,7 @@ const (
 	defaultSort            = "latest"
 	maxLimit               = 100
 	maxPage                = 1000
+	maxCategoryLength      = 100
 	defaultMerchantFeeRate = 0.0
 	defaultPlatformFeeRate = 0.0
 )
@@ -48,6 +49,7 @@ type CreateRequest struct {
 	MerchantID    string   `json:"merchant_id"`
 	EventID       string   `json:"event_id"`
 	Type          string   `json:"type"`
+	Category      string   `json:"category,omitempty"`
 	Question      string   `json:"question"`
 	Options       []string `json:"options"`
 	LiquidityPool float64  `json:"liquidity_pool"`
@@ -58,6 +60,7 @@ type ListFilters struct {
 
 	MerchantID string `json:"merchant_id,omitempty"`
 	EventID    string `json:"event_id,omitempty"`
+	Category   string `json:"category,omitempty"`
 	Status     string `json:"status,omitempty"`
 	Sort       string `json:"sort,omitempty"`
 	Page       int    `json:"page,omitempty"`
@@ -138,8 +141,14 @@ func (s *implementation) Create(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repository.ValidateReferences(ctx, input.MerchantID, input.EventID); err != nil {
+	eventCategory, err := s.repository.ValidateReferences(ctx, input.MerchantID, input.EventID)
+	if err != nil {
 		return nil, fmt.Errorf("validate market references: %w", err)
+	}
+	// A market without its own category inherits the event's, so list pages
+	// can render market categories without joining events.
+	if input.Category == "" {
+		input.Category = eventCategory
 	}
 
 	marketID, err := generateMarketID(s.random)
@@ -151,6 +160,7 @@ func (s *implementation) Create(
 		MerchantID:      input.MerchantID,
 		EventID:         input.EventID,
 		Type:            input.Type,
+		Category:        input.Category,
 		Question:        input.Question,
 		Options:         append([]string{}, input.Options...),
 		Status:          "active",
@@ -259,8 +269,12 @@ func validateCreateRequest(req *CreateRequest) (*CreateRequest, error) {
 	input.MerchantID = strings.TrimSpace(input.MerchantID)
 	input.EventID = strings.TrimSpace(input.EventID)
 	input.Type = strings.ToLower(strings.TrimSpace(input.Type))
+	input.Category = strings.ToLower(strings.TrimSpace(input.Category))
 	input.Question = strings.TrimSpace(input.Question)
 	input.Options = normalizeOptions(input.Options)
+	if len(input.Category) > maxCategoryLength {
+		return nil, &ValidationError{Field: "category", Message: "is too long"}
+	}
 	if !isUUID(input.MerchantID) {
 		return nil, &ValidationError{Field: "merchant_id", Message: "must be a UUID"}
 	}
@@ -289,6 +303,7 @@ func normalizeFilters(filters *ListFilters) (ListFilters, error) {
 	}
 	value.MerchantID = strings.TrimSpace(value.MerchantID)
 	value.EventID = strings.TrimSpace(value.EventID)
+	value.Category = strings.ToLower(strings.TrimSpace(value.Category))
 	value.Status = strings.ToLower(strings.TrimSpace(value.Status))
 	value.Sort = strings.ToLower(strings.TrimSpace(value.Sort))
 	if value.MerchantID != "" && !isUUID(value.MerchantID) {

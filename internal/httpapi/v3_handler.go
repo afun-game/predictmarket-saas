@@ -116,6 +116,7 @@ type v3UserMarket struct {
 	ID          string     `json:"id"`
 	EventID     string     `json:"event_id"`
 	Type        string     `json:"type"`
+	Category    string     `json:"category"`
 	Question    string     `json:"question"`
 	Options     []string   `json:"options"`
 	Status      string     `json:"status"`
@@ -1463,6 +1464,7 @@ func (h *v3Handler) listMarkets(w http.ResponseWriter, r *http.Request) {
 	values, total, err := h.markets.List(r.Context(), &market.ListFilters{
 		MerchantID: browserSession.MerchantID,
 		EventID:    r.URL.Query().Get("event_id"),
+		Category:   r.URL.Query().Get("category"),
 		Status:     r.URL.Query().Get("status"),
 		Page:       page,
 		Limit:      limit,
@@ -1704,6 +1706,7 @@ func userMarketFrom(value *types.Market, pool map[string]any, book []v2query.Boo
 		ID:          value.ID,
 		EventID:     value.EventID,
 		Type:        value.Type,
+		Category:    value.Category,
 		Question:    value.Question,
 		Options:     append([]string{}, value.Options...),
 		Status:      value.Status,

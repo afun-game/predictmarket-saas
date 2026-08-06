@@ -607,6 +607,7 @@ type MarketRow struct {
 	MerchantID    string     `json:"merchant_id"`
 	EventID       string     `json:"event_id"`
 	Type          string     `json:"type"`
+	Category      string     `json:"category"`
 	Question      string     `json:"question"`
 	Options       []string   `json:"options"`
 	Status        string     `json:"status"`
@@ -632,7 +633,7 @@ WHERE ($1 = '' OR m.merchant_id::text = $1)
   AND ($3 = '' OR m.status = $3)
   AND ($4 = '' OR m.question ILIKE '%' || $4 || '%')`
 	const selectQuery = `
-SELECT m.id, m.merchant_id, m.event_id, m.type, m.question, m.options,
+SELECT m.id, m.merchant_id, m.event_id, m.type, m.category, m.question, m.options,
        m.status, m.total_volume, m.liquidity_pool, m.created_at, m.settled_at
 FROM markets m` + where + `
 ORDER BY m.created_at DESC
@@ -647,7 +648,7 @@ LIMIT $5 OFFSET $6`
 		item := MarketRow{}
 		var options []byte
 		if err := rows.Scan(
-			&item.ID, &item.MerchantID, &item.EventID, &item.Type, &item.Question,
+			&item.ID, &item.MerchantID, &item.EventID, &item.Type, &item.Category, &item.Question,
 			&options, &item.Status, &item.TotalVolume, &item.LiquidityPool,
 			&item.CreatedAt, &item.SettledAt,
 		); err != nil {

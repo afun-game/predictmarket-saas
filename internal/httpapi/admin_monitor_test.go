@@ -485,7 +485,7 @@ WHERE ($1 = '' OR m.merchant_id::text = $1)
   AND ($3 = '' OR m.status = $3)
   AND ($4 = '' OR m.question ILIKE '%' || $4 || '%')`
 	marketsSelect = `
-SELECT m.id, m.merchant_id, m.event_id, m.type, m.question, m.options,
+SELECT m.id, m.merchant_id, m.event_id, m.type, m.category, m.question, m.options,
        m.status, m.total_volume, m.liquidity_pool, m.created_at, m.settled_at
 FROM markets m` + marketsWhere + `
 ORDER BY m.created_at DESC
@@ -812,9 +812,9 @@ func TestAdminListMarketsFilters(t *testing.T) {
 	now := time.Now().UTC()
 	mock.ExpectQuery(marketsSelect).WithArgs("m-1", "ev-1", "active", "rain", 20, 0).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "merchant_id", "event_id", "type", "question", "options",
+			"id", "merchant_id", "event_id", "type", "category", "question", "options",
 			"status", "total_volume", "liquidity_pool", "created_at", "settled_at",
-		}).AddRow("mk-1", "m-1", "ev-1", "binary", "Will it rain?",
+		}).AddRow("mk-1", "m-1", "ev-1", "binary", "sports", "Will it rain?",
 			[]byte(`["Yes","No"]`), "active", 500.0, 1000.0, now, nil))
 	mock.ExpectQuery("SELECT COUNT(*) FROM markets m "+marketsWhere).
 		WithArgs("m-1", "ev-1", "active", "rain").

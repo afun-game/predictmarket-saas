@@ -95,6 +95,44 @@ func TestCreateRejectsExpiredEvent(t *testing.T) {
 	}
 }
 
+func TestCreateInheritsEventCategory(t *testing.T) {
+	t.Parallel()
+
+	service := newService(&categorizedEventRepository{Repository: newMemoryRepository()})
+	created, err := service.Create(context.Background(), validCreateRequest())
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if created.Category != "sports" {
+		t.Fatalf("Category = %q, want inherited sports", created.Category)
+	}
+}
+
+func TestCreateCategoryExplicitOverridesInheritance(t *testing.T) {
+	t.Parallel()
+
+	service := newService(&categorizedEventRepository{Repository: newMemoryRepository()})
+	request := validCreateRequest()
+	request.Category = "eSports"
+	created, err := service.Create(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if created.Category != "esports" {
+		t.Fatalf("Category = %q, want lowercased esports", created.Category)
+	}
+}
+
+func TestCreateRejectsOverlongCategory(t *testing.T) {
+	t.Parallel()
+
+	request := validCreateRequest()
+	request.Category = string(make([]byte, maxCategoryLength+1))
+	if _, err := validateCreateRequest(request); err == nil {
+		t.Fatal("validateCreateRequest() accepted an overlong category")
+	}
+}
+
 func TestListFiltersAndPagination(t *testing.T) {
 	service := newService(newMemoryRepository())
 	first := createMarket(t, service, validCreateRequest())
@@ -244,16 +282,24 @@ type invalidReferenceRepository struct {
 	Repository
 }
 
-func (r *invalidReferenceRepository) ValidateReferences(context.Context, string, string) error {
-	return ErrInvalidReference
+func (r *invalidReferenceRepository) ValidateReferences(context.Context, string, string) (string, error) {
+	return "", ErrInvalidReference
 }
 
 type expiredEventRepository struct {
 	Repository
 }
 
-func (r *expiredEventRepository) ValidateReferences(context.Context, string, string) error {
-	return ErrEventExpired
+func (r *expiredEventRepository) ValidateReferences(context.Context, string, string) (string, error) {
+	return "", ErrEventExpired
+}
+
+type categorizedEventRepository struct {
+	Repository
+}
+
+func (r *categorizedEventRepository) ValidateReferences(context.Context, string, string) (string, error) {
+	return "sports", nil
 }
 
 func validCreateRequest() *CreateRequest {

@@ -69,6 +69,7 @@ type Market struct {
 	MerchantID    string   `json:"merchant_id"`
 	EventID       string   `json:"event_id"`
 	Type          string   `json:"type"` // binary
+	Category      string   `json:"category"`
 	Question      string   `json:"question"`
 	Options       []string `json:"options"`
 	Status        string   `json:"status"` // active, suspended, closed, settled

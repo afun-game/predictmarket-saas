@@ -96,6 +96,7 @@ func (h *marketHandler) list(w http.ResponseWriter, r *http.Request) {
 	filters := &market.ListFilters{
 		MerchantID: authenticated.ID,
 		EventID:    r.URL.Query().Get("event_id"),
+		Category:   r.URL.Query().Get("category"),
 		Status:     r.URL.Query().Get("status"),
 		Sort:       r.URL.Query().Get("sort"),
 		Page:       page,

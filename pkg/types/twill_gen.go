@@ -167,6 +167,7 @@ type __is_Market[T ~struct {
 	MerchantID      string     "json:\"merchant_id\""
 	EventID         string     "json:\"event_id\""
 	Type            string     "json:\"type\""
+	Category        string     "json:\"category\""
 	Question        string     "json:\"question\""
 	Options         []string   "json:\"options\""
 	Status          string     "json:\"status\""
@@ -188,6 +189,7 @@ func (x *Market) WeaverMarshal(enc *codegen.Encoder) {
 	enc.String(x.MerchantID)
 	enc.String(x.EventID)
 	enc.String(x.Type)
+	enc.String(x.Category)
 	enc.String(x.Question)
 	servicetwill_enc_slice_string_4af10117(enc, x.Options)
 	enc.String(x.Status)
@@ -207,6 +209,7 @@ func (x *Market) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.MerchantID = dec.String()
 	x.EventID = dec.String()
 	x.Type = dec.String()
+	x.Category = dec.String()
 	x.Question = dec.String()
 	x.Options = servicetwill_dec_slice_string_4af10117(dec)
 	x.Status = dec.String()

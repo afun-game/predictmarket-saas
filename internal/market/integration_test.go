@@ -51,6 +51,9 @@ func TestMarketPostgresIntegration(t *testing.T) {
 			stored.PlatformFeeRate,
 		)
 	}
+	if stored.Category != "integration" {
+		t.Errorf("stored category = %q, want inherited event category integration", stored.Category)
+	}
 	values, total, err := fixture.service.List(ctx, &ListFilters{
 		MerchantID: fixture.merchantID,
 		EventID:    fixture.eventID,
@@ -131,6 +134,31 @@ func TestMarketPostgresIntegration(t *testing.T) {
 	}
 	if closed.Status != "closed" || closed.SettledAt != nil {
 		t.Errorf("closed market = %#v", closed)
+	}
+
+	categorized, err := fixture.service.Create(ctx, &CreateRequest{
+		MerchantID: fixture.merchantID,
+		EventID:    fixture.eventID,
+		Type:       "binary",
+		Category:   "Crypto",
+		Question:   "Will category filtering work?",
+		Options:    []string{"Yes", "No"},
+	})
+	if err != nil {
+		t.Fatalf("Create(categorized) error = %v", err)
+	}
+	if categorized.Category != "crypto" {
+		t.Errorf("explicit category = %q, want lowercased crypto", categorized.Category)
+	}
+	catValues, catTotal, err := fixture.service.List(ctx, &ListFilters{
+		MerchantID: fixture.merchantID,
+		Category:   "crypto",
+	})
+	if err != nil {
+		t.Fatalf("List(category) error = %v", err)
+	}
+	if catTotal != 1 || len(catValues) != 1 || catValues[0].ID != categorized.ID {
+		t.Errorf("List(category=crypto) = %#v, total = %d", catValues, catTotal)
 	}
 
 	fixture.assertInactiveReferenceRejected(t, ctx)

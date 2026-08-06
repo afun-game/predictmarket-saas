@@ -18,8 +18,10 @@ func newMemoryRepository() *memoryRepository {
 	return &memoryRepository{byID: map[string]*types.Market{}}
 }
 
-func (r *memoryRepository) ValidateReferences(ctx context.Context, _, _ string) error {
-	return ctx.Err()
+func (r *memoryRepository) ValidateReferences(ctx context.Context, _, _ string) (string, error) {
+	// The in-memory repository has no events; callers set the category
+	// explicitly in tests.
+	return "", ctx.Err()
 }
 
 func (r *memoryRepository) Create(ctx context.Context, value *types.Market) error {
@@ -64,8 +66,9 @@ func (r *memoryRepository) List(
 	for _, value := range r.byID {
 		matchesMerchant := filters.MerchantID == "" || value.MerchantID == filters.MerchantID
 		matchesEvent := filters.EventID == "" || value.EventID == filters.EventID
+		matchesCategory := filters.Category == "" || value.Category == filters.Category
 		matchesStatus := filters.Status == "" || value.Status == filters.Status
-		if matchesMerchant && matchesEvent && matchesStatus {
+		if matchesMerchant && matchesEvent && matchesCategory && matchesStatus {
 			values = append(values, cloneMarket(value))
 		}
 	}

@@ -828,6 +828,7 @@ async function marketsPage() {
     <tr class="clickable" data-nav="#/markets/${escapeHTML(item.id)}">
       <td class="td-strong">${escapeHTML(item.question)}</td>
       <td>${marketTypeBadge(item.type)}</td>
+      <td>${categoryLabel(item.category)}</td>
       <td class="td-mono">${escapeHTML(item.merchant_id)}</td>
       <td class="td-mono">${escapeHTML(item.event_id)}</td>
       <td>${statusBadge(item.status)}</td>
@@ -843,6 +844,7 @@ async function marketsPage() {
         <div class="field"><label>商户 *</label><select class="input" name="merchant_id" required><option value="">请选择商户</option>${merchantOptions}</select></div>
         <div class="field"><label>事件 ID *</label><input class="input" name="event_id" required></div>
         <div class="field"><label>类型 *</label><select class="input" name="type"><option value="binary" selected>订单簿</option><option value="parimutuel">奖池</option></select></div>
+        <div class="field"><label>分类</label><select class="input" name="category">${categoryOptions("")}</select></div>
         <div class="field" data-liquidity-field><label>初始流动性</label><input class="input" name="liquidity_pool" type="number" min="0" step="any"></div>
         <div class="field" data-liquidity-hint hidden><label>初始流动性</label><p class="field-hint">奖池市场无需初始流动性</p></div>
         <div class="field field--span2"><label>问题 *</label><input class="input" name="question" placeholder="例如：BTC 将在 7 月收于 6 万美元以上吗？" required></div>
@@ -862,7 +864,7 @@ async function marketsPage() {
       </form>
       <div class="section-heading list-heading"><h2>市场列表</h2><button class="btn btn--primary" type="button" data-action="toggle-create-market">${view.showCreateMarket ? "收起表单" : "新建市场"}</button></div>
       ${createForm}
-      ${tableCard(["问题", "类型", "商户", "事件", "状态", "交易量", "流动性"], rows, "暂无市场", 7)}
+      ${tableCard(["问题", "类型", "分类", "商户", "事件", "状态", "交易量", "流动性"], rows, "暂无市场", 8)}
       ${paginationBar(data.total, view.page)}
     </section>`;
 }
@@ -890,6 +892,7 @@ async function marketDetailPage(id) {
     ["商户 ID", escapeHTML(market.merchant_id ?? "—")],
     ["事件 ID", escapeHTML(market.event_id ?? "—")],
     ["类型", marketTypeBadge(market.type)],
+    ["分类", categoryLabel(market.category)],
     ["选项", escapeHTML(options)],
     ["状态", statusBadge(market.status)],
     ["交易量", formatMoney(market.total_volume)],
@@ -1490,6 +1493,8 @@ async function createMarket(form) {
     return;
   }
   const body = { event_id: eventId, merchant_id: merchantId, type, question, options };
+  const category = String(data.get("category") ?? "").trim();
+  if (category) body.category = category;
   if (type === "parimutuel") {
     body.liquidity_pool = 0;
   } else if (pool) {

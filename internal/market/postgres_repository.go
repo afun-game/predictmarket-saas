@@ -16,6 +16,7 @@ const marketColumns = `
     merchant_id,
     event_id,
     type,
+    category,
     question,
     options,
     status,
@@ -38,7 +39,7 @@ func (r *postgresRepository) ValidateReferences(
 	ctx context.Context,
 	merchantID string,
 	eventID string,
-) error {
+) (string, error) {
 	const query = `
 SELECT EXISTS (
            SELECT 1 FROM merchants WHERE id = $1 AND status = 'active'
@@ -48,25 +49,28 @@ SELECT EXISTS (
        ),
        EXISTS (
            SELECT 1 FROM events WHERE id = $2 AND resolution_time > now()
-       )`
+       ),
+       COALESCE((SELECT category FROM events WHERE id = $2), '')`
 
 	var merchantActive bool
 	var eventActive bool
 	var eventNotExpired bool
+	var eventCategory string
 	if err := r.database.QueryRowContext(ctx, query, merchantID, eventID).Scan(
 		&merchantActive,
 		&eventActive,
 		&eventNotExpired,
+		&eventCategory,
 	); err != nil {
-		return fmt.Errorf("query market references: %w", err)
+		return "", fmt.Errorf("query market references: %w", err)
 	}
 	if !merchantActive || !eventActive {
-		return ErrInvalidReference
+		return "", ErrInvalidReference
 	}
 	if !eventNotExpired {
-		return ErrEventExpired
+		return "", ErrEventExpired
 	}
-	return nil
+	return eventCategory, nil
 }
 
 func (r *postgresRepository) Create(ctx context.Context, value *types.Market) error {
@@ -80,6 +84,7 @@ INSERT INTO markets (
     merchant_id,
     event_id,
     type,
+    category,
     question,
     options,
     status,
@@ -89,7 +94,7 @@ INSERT INTO markets (
     platform_fee_rate,
     created_at,
     settled_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
 
 	_, err = r.database.ExecContext(
 		ctx,
@@ -98,6 +103,7 @@ INSERT INTO markets (
 		value.MerchantID,
 		value.EventID,
 		value.Type,
+		value.Category,
 		value.Question,
 		options,
 		value.Status,
@@ -134,7 +140,8 @@ SELECT COUNT(*)
 FROM markets
 WHERE ($1 = '' OR merchant_id = NULLIF($1, '')::uuid)
   AND ($2 = '' OR event_id = NULLIF($2, '')::uuid)
-  AND ($3 = '' OR status = $3)`
+  AND ($3 = '' OR category = $3)
+  AND ($4 = '' OR status = $4)`
 
 	var total int
 	err := r.database.QueryRowContext(
@@ -142,6 +149,7 @@ WHERE ($1 = '' OR merchant_id = NULLIF($1, '')::uuid)
 		countQuery,
 		filters.MerchantID,
 		filters.EventID,
+		filters.Category,
 		filters.Status,
 	).Scan(&total)
 	if err != nil {
@@ -156,15 +164,17 @@ WHERE ($1 = '' OR merchant_id = NULLIF($1, '')::uuid)
 FROM markets
 WHERE ($1 = '' OR merchant_id = NULLIF($1, '')::uuid)
   AND ($2 = '' OR event_id = NULLIF($2, '')::uuid)
-  AND ($3 = '' OR status = $3)
+  AND ($3 = '' OR category = $3)
+  AND ($4 = '' OR status = $4)
 ORDER BY ` + orderBy + `
-LIMIT $4 OFFSET $5`
+LIMIT $5 OFFSET $6`
 	offset := (filters.Page - 1) * filters.Limit
 	rows, err := r.database.QueryContext(
 		ctx,
 		query,
 		filters.MerchantID,
 		filters.EventID,
+		filters.Category,
 		filters.Status,
 		filters.Limit,
 		offset,
@@ -239,6 +249,7 @@ func scanMarket(row rowScanner) (*types.Market, error) {
 		&value.MerchantID,
 		&value.EventID,
 		&value.Type,
+		&value.Category,
 		&value.Question,
 		&options,
 		&value.Status,
