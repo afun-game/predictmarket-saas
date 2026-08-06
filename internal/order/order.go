@@ -738,7 +738,7 @@ func validCurrency(currency string) bool {
 
 func validStatus(status string) bool {
 	switch status {
-	case "pending", "partial", "filled", "cancelled":
+	case "pending", "partial", "filled", "cancelled", "voided":
 		return true
 	default:
 		return false

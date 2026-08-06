@@ -484,3 +484,22 @@ func (f *orderFixture) getOrder(t *testing.T, orderID string) *types.Order {
 	}
 	return value
 }
+
+func TestListFiltersAcceptAllStoredStatuses(t *testing.T) {
+	t.Parallel()
+
+	// voided is written by market settlement; the list filter must accept
+	// every status that can exist in storage.
+	for _, status := range []string{"pending", "partial", "filled", "cancelled", "voided"} {
+		normalized, err := normalizeFilters(&ListFilters{Status: status})
+		if err != nil {
+			t.Fatalf("normalizeFilters(status=%q) error = %v", status, err)
+		}
+		if normalized.Status != status {
+			t.Errorf("normalizeFilters(status=%q) = %q", status, normalized.Status)
+		}
+	}
+	if _, err := normalizeFilters(&ListFilters{Status: "unknown"}); err == nil {
+		t.Fatal("normalizeFilters accepted an unknown status")
+	}
+}
