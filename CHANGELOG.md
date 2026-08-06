@@ -165,6 +165,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   拒绝奖池结算 credit 携带注单 ID，导致结算 5 次重试后进死信；迁移 020
   移除该外键（与 019 同理由），并新增 seamless 奖池结算端到端测试
   （TestSeamlessChaosSettleParimutuelPaysShadowBets）。
+- 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
+  不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
+  接口的 `total_volume` 恢复真实投注量。
 
 ### Security
 - Merchant API keys are bcrypt-hashed and located by a non-secret prefix
