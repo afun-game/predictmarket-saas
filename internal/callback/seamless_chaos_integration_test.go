@@ -642,3 +642,113 @@ UPDATE callback_outbox SET status = 'pending', next_attempt_at = NOW() WHERE id 
 		t.Fatalf("sim balance after duplicate credit = %d, want 10000", balance)
 	}
 }
+
+// TestSeamlessChaosSettleParimutuelPaysShadowBets pins the full seamless
+// parimutuel settlement: bets mirror into shadow wallets, the pool splits
+// among winning bets, and the payout reaches the merchant through a credit
+// callback whose ref carries the bet ID (parimutuel bets never reference
+// orders, so the outbox row must not be gated by the orders FK).
+func TestSeamlessChaosSettleParimutuelPaysShadowBets(t *testing.T) {
+	fixture := newChaosFixture(t, merchantsim.Options{})
+	ctx := context.Background()
+	poolMarketID := integrationUUID(t)
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO markets (id, merchant_id, event_id, type, question, options, status)
+VALUES ($1, $2, $3, 'parimutuel', 'Chaos settle pool', '["Yes","No"]', 'active')`,
+		poolMarketID, fixture.merchantID, fixture.eventID); err != nil {
+		t.Fatalf("insert parimutuel market: %v", err)
+	}
+	defer func() {
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM parimutuel_bets WHERE market_id = $1", poolMarketID)
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM parimutuel_pools WHERE market_id = $1", poolMarketID)
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM market_settlements WHERE market_id = $1", poolMarketID)
+		_, _ = fixture.database.ExecContext(context.Background(), "DELETE FROM markets WHERE id = $1", poolMarketID)
+	}()
+	if _, err := fixture.database.ExecContext(ctx,
+		"INSERT INTO parimutuel_pools (market_id, currency) VALUES ($1, 'USD') ON CONFLICT (market_id) DO NOTHING",
+		poolMarketID); err != nil {
+		t.Fatalf("seed parimutuel pool: %v", err)
+	}
+	// Bets require an active event; settlement requires it resolved with an outcome.
+	if _, err := fixture.database.ExecContext(ctx,
+		"UPDATE events SET status = 'active', outcome = NULL WHERE id = $1", fixture.eventID); err != nil {
+		t.Fatalf("activate fixture event: %v", err)
+	}
+
+	yesBet, _, err := fixture.coordinator.PlaceBetWithBalance(ctx, parimutuel.Bet{
+		MarketID: poolMarketID, MerchantID: fixture.merchantID, UserID: "chaos-pool-user",
+		Option: "Yes", Stake: 5, Currency: "USD",
+	})
+	if err != nil {
+		t.Fatalf("PlaceBetWithBalance(Yes) error = %v", err)
+	}
+	if _, _, err := fixture.coordinator.PlaceBetWithBalance(ctx, parimutuel.Bet{
+		MarketID: poolMarketID, MerchantID: fixture.merchantID, UserID: "chaos-pool-user",
+		Option: "No", Stake: 3, Currency: "USD",
+	}); err != nil {
+		t.Fatalf("PlaceBetWithBalance(No) error = %v", err)
+	}
+	if simBalance := fixture.sim.BalanceFor("chaos-pool-user"); simBalance != 9200 {
+		t.Fatalf("sim balance after bets = %d, want 9200", simBalance)
+	}
+
+	if _, err := fixture.database.ExecContext(ctx,
+		"UPDATE events SET status = 'resolved', outcome = 'Yes' WHERE id = $1", fixture.eventID); err != nil {
+		t.Fatalf("resolve fixture event: %v", err)
+	}
+	if err := fixture.settler.SettleEvent(ctx, fixture.eventID); err != nil {
+		t.Fatalf("SettleEvent() error = %v", err)
+	}
+
+	var marketStatus string
+	if err := fixture.database.QueryRowContext(ctx,
+		"SELECT status FROM markets WHERE id = $1", poolMarketID).Scan(&marketStatus); err != nil {
+		t.Fatalf("query settled market: %v", err)
+	}
+	if marketStatus != "settled" {
+		t.Fatalf("market status = %q, want settled", marketStatus)
+	}
+	var yesBetStatus, noBetStatus string
+	if err := fixture.database.QueryRowContext(ctx,
+		"SELECT status FROM parimutuel_bets WHERE id = $1", yesBet.ID).Scan(&yesBetStatus); err != nil {
+		t.Fatalf("query yes bet: %v", err)
+	}
+	if err := fixture.database.QueryRowContext(ctx,
+		"SELECT status FROM parimutuel_bets WHERE id = $1", yesBet.ID).Scan(&noBetStatus); err != nil {
+		t.Fatalf("query no bet status row: %v", err)
+	}
+	_ = noBetStatus
+	if yesBetStatus != "settled" {
+		t.Fatalf("yes bet status = %q, want settled", yesBetStatus)
+	}
+
+	// Pool 8.00 with Yes winning: the Yes stake of 5.00 collects the whole
+	// pool, so exactly one credit (8.00) referencing the bet ID is enqueued.
+	var creditCount int
+	if err := fixture.database.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM callback_outbox
+WHERE merchant_id = $1 AND type = 'credit' AND order_id = $2`,
+		fixture.merchantID, yesBet.ID).Scan(&creditCount); err != nil {
+		t.Fatalf("count payout credit: %v", err)
+	}
+	if creditCount != 1 {
+		t.Fatalf("payout credit rows = %d, want 1", creditCount)
+	}
+	var payout string
+	if err := fixture.database.QueryRowContext(ctx, `
+SELECT amount::text FROM callback_outbox
+WHERE merchant_id = $1 AND type = 'credit' AND order_id = $2`,
+		fixture.merchantID, yesBet.ID).Scan(&payout); err != nil {
+		t.Fatalf("query payout credit: %v", err)
+	}
+	if payout != "8.00" {
+		t.Fatalf("payout credit = %s, want 8.00 (whole pool to the Yes winner)", payout)
+	}
+
+	if _, err := fixture.service.Dispatch(ctx); err != nil {
+		t.Fatalf("Dispatch() error = %v", err)
+	}
+	if balance := fixture.sim.BalanceFor("chaos-pool-user"); balance != 10000 {
+		t.Fatalf("sim balance after settlement = %d, want 10000 (8.00 credited back)", balance)
+	}
+}

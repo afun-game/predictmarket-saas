@@ -161,6 +161,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `(total_stake - total_fees) / option_stake`，两位小数）；`POST
   /api/user/bets` 响应 `meta.pool` 携带下注后的池快照，托管页下注前展示
   各选项回报率、下注后即时刷新，无需二次请求。
+- 奖池结算死信修复：`seamless_transactions.order_id` 外键（指向 orders）
+  拒绝奖池结算 credit 携带注单 ID，导致结算 5 次重试后进死信；迁移 020
+  移除该外键（与 019 同理由），并新增 seamless 奖池结算端到端测试
+  （TestSeamlessChaosSettleParimutuelPaysShadowBets）。
 
 ### Security
 - Merchant API keys are bcrypt-hashed and located by a non-secret prefix
