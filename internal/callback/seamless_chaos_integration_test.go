@@ -691,6 +691,15 @@ VALUES ($1, $2, $3, 'parimutuel', 'Chaos settle pool', '["Yes","No"]', 'active')
 	if simBalance := fixture.sim.BalanceFor("chaos-pool-user"); simBalance != 9200 {
 		t.Fatalf("sim balance after bets = %d, want 9200", simBalance)
 	}
+	// Stakes accumulate into the market's total_volume like matched flow.
+	var marketVolume float64
+	if err := fixture.database.QueryRowContext(ctx,
+		"SELECT total_volume::float8 FROM markets WHERE id = $1", poolMarketID).Scan(&marketVolume); err != nil {
+		t.Fatalf("query market volume: %v", err)
+	}
+	if marketVolume != 8.0 {
+		t.Fatalf("market total_volume = %v, want 8 after 5.00 + 3.00 stakes", marketVolume)
+	}
 
 	if _, err := fixture.database.ExecContext(ctx,
 		"UPDATE events SET status = 'resolved', outcome = 'Yes' WHERE id = $1", fixture.eventID); err != nil {

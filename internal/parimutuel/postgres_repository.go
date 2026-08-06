@@ -145,6 +145,16 @@ WHERE market_id = $1`
 	if _, err := databaseTx.ExecContext(ctx, updatePool, bet.MarketID, bet.Stake); err != nil {
 		return nil, fmt.Errorf("update parimutuel pool: %w", err)
 	}
+	// Volume is cumulative staked amount, mirroring the order-book market
+	// semantics where total_volume only grows with matched flow.
+	if _, err := databaseTx.ExecContext(
+		ctx,
+		"UPDATE markets SET total_volume = total_volume + $2::numeric WHERE id = $1",
+		bet.MarketID,
+		bet.Stake,
+	); err != nil {
+		return nil, fmt.Errorf("update parimutuel market volume: %w", err)
+	}
 	if err := databaseTx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit parimutuel bet: %w", err)
 	}
