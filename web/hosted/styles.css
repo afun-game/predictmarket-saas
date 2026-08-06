@@ -275,6 +275,7 @@ a:focus-visible {
 .market-card__volume { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
 .market-card h3 { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; margin: 8px 0 4px; font-size: 16px; line-height: 1.34; letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .market-card__event { display: block; min-width: 0; overflow: hidden; margin: 0 0 14px; color: var(--muted); font-size: 12px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.market-card__pool { display: block; min-width: 0; overflow: hidden; margin: 0 0 14px; color: var(--muted); font-size: 12px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 .probability { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .probability__bar { height: 7px; overflow: hidden; border-radius: 999px; background: #e9edf4; }
 .probability__fill { display: block; height: 100%; border-radius: inherit; background: var(--primary); }

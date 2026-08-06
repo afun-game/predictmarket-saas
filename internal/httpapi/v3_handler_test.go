@@ -805,6 +805,44 @@ func TestV3UserParimutuelBetFlow(t *testing.T) {
 			final.Options[0].Option, final.Options[0].Odds, final.Options[1].Option, final.Options[1].Odds)
 	}
 
+	// The market list embeds the pool summary so list pages render stakes and
+	// return rates without per-market requests.
+	listed := v3Request(t, handler, http.MethodGet, "/api/user/markets?status=active", nil, "Bearer "+accessToken)
+	marketList := struct {
+		Data []struct {
+			ID   string         `json:"id"`
+			Pool map[string]any `json:"pool"`
+		} `json:"data"`
+	}{}
+	if err := json.Unmarshal(listed.Body.Bytes(), &marketList); err != nil {
+		t.Fatalf("decode market list: %v", err)
+	}
+	var listedPool map[string]any
+	for _, item := range marketList.Data {
+		if item.ID == poolMarketID {
+			listedPool = item.Pool
+			break
+		}
+	}
+	if listedPool == nil {
+		t.Fatalf("market list item %s is missing the pool summary", poolMarketID)
+	}
+	if listedPool["total_stake"] != "15.00" {
+		t.Errorf("list pool total_stake = %v, want 15.00", listedPool["total_stake"])
+	}
+	rawOptions, ok := listedPool["options"].([]any)
+	if !ok || len(rawOptions) != 2 {
+		t.Fatalf("list pool options = %#v", listedPool["options"])
+	}
+	oddsByOption := map[string]string{}
+	for _, raw := range rawOptions {
+		entry := raw.(map[string]any)
+		oddsByOption[entry["option"].(string)] = entry["odds"].(string)
+	}
+	if oddsByOption["Yes"] != "1.20" || oddsByOption["No"] != "6.00" {
+		t.Errorf("list pool odds = %v, want Yes 1.20, No 6.00", oddsByOption)
+	}
+
 	profile := v3Request(t, handler, http.MethodGet, "/api/user/me", nil, "Bearer "+accessToken)
 	me := struct {
 		Data struct {

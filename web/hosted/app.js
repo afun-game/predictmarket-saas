@@ -379,7 +379,22 @@ function eventCard(event) {
 
 function marketCard(market) {
   const leading = market.outcomes[0];
-  const price = leading?.price == null ? t("market.noQuote") : `${leading.price}¢`;
+  const quote = market.book?.quotes?.find((entry) => entry.option === leading?.label);
+  const poolLeading = market.pool?.options?.[0];
+  const isPool = market.type === "parimutuel";
+  // Binary cards quote the best executable ask; parimutuel cards show the
+  // leading option's implied probability from the embedded pool summary.
+  const implied = isPool
+    ? (poolLeading && Number(market.pool?.total_stake) > 0
+        ? Math.round((Number(poolLeading.stake) / Number(market.pool.total_stake)) * 100)
+        : null)
+    : (quote?.ask == null ? null : Math.round(quote.ask * 100));
+  const price = implied == null ? t("market.noQuote") : isPool ? `${implied}%` : `${implied}¢`;
+  const poolLine = isPool && market.pool?.options?.length ? `
+        <span class="market-card__pool">${market.pool.options.map((row) => {
+          const odds = Number(row.odds) > 0 ? `${Number(row.odds).toFixed(2)}x` : t("market.noQuote");
+          return `${escapeHTML(row.option)} ${formatPoolAmount(row.stake)} · ${odds}`;
+        }).join(" · ")}</span>` : "";
   return `
     <button class="market-card" type="button" data-route="/market/${market.id}">
       <span class="market-card__top">
@@ -388,8 +403,9 @@ function marketCard(market) {
       </span>
       <h3>${escapeHTML(market.question)}</h3>
       ${market.eventTitle ? `<span class="market-card__event">${escapeHTML(market.eventTitle)}</span>` : ""}
+      ${poolLine}
       <span class="probability" aria-label="${t("quote.aria", { label: leading?.label ?? "" })}">
-        <span class="probability__bar"><span class="probability__fill" style="width:${leading?.price ?? 0}%"></span></span>
+        <span class="probability__bar"><span class="probability__fill" style="width:${implied ?? 0}%"></span></span>
         <strong class="probability__value">${price}</strong>
       </span>
       <span class="market-card__footer"><span>${escapeHTML(leading?.label ?? "")} ${price}</span><span class="status">${escapeHTML(marketStatusLabel(market))}</span></span>

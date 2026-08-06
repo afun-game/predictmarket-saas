@@ -235,6 +235,65 @@ FROM parimutuel_pools WHERE market_id = $1`
 	return items, rows.Err()
 }
 
+// MarketPools returns pool totals plus per-option active stakes for many
+// markets in two batched queries. Markets without a pool row are absent.
+func (r *PostgresRepository) MarketPools(ctx context.Context, marketIDs []string) (map[string]MarketPool, error) {
+	if r == nil || r.database == nil {
+		return nil, errors.New("parimutuel database is not configured")
+	}
+	result := make(map[string]MarketPool, len(marketIDs))
+	if len(marketIDs) == 0 {
+		return result, nil
+	}
+	const poolQuery = `
+SELECT market_id, currency, total_stake, total_fees
+FROM parimutuel_pools
+WHERE market_id::text = ANY($1)`
+	rows, err := r.database.QueryContext(ctx, poolQuery, marketIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get parimutuel pools for markets: %w", err)
+	}
+	for rows.Next() {
+		pool := MarketPool{}
+		var marketID string
+		if err := rows.Scan(&marketID, &pool.Currency, &pool.TotalStake, &pool.TotalFees); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("scan parimutuel pool for market: %w", err)
+		}
+		pool.Options = []OptionStake{}
+		result[marketID] = pool
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close parimutuel pools for markets: %w", err)
+	}
+
+	const stakeQuery = `
+SELECT market_id, option, SUM(stake)
+FROM parimutuel_bets
+WHERE market_id::text = ANY($1) AND status = 'active'
+GROUP BY market_id, option`
+	stakeRows, err := r.database.QueryContext(ctx, stakeQuery, marketIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get parimutuel stakes for markets: %w", err)
+	}
+	defer func() { _ = stakeRows.Close() }()
+	for stakeRows.Next() {
+		var marketID string
+		stake := OptionStake{}
+		if err := stakeRows.Scan(&marketID, &stake.Option, &stake.Stake); err != nil {
+			return nil, fmt.Errorf("scan parimutuel stake for market: %w", err)
+		}
+		pool, exists := result[marketID]
+		if !exists {
+			pool = MarketPool{Options: []OptionStake{}}
+			result[marketID] = pool
+		}
+		pool.Options = append(pool.Options, stake)
+		result[marketID] = pool
+	}
+	return result, stakeRows.Err()
+}
+
 // OptionStakes sums the active stake per option for one market. The totals
 // feed the per-outcome implied odds shown in the hosted UI.
 func (r *PostgresRepository) OptionStakes(ctx context.Context, marketID string) ([]OptionStake, error) {

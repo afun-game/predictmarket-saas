@@ -268,3 +268,74 @@ func integrationUUID(t *testing.T) string {
 		value[10:16],
 	)
 }
+
+func TestTopOfBookIntegration(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "1" {
+		t.Skip("set INTEGRATION_TEST=1 to run PostgreSQL integration tests")
+	}
+	fixture := newIntegrationFixture(t)
+	ctx := context.Background()
+	service := New(fixture.database)
+
+	eventID := fixture.newID(t)
+	bookMarketID := fixture.newID(t)
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO events (id, source_type, source_id, title, category, end_time, resolution_time, status)
+VALUES ($1, 'custom', $2, 'TopOfBook event', 'test', $3, $3, 'active')`,
+		eventID, "v2-query-"+eventID, fixture.now); err != nil {
+		t.Fatalf("insert top-of-book event: %v", err)
+	}
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO markets (id, merchant_id, event_id, type, question, options, status)
+VALUES ($1, $2, $3, 'binary', 'Top of book market', '["Yes", "No"]', 'active')`,
+		bookMarketID, fixture.merchantID, eventID); err != nil {
+		t.Fatalf("insert top-of-book market: %v", err)
+	}
+	resting := []struct {
+		side   string
+		option string
+		price  string
+		status string
+	}{
+		{side: "buy", option: "Yes", price: "0.60", status: "pending"},
+		{side: "buy", option: "Yes", price: "0.55", status: "pending"},
+		{side: "sell", option: "Yes", price: "0.65", status: "pending"},
+		{side: "sell", option: "Yes", price: "0.70", status: "pending"},
+		{side: "buy", option: "No", price: "0.40", status: "partial"},
+	}
+	for _, order := range resting {
+		if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO orders (
+    id, merchant_id, user_id, market_id, type, option, amount, filled_amount,
+    currency, price, time_in_force, status, created_at
+) VALUES ($1, $2, $3, $4, $5, $6, 10, 0, 'USD', $7, 'gtc', $8, $9)`,
+			fixture.newID(t), fixture.merchantID, fixture.userID, bookMarketID,
+			order.side, order.option, order.price, order.status, fixture.now,
+		); err != nil {
+			t.Fatalf("insert resting order: %v", err)
+		}
+	}
+	quotes, err := service.TopOfBook(ctx, []string{bookMarketID, fixture.marketID})
+	if err != nil {
+		t.Fatalf("TopOfBook() error = %v", err)
+	}
+	byOption := map[string]BookQuote{}
+	for _, quote := range quotes[bookMarketID] {
+		byOption[quote.Option] = quote
+	}
+	yes := byOption["Yes"]
+	if yes.Bid == nil || *yes.Bid != 0.60 || yes.Ask == nil || *yes.Ask != 0.65 {
+		t.Errorf("Yes quote = bid %v ask %v, want 0.60/0.65", yes.Bid, yes.Ask)
+	}
+	no := byOption["No"]
+	if no.Bid == nil || *no.Bid != 0.40 || no.Ask != nil {
+		t.Errorf("No quote = bid %v ask %v, want 0.40/nil", no.Bid, no.Ask)
+	}
+	if len(quotes[fixture.marketID]) != 0 {
+		t.Errorf("settled market quotes = %#v, want none", quotes[fixture.marketID])
+	}
+	empty, err := service.TopOfBook(ctx, nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("TopOfBook(nil) = %#v, %v", empty, err)
+	}
+}

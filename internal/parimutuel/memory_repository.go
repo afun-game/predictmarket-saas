@@ -177,3 +177,35 @@ func (r *MemoryRepository) GetPools(ctx context.Context, marketID string) ([]Poo
 	}
 	return []Pool{pool}, nil
 }
+
+func (r *MemoryRepository) MarketPools(ctx context.Context, marketIDs []string) (map[string]MarketPool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result := make(map[string]MarketPool, len(marketIDs))
+	for _, marketID := range marketIDs {
+		pool, exists := r.pools[marketID]
+		if !exists {
+			continue
+		}
+		value := MarketPool{
+			Currency:   pool.Currency,
+			TotalStake: pool.TotalStake,
+			TotalFees:  pool.TotalFees,
+			Options:    []OptionStake{},
+		}
+		totals := map[string]float64{}
+		for _, bet := range r.bets {
+			if bet.MarketID == marketID && bet.Status == StatusActive {
+				totals[bet.Option] += bet.Stake
+			}
+		}
+		for option, stake := range totals {
+			value.Options = append(value.Options, OptionStake{Option: option, Stake: stake})
+		}
+		result[marketID] = value
+	}
+	return result, nil
+}

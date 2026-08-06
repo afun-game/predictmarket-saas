@@ -122,6 +122,13 @@ type v3UserMarket struct {
 	TotalVolume string     `json:"total_volume"`
 	CreatedAt   time.Time  `json:"created_at"`
 	SettledAt   *time.Time `json:"settled_at,omitempty"`
+	// Pool is the parimutuel pool snapshot (totals + per-option stake/odds),
+	// shaped like GET /api/user/markets/{id}/pools so list rendering reuses
+	// the same code. Only present on parimutuel markets with a pool row.
+	Pool map[string]any `json:"pool,omitempty"`
+	// Book carries the best bid/ask per option for binary markets, so list
+	// cards render quotes without fetching the full order book.
+	Book []v2query.BookQuote `json:"book,omitempty"`
 }
 
 type v3UserEvent struct {
@@ -606,35 +613,22 @@ func (h *v3Handler) createUserBet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, response)
 }
 
-// poolSnapshot builds the parimutuel pool payload shared by GET /pools and
-// the POST /bets response. Each option carries its stake and the gross return
-// per unit staked if that option wins: (total_stake - total_fees) / stake.
-// An option with no active stake has odds "0.00" (undefined).
-func (h *v3Handler) poolSnapshot(ctx context.Context, marketID string) (map[string]any, error) {
-	pools, err := h.parimutuel.GetPools(ctx, marketID)
-	if err != nil {
-		return nil, err
-	}
-	stakes, err := h.parimutuel.OptionStakes(ctx, marketID)
-	if err != nil {
-		return nil, err
-	}
+// formatMarketPool renders a parimutuel pool as the public payload shared by
+// GET /pools, the POST /bets response, and market list summaries. Each option
+// carries its stake and the gross return per unit staked if that option wins:
+// (total_stake - total_fees) / stake. An option with no active stake has
+// odds "0.00" (undefined).
+func formatMarketPool(marketID string, pool parimutuel.MarketPool) map[string]any {
 	payload := map[string]any{
 		"market_id":   marketID,
-		"currency":    "",
-		"total_stake": "0.00",
-		"total_fees":  "0.00",
+		"currency":    pool.Currency,
+		"total_stake": formatMoney(pool.TotalStake),
+		"total_fees":  formatMoney(pool.TotalFees),
 		"options":     []any{},
 	}
-	available := 0.0
-	if len(pools) > 0 {
-		payload["currency"] = pools[0].Currency
-		payload["total_stake"] = formatMoney(pools[0].TotalStake)
-		payload["total_fees"] = formatMoney(pools[0].TotalFees)
-		available = pools[0].TotalStake - pools[0].TotalFees
-	}
-	options := make([]map[string]any, 0, len(stakes))
-	for _, stake := range stakes {
+	available := pool.TotalStake - pool.TotalFees
+	options := make([]map[string]any, 0, len(pool.Options))
+	for _, stake := range pool.Options {
 		odds := "0.00"
 		if stake.Stake > 0 && available > 0 {
 			odds = formatMoney(available / stake.Stake)
@@ -646,7 +640,64 @@ func (h *v3Handler) poolSnapshot(ctx context.Context, marketID string) (map[stri
 		})
 	}
 	payload["options"] = options
-	return payload, nil
+	return payload
+}
+
+// poolSnapshot builds the parimutuel pool payload shared by GET /pools and
+// the POST /bets response.
+func (h *v3Handler) poolSnapshot(ctx context.Context, marketID string) (map[string]any, error) {
+	pools, err := h.parimutuel.GetPools(ctx, marketID)
+	if err != nil {
+		return nil, err
+	}
+	stakes, err := h.parimutuel.OptionStakes(ctx, marketID)
+	if err != nil {
+		return nil, err
+	}
+	pool := parimutuel.MarketPool{Options: stakes}
+	if len(pools) > 0 {
+		pool.Currency = pools[0].Currency
+		pool.TotalStake = pools[0].TotalStake
+		pool.TotalFees = pools[0].TotalFees
+	}
+	return formatMarketPool(marketID, pool), nil
+}
+
+// marketSummaries batches parimutuel pool snapshots and top-of-book quotes
+// for the given markets so list/detail responses carry display-ready行情
+// without per-market queries. Failures degrade to missing summaries; the
+// frontend falls back to the dedicated endpoints.
+func (h *v3Handler) marketSummaries(ctx context.Context, markets []*types.Market) (map[string]map[string]any, map[string][]v2query.BookQuote) {
+	pools := map[string]map[string]any{}
+	book := map[string][]v2query.BookQuote{}
+	var poolIDs, bookIDs []string
+	for _, value := range markets {
+		switch value.Type {
+		case "parimutuel":
+			poolIDs = append(poolIDs, value.ID)
+		case "binary":
+			bookIDs = append(bookIDs, value.ID)
+		}
+	}
+	if len(poolIDs) > 0 && h.parimutuel != nil {
+		values, err := h.parimutuel.MarketPools(ctx, poolIDs)
+		if err != nil {
+			slog.WarnContext(ctx, "market pool summaries unavailable", "error", err)
+		} else {
+			for marketID, pool := range values {
+				pools[marketID] = formatMarketPool(marketID, pool)
+			}
+		}
+	}
+	if len(bookIDs) > 0 && h.queries != nil {
+		values, err := h.queries.TopOfBook(ctx, bookIDs)
+		if err != nil {
+			slog.WarnContext(ctx, "market book summaries unavailable", "error", err)
+		} else {
+			book = values
+		}
+	}
+	return pools, book
 }
 
 // getUserMarketPools exposes a parimutuel market's pool totals and per-option
@@ -1421,8 +1472,11 @@ func (h *v3Handler) listMarkets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result := make([]v3UserMarket, 0, len(values))
-	for _, value := range values {
-		result = append(result, userMarketFrom(value))
+	if len(values) > 0 {
+		pools, book := h.marketSummaries(r.Context(), values)
+		for _, value := range values {
+			result = append(result, userMarketFrom(value, pools[value.ID], book[value.ID]))
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data": result,
@@ -1435,7 +1489,8 @@ func (h *v3Handler) getMarket(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": userMarketFrom(value)})
+	pools, book := h.marketSummaries(r.Context(), []*types.Market{value})
+	writeJSON(w, http.StatusOK, map[string]any{"data": userMarketFrom(value, pools[value.ID], book[value.ID])})
 }
 
 func (h *v3Handler) getOrderBook(w http.ResponseWriter, r *http.Request) {
@@ -1644,7 +1699,7 @@ func sessionUserResponse(value session.BrowserSession) map[string]any {
 	}
 }
 
-func userMarketFrom(value *types.Market) v3UserMarket {
+func userMarketFrom(value *types.Market, pool map[string]any, book []v2query.BookQuote) v3UserMarket {
 	return v3UserMarket{
 		ID:          value.ID,
 		EventID:     value.EventID,
@@ -1655,6 +1710,8 @@ func userMarketFrom(value *types.Market) v3UserMarket {
 		TotalVolume: fmt.Sprintf("%.6f", value.TotalVolume),
 		CreatedAt:   value.CreatedAt,
 		SettledAt:   value.SettledAt,
+		Pool:        pool,
+		Book:        book,
 	}
 }
 

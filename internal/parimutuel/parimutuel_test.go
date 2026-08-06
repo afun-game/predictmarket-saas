@@ -219,3 +219,53 @@ func TestPlaceBetPersistsWalletKind(t *testing.T) {
 		t.Errorf("stored wallet kinds = %v, want platform and shadow", kinds)
 	}
 }
+
+func TestMarketPoolsBulk(t *testing.T) {
+	service, repo := newFixture(t)
+	ctx := context.Background()
+	if _, err := service.PlaceBet(ctx, Bet{
+		MarketID: "m-1", MerchantID: "merchant-1", UserID: "user-1",
+		Option: "Yes", Stake: 100, Currency: "USD",
+	}); err != nil {
+		t.Fatalf("place Yes bet: %v", err)
+	}
+	if _, err := service.PlaceBet(ctx, Bet{
+		MarketID: "m-1", MerchantID: "merchant-1", UserID: "user-1",
+		Option: "No", Stake: 50, Currency: "USD",
+	}); err != nil {
+		t.Fatalf("place No bet: %v", err)
+	}
+	repo.SeedMarket("m-2", "parimutuel", "active", "active", []string{"Yes", "No"})
+	if err := service.CreatePools(ctx, "m-2", "USD"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.PlaceBet(ctx, Bet{
+		MarketID: "m-2", MerchantID: "merchant-1", UserID: "user-1",
+		Option: "Yes", Stake: 20, Currency: "USD",
+	}); err != nil {
+		t.Fatalf("place m-2 bet: %v", err)
+	}
+
+	pools, err := service.MarketPools(ctx, []string{"m-1", "m-2", "m-missing"})
+	if err != nil {
+		t.Fatalf("MarketPools() error = %v", err)
+	}
+	first, exists := pools["m-1"]
+	if !exists || first.TotalStake != 150 || first.Currency != "USD" || len(first.Options) != 2 {
+		t.Fatalf("m-1 pool = %#v", first)
+	}
+	stakes := map[string]float64{}
+	for _, option := range first.Options {
+		stakes[option.Option] = option.Stake
+	}
+	if stakes["Yes"] != 100 || stakes["No"] != 50 {
+		t.Errorf("m-1 stakes = %v, want Yes 100, No 50", stakes)
+	}
+	second, exists := pools["m-2"]
+	if !exists || second.TotalStake != 20 || len(second.Options) != 1 || second.Options[0].Stake != 20 {
+		t.Fatalf("m-2 pool = %#v", second)
+	}
+	if _, exists := pools["m-missing"]; exists {
+		t.Errorf("missing market unexpectedly present: %#v", pools["m-missing"])
+	}
+}

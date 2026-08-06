@@ -78,6 +78,15 @@ type ListFilters struct {
 	Limit      int    `json:"limit,omitempty"`
 }
 
+// MarketPool is one market's pool totals plus per-option active stakes,
+// returned in bulk for market lists.
+type MarketPool struct {
+	Currency   string
+	TotalStake float64
+	TotalFees  float64
+	Options    []OptionStake
+}
+
 // Service manages parimutuel pools and bets.
 type Service interface {
 	// CreatePools initializes a market's pool row (idempotent).
@@ -92,6 +101,9 @@ type Service interface {
 	GetPools(ctx context.Context, marketID string) ([]Pool, error)
 	// OptionStakes returns the active stake total per option for one market.
 	OptionStakes(ctx context.Context, marketID string) ([]OptionStake, error)
+	// MarketPools returns pool totals and per-option stakes for many markets
+	// in one pass; markets without a pool row are absent from the map.
+	MarketPools(ctx context.Context, marketIDs []string) (map[string]MarketPool, error)
 }
 
 // ValidationError identifies an invalid bet field.
@@ -111,6 +123,7 @@ type Repository interface {
 	ListBets(ctx context.Context, filters ListFilters) ([]Bet, int, error)
 	GetPools(ctx context.Context, marketID string) ([]Pool, error)
 	OptionStakes(ctx context.Context, marketID string) ([]OptionStake, error)
+	MarketPools(ctx context.Context, marketIDs []string) (map[string]MarketPool, error)
 	// LockMarketForBet returns the market's type, status, options, and event
 	// status while holding the market row lock.
 	LockMarketForBet(ctx context.Context, marketID string) (marketType string, status string, options []string, eventStatus string, err error)

@@ -214,6 +214,44 @@ LIMIT $4`
 	return page, nil
 }
 
+// TopOfBook returns the best resting bid and ask per option for each market.
+// Only the executable resting orders are considered, matching the full
+// order-book semantics (status pending/partial, buy = bid, sell = ask).
+func (s *implementation) TopOfBook(ctx context.Context, marketIDs []string) (map[string][]BookQuote, error) {
+	result := make(map[string][]BookQuote, len(marketIDs))
+	if len(marketIDs) == 0 {
+		return result, nil
+	}
+	const query = `
+SELECT market_id, option,
+       MAX(price) FILTER (WHERE type = 'buy') AS best_bid,
+       MIN(price) FILTER (WHERE type = 'sell') AS best_ask
+FROM orders
+WHERE market_id::text = ANY($1) AND status IN ('pending', 'partial')
+GROUP BY market_id, option`
+	rows, err := s.database.QueryContext(ctx, query, marketIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query top-of-book: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var marketID string
+		var bid, ask sql.NullFloat64
+		quote := BookQuote{}
+		if err := rows.Scan(&marketID, &quote.Option, &bid, &ask); err != nil {
+			return nil, fmt.Errorf("scan top-of-book quote: %w", err)
+		}
+		if bid.Valid {
+			quote.Bid = &bid.Float64
+		}
+		if ask.Valid {
+			quote.Ask = &ask.Float64
+		}
+		result[marketID] = append(result[marketID], quote)
+	}
+	return result, rows.Err()
+}
+
 func (s *implementation) DailyReport(
 	ctx context.Context,
 	merchantID string,

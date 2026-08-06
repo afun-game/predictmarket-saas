@@ -66,3 +66,7 @@ func (s *implementation) GetPools(ctx context.Context, marketID string) ([]Pool,
 func (s *implementation) OptionStakes(ctx context.Context, marketID string) ([]OptionStake, error) {
 	return s.repository.OptionStakes(ctx, strings.TrimSpace(marketID))
 }
+
+func (s *implementation) MarketPools(ctx context.Context, marketIDs []string) (map[string]MarketPool, error) {
+	return s.repository.MarketPools(ctx, marketIDs)
+}

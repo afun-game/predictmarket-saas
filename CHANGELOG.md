@@ -168,6 +168,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- 市场列表/详情接口（`GET /api/user/markets` 与 `/{id}`）内嵌行情摘要：
+  奖池市场携带 `pool`（与 `GET …/pools` 同构，含每选项 `stake`/`odds`），
+  订单簿市场携带 `book`（每选项最优 bid/ask）；批量聚合一次查询完成，
+  列表页无需逐市场请求。
 - 奖池结算未写 `settlement_payouts`，`GET /api/v2/settlements/{id}/payouts`
   对奖池市场返回空：结算时按注单逐笔写入审计行（中奖/未中奖均记录，
   `order_id` 为注单 ID，迁移 033 移除 orders 外键），商户可查询到完整

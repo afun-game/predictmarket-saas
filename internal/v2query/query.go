@@ -25,6 +25,16 @@ type Service interface {
 	ListSettlements(ctx context.Context, filters SettlementFilters) (*SettlementPage, error)
 	ListPayouts(ctx context.Context, filters PayoutFilters) (*PayoutPage, error)
 	DailyReport(ctx context.Context, merchantID string, date time.Time, currency string) (*DailyReport, error)
+	// TopOfBook returns the best resting bid and ask per option for each
+	// market, used to render compact list summaries without full books.
+	TopOfBook(ctx context.Context, marketIDs []string) (map[string][]BookQuote, error)
+}
+
+// BookQuote is the best executable bid/ask for one market option.
+type BookQuote struct {
+	Option string   `json:"option"`
+	Bid    *float64 `json:"bid,omitempty"`
+	Ask    *float64 `json:"ask,omitempty"`
 }
 
 // TransactionFilters scopes the platform wallet ledger to one merchant.
