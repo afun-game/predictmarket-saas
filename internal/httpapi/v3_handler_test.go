@@ -777,14 +777,32 @@ func TestV3UserParimutuelBetFlow(t *testing.T) {
 	if updated.TotalStake != "5.00" || len(updated.Options) != 1 || updated.Options[0].Option != "Yes" || updated.Options[0].Stake != 5 {
 		t.Errorf("pools after first bet = %#v", updated)
 	}
+	if updated.Options[0].Odds != "1.00" {
+		t.Errorf("odds after first bet = %q, want 1.00 (pool entirely on Yes)", updated.Options[0].Odds)
+	}
+	// The bet response carries the post-bet pool snapshot so the UI can show
+	// the updated return rate without a second request.
+	if firstBet.Meta.Pool.TotalStake != "5.00" || len(firstBet.Meta.Pool.Options) != 1 || firstBet.Meta.Pool.Options[0].Odds != "1.00" {
+		t.Errorf("first bet meta.pool = %#v", firstBet.Meta.Pool)
+	}
 
 	second := userBetRequest(t, handler, poolMarketID, "Yes", 7.5, accessToken, "pool-bet-002")
 	if second.Code != http.StatusCreated {
 		t.Fatalf("second bet status = %d, body = %s", second.Code, second.Body.String())
 	}
+	// A No-side bet makes the per-option return rates distinct: the pool of
+	// 15.00 splits 12.50 (Yes) vs 2.50 (No).
+	noBet := userBetRequest(t, handler, poolMarketID, "No", 2.5, accessToken, "pool-bet-003-no")
+	if noBet.Code != http.StatusCreated {
+		t.Fatalf("no-side bet status = %d, body = %s", noBet.Code, noBet.Body.String())
+	}
 	final := decodePoolsResponse(t, userPoolsRequest(t, handler, poolMarketID, accessToken).Body.Bytes())
-	if final.TotalStake != "12.50" || len(final.Options) != 1 || final.Options[0].Stake != 12.5 {
-		t.Errorf("pools after second bet = %#v", final)
+	if final.TotalStake != "15.00" || len(final.Options) != 2 {
+		t.Fatalf("pools after third bet = %#v", final)
+	}
+	if final.Options[0].Option == "Yes" && (final.Options[0].Odds != "1.20" || final.Options[1].Odds != "6.00") {
+		t.Errorf("pools odds = %s %s / %s %s, want Yes 1.20, No 6.00",
+			final.Options[0].Option, final.Options[0].Odds, final.Options[1].Option, final.Options[1].Odds)
 	}
 
 	profile := v3Request(t, handler, http.MethodGet, "/api/user/me", nil, "Bearer "+accessToken)
@@ -796,8 +814,8 @@ func TestV3UserParimutuelBetFlow(t *testing.T) {
 	if err := json.Unmarshal(profile.Body.Bytes(), &me); err != nil {
 		t.Fatalf("decode profile: %v", err)
 	}
-	if me.Data.AvailableBalance != "7.50" {
-		t.Errorf("balance after second bet = %q, want 7.50", me.Data.AvailableBalance)
+	if me.Data.AvailableBalance != "5.00" {
+		t.Errorf("balance after third bet = %q, want 5.00", me.Data.AvailableBalance)
 	}
 
 	// Order-book markets refuse pool bets before any wallet debit.
@@ -892,6 +910,7 @@ type userPoolView struct {
 	Options    []struct {
 		Option string  `json:"option"`
 		Stake  float64 `json:"stake"`
+		Odds   string  `json:"odds"`
 	} `json:"options"`
 }
 
@@ -913,7 +932,8 @@ type userBetView struct {
 		Stake  float64 `json:"stake"`
 	} `json:"data"`
 	Meta struct {
-		AvailableBalance string `json:"available_balance"`
+		AvailableBalance string       `json:"available_balance"`
+		Pool             userPoolView `json:"pool"`
 	} `json:"meta"`
 }
 

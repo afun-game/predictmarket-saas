@@ -821,10 +821,21 @@ POST /api/user/bets
 ```
 
 `GET …/pools` returns the pool totals (`total_stake`, `total_fees`,
-`currency`) plus per-option active stakes (`options: [{option, stake}]`),
-which the hosted UI renders as implied odds. `POST /api/user/bets` takes
-`{market_id, option, amount}` and requires `Idempotency-Key`; the stake is
-debited from the wallet and joins the pool, and a rejected bet is refunded.
+`currency`) plus per-option active stakes
+(`options: [{option, stake, odds}]`), which the hosted UI renders as implied
+odds. Each option's `odds` is the gross return per unit staked if that option
+wins — `(total_stake - total_fees) / option_stake`, rounded to two decimals
+(so betting 1 MXN on a 1.20 option returns 1.20 MXN, stake included). An
+option with no active stake reports `odds: "0.00"` (no return rate yet). The
+return rate is dynamic: it changes with every new stake and is only fixed at
+settlement, when the pool is split among winning bets in proportion to their
+stakes (`payout = total × stake / winning_stake`).
+
+`POST /api/user/bets` takes `{market_id, option, amount}` and requires
+`Idempotency-Key`; the stake is debited from the wallet and joins the pool,
+and a rejected bet is refunded. The response `meta` carries the updated
+`pool` snapshot (same shape as `GET …/pools`) so the UI can show the
+post-bet return rate without a second request.
 Both endpoints refuse order-book markets with `400` and are scoped to the
 session's merchant. Both wallet modes are supported: `transfer` bets debit
 the platform user wallet (transaction type `bet`, refund `bet_refund`);

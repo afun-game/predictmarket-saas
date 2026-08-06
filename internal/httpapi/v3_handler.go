@@ -566,10 +566,11 @@ func (h *v3Handler) createUserBet(w http.ResponseWriter, r *http.Request) {
 			writeSeamlessOrderError(w, err, currency)
 			return
 		}
-		writeJSON(w, http.StatusCreated, map[string]any{
-			"data": bet,
-			"meta": balanceMeta(balance, currency),
-		})
+		meta := balanceMeta(balance, currency)
+		if snapshot, snapshotErr := h.poolSnapshot(r.Context(), request.MarketID); snapshotErr == nil {
+			meta["pool"] = snapshot
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"data": bet, "meta": meta})
 		return
 	}
 	if err := h.wallets.Debit(r.Context(), browserSession.MerchantID, browserSession.UserID, currency, request.Amount, "bet"); err != nil {
@@ -596,9 +597,56 @@ func (h *v3Handler) createUserBet(w http.ResponseWriter, r *http.Request) {
 	}
 	response := map[string]any{"data": bet}
 	if balance, ok := h.currentPlatformBalance(r, browserSession.MerchantID, browserSession.UserID, currency); ok {
-		response["meta"] = balanceMeta(balance, currency)
+		meta := balanceMeta(balance, currency)
+		if snapshot, snapshotErr := h.poolSnapshot(r.Context(), request.MarketID); snapshotErr == nil {
+			meta["pool"] = snapshot
+		}
+		response["meta"] = meta
 	}
 	writeJSON(w, http.StatusCreated, response)
+}
+
+// poolSnapshot builds the parimutuel pool payload shared by GET /pools and
+// the POST /bets response. Each option carries its stake and the gross return
+// per unit staked if that option wins: (total_stake - total_fees) / stake.
+// An option with no active stake has odds "0.00" (undefined).
+func (h *v3Handler) poolSnapshot(ctx context.Context, marketID string) (map[string]any, error) {
+	pools, err := h.parimutuel.GetPools(ctx, marketID)
+	if err != nil {
+		return nil, err
+	}
+	stakes, err := h.parimutuel.OptionStakes(ctx, marketID)
+	if err != nil {
+		return nil, err
+	}
+	payload := map[string]any{
+		"market_id":   marketID,
+		"currency":    "",
+		"total_stake": "0.00",
+		"total_fees":  "0.00",
+		"options":     []any{},
+	}
+	available := 0.0
+	if len(pools) > 0 {
+		payload["currency"] = pools[0].Currency
+		payload["total_stake"] = formatMoney(pools[0].TotalStake)
+		payload["total_fees"] = formatMoney(pools[0].TotalFees)
+		available = pools[0].TotalStake - pools[0].TotalFees
+	}
+	options := make([]map[string]any, 0, len(stakes))
+	for _, stake := range stakes {
+		odds := "0.00"
+		if stake.Stake > 0 && available > 0 {
+			odds = formatMoney(available / stake.Stake)
+		}
+		options = append(options, map[string]any{
+			"option": stake.Option,
+			"stake":  stake.Stake,
+			"odds":   odds,
+		})
+	}
+	payload["options"] = options
+	return payload, nil
 }
 
 // getUserMarketPools exposes a parimutuel market's pool totals and per-option
@@ -616,27 +664,10 @@ func (h *v3Handler) getUserMarketPools(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "parimutuel_unavailable", "parimutuel betting is not configured")
 		return
 	}
-	pools, err := h.parimutuel.GetPools(r.Context(), value.ID)
+	payload, err := h.poolSnapshot(r.Context(), value.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not load parimutuel pools")
 		return
-	}
-	stakes, err := h.parimutuel.OptionStakes(r.Context(), value.ID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "could not load parimutuel stakes")
-		return
-	}
-	payload := map[string]any{
-		"market_id":   value.ID,
-		"currency":    "",
-		"total_stake": "0.00",
-		"total_fees":  "0.00",
-		"options":     stakes,
-	}
-	if len(pools) > 0 {
-		payload["currency"] = pools[0].Currency
-		payload["total_stake"] = formatMoney(pools[0].TotalStake)
-		payload["total_fees"] = formatMoney(pools[0].TotalFees)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": payload})
 }

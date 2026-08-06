@@ -157,6 +157,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   内存）：access token 持久化到 sessionStorage，刷新页面时调用
   `POST /api/user/session/refresh` 续期并重新拉取数据；会话过期/被吊销
   时清除本地会话并提示从商户站点重新进入。
+- 奖池市场展示回报率：`GET …/pools` 每个选项新增 `odds`（返还倍数，
+  `(total_stake - total_fees) / option_stake`，两位小数）；`POST
+  /api/user/bets` 响应 `meta.pool` 携带下注后的池快照，托管页下注前展示
+  各选项回报率、下注后即时刷新，无需二次请求。
 
 ### Security
 - Merchant API keys are bcrypt-hashed and located by a non-secret prefix

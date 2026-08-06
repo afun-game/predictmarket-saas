@@ -64,6 +64,7 @@ const translations = {
     "market.pool": "奖池",
     "market.poolTotal": "累计投注 {amount}",
     "market.poolOption": "{option} 投注 {amount}",
+    "market.poolOptionReturn": "{option} 投注 {amount} · 回报率 {odds}",
     "market.orderbook": "盘口报价",
     "market.noQuotes": "暂无报价，做市商将在数秒内自动挂单，请稍候刷新",
     "market.livePrice": "可成交价 {price}¢",
@@ -148,6 +149,7 @@ const translations = {
     "market.pool": "Pool",
     "market.poolTotal": "Total staked {amount}",
     "market.poolOption": "{option} staked {amount}",
+    "market.poolOptionReturn": "{option} staked {amount} · Return {odds}",
     "market.orderbook": "Order book",
     "market.noQuotes": "No quotes yet. The market maker will place quotes shortly; refresh later.",
     "market.livePrice": "Executable at {price}¢",
@@ -481,7 +483,10 @@ function marketPage(market) {
   const poolSummary = isPool && pools && !pools.error ? `
         <section class="info-card"><h2>${t("market.pool")}</h2>
           <p>${t("market.poolTotal", { amount: pools.total_stake ?? "0.00" })}${pools.currency ? ` · ${escapeHTML(pools.currency)}` : ""}</p>
-          <ul>${(pools.options ?? []).map((row) => `<li>${t("market.poolOption", { option: row.option, amount: formatPoolAmount(row.stake) })}</li>`).join("")}</ul>
+          <ul>${(pools.options ?? []).map((row) => {
+            const odds = Number(row.odds) > 0 ? `${Number(row.odds).toFixed(2)}x` : t("market.noQuote");
+            return `<li>${t("market.poolOptionReturn", { option: row.option, amount: formatPoolAmount(row.stake), odds })}</li>`;
+          }).join("")}</ul>
         </section>` : "";
   const bookSummary = !isPool ? `
         <section class="info-card"><h2>${t("market.orderbook")}</h2>${orderBookSummary(market, book)}</section>` : "";
@@ -501,7 +506,7 @@ function marketPage(market) {
         <div class="section-heading"><h2 id="outcomes-title">${t("market.chooseOutcome")}</h2><span class="label">${t("market.currentOdds")}</span></div>
         <div class="outcome-grid">${market.outcomes.map((outcome, index) => `
           <button class="outcome" type="button" data-outcome="${market.id}:${index}" aria-pressed="${selected?.index === index}">
-            <strong>${escapeHTML(outcome.label)}</strong><span>${quoteFor(outcome.label) == null ? t("market.noQuote") : `${quoteFor(outcome.label)}¢`}</span>
+            <strong>${escapeHTML(outcome.label)}</strong><span>${quoteFor(outcome.label) == null ? t("market.noQuote") : isPool ? `${quoteFor(outcome.label)}%` : `${quoteFor(outcome.label)}¢`}</span>
           </button>`).join("")}</div>
       </section>
       ${poolSummary}
@@ -856,6 +861,9 @@ async function placeOrder() {
       state.orders.unshift({ ...bet, type: "bet", amount: bet.stake });
       state.selectedOutcome = null;
       applyBalance(result.meta);
+      // The response carries the post-bet pool snapshot (totals + per-option
+      // return rates) so the ticket and pool card update without a refetch.
+      if (result.meta?.pool) state.marketPools[market.id] = result.meta.pool;
       emit("pm:bet_placed", { market_id: market.id, order_id: bet.id, outcome: option.label });
     } catch (error) {
       applyBalance(error?.meta);
