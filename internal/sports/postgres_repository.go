@@ -16,7 +16,12 @@ func newPostgresRepository(database *sql.DB) *postgresRepository {
 	return &postgresRepository{database: database}
 }
 
-func (r *postgresRepository) UpsertSource(ctx context.Context, sourceID string, value *SportsEvent, syncedAt time.Time) (string, error) {
+// NewPostgresRepository creates a Repository backed by PostgreSQL.
+func NewPostgresRepository(database *sql.DB) Repository {
+	return newPostgresRepository(database)
+}
+
+func (r *postgresRepository) UpsertSource(ctx context.Context, sourceType, sourceID string, value *SportsEvent, syncedAt time.Time) (string, error) {
 	tx, err := r.database.BeginTx(ctx, nil)
 	if err != nil {
 		return "", fmt.Errorf("begin sports metadata upsert: %w", err)
@@ -24,9 +29,9 @@ func (r *postgresRepository) UpsertSource(ctx context.Context, sourceID string, 
 	defer func() { _ = tx.Rollback() }()
 	const upsert = `
 INSERT INTO sports_events (event_id, league, game_id, start_time, synced_at)
-SELECT id, $2, NULLIF($3, ''), $4, $5
+SELECT id, $3, NULLIF($4, ''), $5, $6
 FROM events
-WHERE source_type = 'polymarket' AND source_id = $1
+WHERE source_type = $1 AND source_id = $2
 ON CONFLICT (event_id) DO UPDATE
 SET league = EXCLUDED.league,
     game_id = EXCLUDED.game_id,
@@ -34,9 +39,9 @@ SET league = EXCLUDED.league,
     synced_at = EXCLUDED.synced_at
 RETURNING event_id`
 	var eventID string
-	err = tx.QueryRowContext(ctx, upsert, sourceID, value.League, value.GameID, value.StartTime, syncedAt).Scan(&eventID)
+	err = tx.QueryRowContext(ctx, upsert, sourceType, sourceID, value.League, value.GameID, value.StartTime, syncedAt).Scan(&eventID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", fmt.Errorf("%w: source %s", ErrNotFound, sourceID)
+		return "", fmt.Errorf("%w: source type %q, source ID %q", ErrNotFound, sourceType, sourceID)
 	}
 	if err != nil {
 		return "", fmt.Errorf("upsert sports event: %w", err)

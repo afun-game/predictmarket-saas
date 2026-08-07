@@ -11,6 +11,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -buildvcs=false -trimpath -ldf
     -o /predictmarket ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -buildvcs=false -trimpath -ldflags="-s -w" \
     -o /predictmarket-migrate ./cmd/migrate
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -buildvcs=false -trimpath -ldflags="-s -w" \
+    -o /sports-ingest ./cmd/sports-ingest
 
 # Final stage
 FROM alpine:3.22
@@ -24,6 +26,7 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /predictmarket .
 COPY --from=builder /predictmarket-migrate .
+COPY --from=builder /sports-ingest .
 
 # Copy migrations
 COPY --from=builder /app/migrations ./migrations

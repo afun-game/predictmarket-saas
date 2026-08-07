@@ -1,0 +1,1465 @@
+{
+  "banner": [
+    {
+      "image_url": "https://d11rb39sj794dg.cloudfront.net/public/2026-07/LMB 1170x150 (1).jpg",
+      "width": "1170",
+      "height": "150",
+      "banner_type": "top_banner",
+      "link": "https://online.caliente.mx/page?member=ligalmb&campaign=DEFAULT&channel=DEFAULT&zone=54300998&lp=65712797&var1=banner1web",
+      "file_url": ""
+    }
+  ],
+  "nextGameDate": null,
+  "games_info": [
+    {
+      "gameId": 846703,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786053600,
+      "hora": "19:00",
+      "inning": {
+        "number": 7,
+        "part": "Alta"
+      },
+      "tv_network": {
+        "name": "TVC Deportes",
+        "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2023-04/tvcDeportes.png"
+      },
+      "tvNetworks": [
+        {
+          "name": "TVC Deportes",
+          "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2023-04/tvcDeportes.png"
+        }
+      ],
+      "tickets": "https://unionlaguna.boletea.com.mx/",
+      "jonron_tv": "https://www.lmb.tv/watch/32de3bec-cfad-4df6-a21e-e9f1d5b4b243",
+      "awayTeam": {
+        "teamUuid": "88e08b39-0215-4599-8245-bd19939da7c2",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Saraperos.png",
+        "name": "Saraperos",
+        "shortName": "SLW",
+        "winGames": 38,
+        "lostGames": 54,
+        "runsScored": 10,
+        "totalHits": 15,
+        "totalErrors": 1,
+        "probablePitcher": "Wilmer Font"
+      },
+      "localTeam": {
+        "teamUuid": "853e6101-756d-44f3-ae6a-df4b881d402b",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Algodoneros.png",
+        "name": "Algodoneros",
+        "shortName": "LAG",
+        "winGames": 45,
+        "lostGames": 47,
+        "runsScored": 12,
+        "totalHits": 13,
+        "totalErrors": 1,
+        "probablePitcher": ""
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 2,
+      "balls": 2,
+      "outs": 3,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Austin Pope",
+        "stats": "0.1 IP / 3.82 ERA"
+      },
+      "losingPitcher": {
+        "name": "Jorge López",
+        "stats": "0.1 IP / 4.09 ERA"
+      },
+      "savedBy": {
+        "name": "Matt Foster",
+        "savedGames": 18
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 3,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 8,
+          "awayTeamRuns": 4
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        }
+      ]
+    },
+    {
+      "gameId": 846700,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786053900,
+      "hora": "19:00",
+      "inning": {
+        "number": 8,
+        "part": "Baja"
+      },
+      "tv_network": {
+        "name": "TVC Deportes",
+        "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2023-04/tvcDeportes.png"
+      },
+      "tvNetworks": [
+        {
+          "name": "TVC Deportes",
+          "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2023-04/tvcDeportes.png"
+        }
+      ],
+      "tickets": "https://unionlaguna.boletea.com.mx/",
+      "jonron_tv": "https://www.lmb.tv/watch/70b7c38f-876b-44d2-9f5e-d4d72990dd24",
+      "awayTeam": {
+        "teamUuid": "88e08b39-0215-4599-8245-bd19939da7c2",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Saraperos.png",
+        "name": "Saraperos",
+        "shortName": "SLW",
+        "winGames": 38,
+        "lostGames": 55,
+        "runsScored": 1,
+        "totalHits": 5,
+        "totalErrors": 0,
+        "probablePitcher": ""
+      },
+      "localTeam": {
+        "teamUuid": "853e6101-756d-44f3-ae6a-df4b881d402b",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Algodoneros.png",
+        "name": "Algodoneros",
+        "shortName": "LAG",
+        "winGames": 46,
+        "lostGames": 47,
+        "runsScored": 2,
+        "totalHits": 4,
+        "totalErrors": 1,
+        "probablePitcher": ""
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 1,
+      "balls": 0,
+      "outs": 2,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Miguel Vazquez",
+        "stats": "1.0 IP / 5.30 ERA"
+      },
+      "losingPitcher": {
+        "name": "Oscar Rojas",
+        "stats": "1.0 IP / 7.48 ERA"
+      },
+      "savedBy": {
+        "name": "",
+        "savedGames": 0
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 8,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 0
+        }
+      ]
+    },
+    {
+      "gameId": 846098,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786057200,
+      "hora": "19:00",
+      "inning": {
+        "number": 7,
+        "part": "Baja"
+      },
+      "tv_network": {
+        "name": "Imagen Digital",
+        "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2026-06/Imagen Digital.png"
+      },
+      "tvNetworks": [
+        {
+          "name": "Imagen Digital",
+          "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2026-06/Imagen Digital.png"
+        }
+      ],
+      "tickets": "https://boletomovil.com/caliente-durango",
+      "jonron_tv": "https://www.lmb.tv/watch/0e205190-0c8e-4844-b918-3acff6a73e8c",
+      "awayTeam": {
+        "teamUuid": "1c376670-88bb-4830-b711-dc18e381f7a4",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Toros.png",
+        "name": "Toros",
+        "shortName": "TIJ",
+        "winGames": 59,
+        "lostGames": 31,
+        "runsScored": 7,
+        "totalHits": 13,
+        "totalErrors": 0,
+        "probablePitcher": ""
+      },
+      "localTeam": {
+        "teamUuid": "c496bc04-1b72-4205-9474-7f80ed48468e",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2025-03/caliente.png",
+        "name": "Caliente ",
+        "shortName": "DUR",
+        "winGames": 51,
+        "lostGames": 41,
+        "runsScored": 2,
+        "totalHits": 10,
+        "totalErrors": 0,
+        "probablePitcher": ""
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 2,
+      "balls": 0,
+      "outs": 3,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Randy Acosta",
+        "stats": "1.0 IP / 0.00 ERA"
+      },
+      "losingPitcher": {
+        "name": "Joe Corbett",
+        "stats": "1.0 IP / 7.00 ERA"
+      },
+      "savedBy": {
+        "name": "",
+        "savedGames": 0
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 2,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 4
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        }
+      ]
+    },
+    {
+      "gameId": 846099,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786057500,
+      "hora": "19:00",
+      "inning": {
+        "number": 7,
+        "part": "Baja"
+      },
+      "tv_network": {
+        "name": "",
+        "logoUrl": ""
+      },
+      "tvNetworks": [],
+      "tickets": "https://boletomovil.com/caliente-durango",
+      "jonron_tv": "https://www.lmb.tv/watch/e2772778-7f64-4b65-b648-3e32e307c0da",
+      "awayTeam": {
+        "teamUuid": "1c376670-88bb-4830-b711-dc18e381f7a4",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Toros.png",
+        "name": "Toros",
+        "shortName": "TIJ",
+        "winGames": 60,
+        "lostGames": 31,
+        "runsScored": 10,
+        "totalHits": 14,
+        "totalErrors": 1,
+        "probablePitcher": ""
+      },
+      "localTeam": {
+        "teamUuid": "c496bc04-1b72-4205-9474-7f80ed48468e",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2025-03/caliente.png",
+        "name": "Caliente ",
+        "shortName": "DUR",
+        "winGames": 51,
+        "lostGames": 42,
+        "runsScored": 1,
+        "totalHits": 6,
+        "totalErrors": 1,
+        "probablePitcher": ""
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 3,
+      "balls": 2,
+      "outs": 3,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Teddy Stankiewicz",
+        "stats": "5.0 IP / 5.06 ERA"
+      },
+      "losingPitcher": {
+        "name": "Maximiliano Méndez",
+        "stats": "1.0 IP / 18.00 ERA"
+      },
+      "savedBy": {
+        "name": "",
+        "savedGames": 0
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 5
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 3
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        }
+      ]
+    },
+    {
+      "gameId": 846241,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786062600,
+      "hora": "19:00",
+      "inning": {
+        "number": 9,
+        "part": "Baja"
+      },
+      "tv_network": {
+        "name": "ESPN",
+        "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2022-07/ESPN.png"
+      },
+      "tvNetworks": [
+        {
+          "name": "ESPN",
+          "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2022-07/ESPN.png"
+        },
+        {
+          "name": "Disney Premium",
+          "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2025-05/DisneyPremium.png"
+        }
+      ],
+      "tickets": "https://mistickets.com.mx/",
+      "jonron_tv": "https://www.lmb.tv/watch/43610f19-99e3-44aa-a3c7-4fc0c2eea54b",
+      "awayTeam": {
+        "teamUuid": "32f61867-5fa1-46f5-bbb7-047577a2fdd1",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Diablos.png",
+        "name": "Diablos Rojos",
+        "shortName": "MEX",
+        "winGames": 64,
+        "lostGames": 29,
+        "runsScored": 18,
+        "totalHits": 16,
+        "totalErrors": 0,
+        "probablePitcher": ""
+      },
+      "localTeam": {
+        "teamUuid": "a9225f6d-6d97-4f54-9787-4f2fb16160cb",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2025-04/Tigres_2025.png",
+        "name": "Tigres",
+        "shortName": "TIG",
+        "winGames": 43,
+        "lostGames": 50,
+        "runsScored": 0,
+        "totalHits": 4,
+        "totalErrors": 1,
+        "probablePitcher": "Alex Delgado"
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 2,
+      "balls": 2,
+      "outs": 3,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Brooks Hall",
+        "stats": "2.0 IP / 4.35 ERA"
+      },
+      "losingPitcher": {
+        "name": "Alex Delgado",
+        "stats": "2.1 IP / 5.75 ERA"
+      },
+      "savedBy": {
+        "name": "",
+        "savedGames": 0
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 6
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 6
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 4
+        },
+        {
+          "inningNumber": 8,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 9,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        }
+      ]
+    },
+    {
+      "gameId": 846506,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786064400,
+      "hora": "19:00",
+      "inning": {
+        "number": 9,
+        "part": "Alta"
+      },
+      "tv_network": {
+        "name": "AYM3",
+        "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2026-07/AYM Sports 3.png"
+      },
+      "tvNetworks": [
+        {
+          "name": "AYM3",
+          "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2026-07/AYM Sports 3.png"
+        }
+      ],
+      "tickets": "https://fanki.com.mx/es/Piratas_de_Campeche",
+      "jonron_tv": "https://www.lmb.tv/watch/0d096e54-b39b-4791-974f-e4fbe126b80d",
+      "awayTeam": {
+        "teamUuid": "8fa84568-c0dc-4115-a6b9-d836213e5ace",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2026-03/olmecas_azul.png",
+        "name": "Olmecas",
+        "shortName": "TAB",
+        "winGames": 54,
+        "lostGames": 38,
+        "runsScored": 1,
+        "totalHits": 3,
+        "totalErrors": 1,
+        "probablePitcher": "Austin Warner"
+      },
+      "localTeam": {
+        "teamUuid": "d28d9a65-1205-415a-80c0-a71b171eed11",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Piratas.png",
+        "name": "Piratas",
+        "shortName": "CAM",
+        "winGames": 52,
+        "lostGames": 41,
+        "runsScored": 9,
+        "totalHits": 12,
+        "totalErrors": 1,
+        "probablePitcher": "Ross Carver"
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 3,
+      "balls": 2,
+      "outs": 3,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Ross Carver",
+        "stats": "6.0 IP / 4.86 ERA"
+      },
+      "losingPitcher": {
+        "name": "Austin Warner",
+        "stats": "4.2 IP / 3.75 ERA"
+      },
+      "savedBy": {
+        "name": "Brian Moran",
+        "savedGames": 1
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 4,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 2,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 3,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 8,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 9,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        }
+      ]
+    },
+    {
+      "gameId": 846143,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786064400,
+      "hora": "19:00",
+      "inning": {
+        "number": 12,
+        "part": "Baja"
+      },
+      "tv_network": {
+        "name": "AYM2",
+        "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2026-07/AYM Sports 2.png"
+      },
+      "tvNetworks": [
+        {
+          "name": "AYM2",
+          "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2026-07/AYM Sports 2.png"
+        }
+      ],
+      "tickets": "https://boletomovil.com/guerreros-de-oaxaca",
+      "jonron_tv": "https://www.lmb.tv/watch/1b9919f1-79de-4807-8de1-c593fd5b6805",
+      "awayTeam": {
+        "teamUuid": "cc043dfb-6d4f-498f-9057-accde7f3cd7f",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2025-05/LOGO LEONES 2025.png",
+        "name": "Leones",
+        "shortName": "YUC",
+        "winGames": 33,
+        "lostGames": 58,
+        "runsScored": 11,
+        "totalHits": 17,
+        "totalErrors": 2,
+        "probablePitcher": "Cameron Gann"
+      },
+      "localTeam": {
+        "teamUuid": "a5d2fa18-4bd9-4206-9c57-f1b597fdf2c0",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Guerreros.png",
+        "name": "Guerreros",
+        "shortName": "OAX",
+        "winGames": 48,
+        "lostGames": 45,
+        "runsScored": 10,
+        "totalHits": 13,
+        "totalErrors": 0,
+        "probablePitcher": "Robert Dugger"
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 0,
+      "balls": 0,
+      "outs": 3,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Ricardo Rodríguez",
+        "stats": "2.0 IP / 2.95 ERA"
+      },
+      "losingPitcher": {
+        "name": "Conner Greene",
+        "stats": "2.0 IP / 5.40 ERA"
+      },
+      "savedBy": {
+        "name": "",
+        "savedGames": 0
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 4,
+          "awayTeamRuns": 3
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 8,
+          "homeTeamRuns": 4,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 9,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 10,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 11,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 12,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        }
+      ]
+    },
+    {
+      "gameId": 846561,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786064400,
+      "hora": "19:00",
+      "inning": {
+        "number": 9,
+        "part": "Baja"
+      },
+      "tv_network": {
+        "name": "Claro",
+        "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2022-07/CLAROSPORTS.png"
+      },
+      "tvNetworks": [
+        {
+          "name": "Claro",
+          "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2022-07/CLAROSPORTS.png"
+        }
+      ],
+      "tickets": "https://fanki.com.mx/es/Pericos_de_Puebla",
+      "jonron_tv": "https://www.lmb.tv/watch/660652b1-23d9-402e-9ea1-0ef6882c3570",
+      "awayTeam": {
+        "teamUuid": "ee43e463-b7ff-4c5b-93d0-a997fb1332ff",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2025-05/veracruz.png",
+        "name": "El Águila",
+        "shortName": "VER",
+        "winGames": 43,
+        "lostGames": 50,
+        "runsScored": 10,
+        "totalHits": 19,
+        "totalErrors": 0,
+        "probablePitcher": ""
+      },
+      "localTeam": {
+        "teamUuid": "84b1ce39-178e-4e1c-a766-5f17d6024f9f",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Pericos.png",
+        "name": "Pericos",
+        "shortName": "PUE",
+        "winGames": 50,
+        "lostGames": 42,
+        "runsScored": 6,
+        "totalHits": 16,
+        "totalErrors": 1,
+        "probablePitcher": "Jose E. Martinez"
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 2,
+      "balls": 0,
+      "outs": 3,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Bryce Bonnin",
+        "stats": "0.1 IP / 4.59 ERA"
+      },
+      "losingPitcher": {
+        "name": "Luis Ramos",
+        "stats": "0.1 IP / 54.00 ERA"
+      },
+      "savedBy": {
+        "name": "",
+        "savedGames": 0
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 2,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 2,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 8,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 4
+        },
+        {
+          "inningNumber": 9,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        }
+      ]
+    },
+    {
+      "gameId": 846189,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786064400,
+      "hora": "19:00",
+      "inning": {
+        "number": 9,
+        "part": "Baja"
+      },
+      "tv_network": {
+        "name": "",
+        "logoUrl": ""
+      },
+      "tvNetworks": [],
+      "tickets": "",
+      "jonron_tv": "https://www.lmb.tv/watch/cfc061c1-d0ee-4d29-a966-07db46944797",
+      "awayTeam": {
+        "teamUuid": "1aa7fc8d-d6d2-4037-b61b-dbf52535740c",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2026-01/LOGO CH AZUL_1a1.png",
+        "name": "Charros",
+        "shortName": "JAL",
+        "winGames": 48,
+        "lostGames": 45,
+        "runsScored": 15,
+        "totalHits": 15,
+        "totalErrors": 0,
+        "probablePitcher": "Michael Boyle"
+      },
+      "localTeam": {
+        "teamUuid": "3acf56c5-ea7c-4c7a-8665-21c069e1b2cc",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Dorados1.png",
+        "name": "Dorados",
+        "shortName": "CHI",
+        "winGames": 35,
+        "lostGames": 58,
+        "runsScored": 7,
+        "totalHits": 13,
+        "totalErrors": 5,
+        "probablePitcher": "Adrián Martinez"
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 2,
+      "balls": 3,
+      "outs": 3,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Sasagi Sanchez",
+        "stats": "1.1 IP / 4.91 ERA"
+      },
+      "losingPitcher": {
+        "name": "Adrián Martinez",
+        "stats": "0.1 IP / 10.38 ERA"
+      },
+      "savedBy": {
+        "name": "",
+        "savedGames": 0
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 7
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 2,
+          "awayTeamRuns": 3
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 2,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 3
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 2,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 8,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 9,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        }
+      ]
+    },
+    {
+      "gameId": 846465,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786066200,
+      "hora": "19:00",
+      "inning": {
+        "number": 9,
+        "part": "Baja"
+      },
+      "tv_network": {
+        "name": "Fox One",
+        "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2026-01/FOX_ONE_Primary_Black.png"
+      },
+      "tvNetworks": [
+        {
+          "name": "Fox One",
+          "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2026-01/FOX_ONE_Primary_Black.png"
+        }
+      ],
+      "tickets": "https://boletomovil.com/rieleros-aguascalientes?source=LMB",
+      "jonron_tv": "https://www.lmb.tv/watch/795f742c-5ba2-47de-8c07-68108de6db0d",
+      "awayTeam": {
+        "teamUuid": "39c31923-d4ae-4cac-98c3-0dd0bbf651f5",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Acereros.png",
+        "name": "Acereros",
+        "shortName": "MVA",
+        "winGames": 48,
+        "lostGames": 45,
+        "runsScored": 7,
+        "totalHits": 14,
+        "totalErrors": 0,
+        "probablePitcher": "Jorge Rodriguez"
+      },
+      "localTeam": {
+        "teamUuid": "586eaba5-49fb-4fab-9422-c71e17077c57",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2026-01/rieleros_azul.png",
+        "name": "Rieleros",
+        "shortName": "AGS",
+        "winGames": 42,
+        "lostGames": 47,
+        "runsScored": 6,
+        "totalHits": 7,
+        "totalErrors": 2,
+        "probablePitcher": ""
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 3,
+      "balls": 1,
+      "outs": 3,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Ian Churchill",
+        "stats": "1.0 IP / 0.00 ERA"
+      },
+      "losingPitcher": {
+        "name": "Juan Mercedes",
+        "stats": "0.2 IP / 5.40 ERA"
+      },
+      "savedBy": {
+        "name": "Jonathan Lopez",
+        "savedGames": 1
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 4,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 2,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 8,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 9,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 2
+        }
+      ]
+    },
+    {
+      "gameId": 846278,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786066200,
+      "hora": "19:00",
+      "inning": {
+        "number": 9,
+        "part": "Baja"
+      },
+      "tv_network": {
+        "name": "Disney Premium",
+        "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2025-05/DisneyPremium.png"
+      },
+      "tvNetworks": [
+        {
+          "name": "Disney Premium",
+          "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2025-05/DisneyPremium.png"
+        }
+      ],
+      "tickets": "https://boletomovil.com/sultanes-monterrey?source=LMB",
+      "jonron_tv": "https://www.lmb.tv/watch/eec463d6-b41f-4d6f-9057-5bf9f10f8ba8",
+      "awayTeam": {
+        "teamUuid": "95f8e6eb-304f-42ef-ab57-a0a8d07c30e3",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Tecolotes.png",
+        "name": "Tecos",
+        "shortName": "LAR",
+        "winGames": 36,
+        "lostGames": 57,
+        "runsScored": 6,
+        "totalHits": 11,
+        "totalErrors": 1,
+        "probablePitcher": "Drew Parrish"
+      },
+      "localTeam": {
+        "teamUuid": "030b8052-c41a-4792-98d4-2e3261963cf4",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Sultanes.png",
+        "name": "Sultanes",
+        "shortName": "MTY",
+        "winGames": 49,
+        "lostGames": 44,
+        "runsScored": 1,
+        "totalHits": 5,
+        "totalErrors": 1,
+        "probablePitcher": ""
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 0,
+      "balls": 0,
+      "outs": 3,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Erick Rodriguez",
+        "stats": "1.0 IP / 9.95 ERA"
+      },
+      "losingPitcher": {
+        "name": "Jose Miranda",
+        "stats": "5.0 IP / 7.53 ERA"
+      },
+      "savedBy": {
+        "name": "",
+        "savedGames": 0
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 2
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 3
+        },
+        {
+          "inningNumber": 8,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 9,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        }
+      ]
+    },
+    {
+      "gameId": 846797,
+      "status": "F",
+      "detailedStatus": "Final",
+      "canceledSubStatus": "",
+      "date_time": 1786066200,
+      "hora": "19:00",
+      "inning": {
+        "number": 9,
+        "part": "Alta"
+      },
+      "tv_network": {
+        "name": "AYM1",
+        "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2026-07/AYM Sports.png"
+      },
+      "tvNetworks": [
+        {
+          "name": "AYM1",
+          "logoUrl": "https://d11rb39sj794dg.cloudfront.net/public/2026-07/AYM Sports.png"
+        }
+      ],
+      "tickets": "https://boletomovil.com/bravos-leon?source=LMB",
+      "jonron_tv": "https://www.lmb.tv/watch/ae1d314f-c34d-401e-8448-741fe7945b09",
+      "awayTeam": {
+        "teamUuid": "ee4287fb-dac6-4baa-9132-8b51de240496",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2024-04/Conspiradores.png",
+        "name": "Conspiradores",
+        "shortName": "QRO",
+        "winGames": 35,
+        "lostGames": 58,
+        "runsScored": 9,
+        "totalHits": 14,
+        "totalErrors": 0,
+        "probablePitcher": "Luis Romero"
+      },
+      "localTeam": {
+        "teamUuid": "1cf499f6-42d5-4bf1-93c0-9c9ab1b286b9",
+        "urlLogo": "https://d11rb39sj794dg.cloudfront.net/public/2025-04/contactos Dimo fix.png",
+        "name": "Bravos",
+        "shortName": "LEO",
+        "winGames": 50,
+        "lostGames": 43,
+        "runsScored": 14,
+        "totalHits": 16,
+        "totalErrors": 2,
+        "probablePitcher": "Rogelio Martinez"
+      },
+      "bases": {
+        "first": 0,
+        "second": 0,
+        "third": 0
+      },
+      "strikes": 3,
+      "balls": 2,
+      "outs": 3,
+      "pitcher": {
+        "name": "",
+        "stats": ""
+      },
+      "batter": {
+        "name": "",
+        "stats": ""
+      },
+      "winningPitcher": {
+        "name": "Matt Tenuta",
+        "stats": "0.1 IP / 0.90 ERA"
+      },
+      "losingPitcher": {
+        "name": "Denny Roman",
+        "stats": "1.0 IP / 4.58 ERA"
+      },
+      "savedBy": {
+        "name": "",
+        "savedGames": 0
+      },
+      "lineScore": [
+        {
+          "inningNumber": 1,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 4
+        },
+        {
+          "inningNumber": 2,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 3,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 3
+        },
+        {
+          "inningNumber": 4,
+          "homeTeamRuns": 6,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 5,
+          "homeTeamRuns": 2,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 6,
+          "homeTeamRuns": 2,
+          "awayTeamRuns": 1
+        },
+        {
+          "inningNumber": 7,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 8,
+          "homeTeamRuns": 1,
+          "awayTeamRuns": 0
+        },
+        {
+          "inningNumber": 9,
+          "homeTeamRuns": 0,
+          "awayTeamRuns": 0
+        }
+      ]
+    }
+  ]
+}

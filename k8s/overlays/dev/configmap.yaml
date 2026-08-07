@@ -9,6 +9,13 @@ data:
   OTEL_SERVICE_NAME: predictmarket-saas-dev
   POLYMARKET_API_URL: https://gamma-api.polymarket.com
   POLYMARKET_SYNC_INTERVAL: "@every 30m"
+  LMB_BASE_URL: https://lmb.com.mx
+  LMB_CALENDAR_TIMEZONE: Asia/Shanghai
+  LMB_MARKET_TIMEZONE: America/Mexico_City
+  LMB_REQUEST_TIMEOUT: 15s
+  SPORTS_INGEST_POLL_INTERVAL: 5m
+  SPORTS_INGEST_LOOKAHEAD_DAYS: "7"
+  SPORTS_INGEST_RUN_ONCE: "false"
   SPORTS_SYNC_INTERVAL: "@every 30m"
   SPORTS_LEAGUES: nba,nfl,mlb,nhl,wnba,epl
   EXCHANGE_RATE_API_URL: https://api.exchangerate-api.com/v4/latest/USD

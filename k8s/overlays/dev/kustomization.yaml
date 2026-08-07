@@ -6,5 +6,6 @@ resources:
   - redis.yaml
   - nats.yaml
   - api.yaml
+  - sports-ingest.yaml
   - ingress.yaml
   - migration-job.yaml

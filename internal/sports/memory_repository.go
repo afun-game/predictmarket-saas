@@ -18,24 +18,25 @@ func newMemoryRepository() *memoryRepository {
 	return &memoryRepository{byID: map[string]*SportsEvent{}, idBySource: map[string]string{}}
 }
 
-func (r *memoryRepository) UpsertSource(ctx context.Context, sourceID string, value *SportsEvent, _ time.Time) (string, error) {
+func (r *memoryRepository) UpsertSource(ctx context.Context, sourceType, sourceID string, value *SportsEvent, _ time.Time) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	id := r.idBySource[sourceID]
+	sourceKey := sourceType + "\x00" + sourceID
+	id := r.idBySource[sourceKey]
 	if id == "" && value.Event != nil {
 		id = value.Event.ID
 	}
 	if id == "" {
-		id = sourceID
+		id = sourceType + ":" + sourceID
 	}
 	clone := cloneSportsEvent(value)
 	if clone.Event != nil {
 		clone.Event.ID = id
 	}
-	r.byID[id], r.idBySource[sourceID] = clone, id
+	r.byID[id], r.idBySource[sourceKey] = clone, id
 	return id, nil
 }
 

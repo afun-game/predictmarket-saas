@@ -223,7 +223,7 @@ func (s *implementation) SyncFromPolymarket(ctx context.Context) error {
 				if err := s.sink.SyncSource(ctx, request); err != nil {
 					return fmt.Errorf("sync sports event %q: %w", sourceEvent.ID, err)
 				}
-				eventID, err := s.repository.UpsertSource(ctx, sourceEvent.ID, metadata, s.now().UTC())
+				eventID, err := s.repository.UpsertSource(ctx, "polymarket", sourceEvent.ID, metadata, s.now().UTC())
 				if err != nil {
 					return fmt.Errorf("upsert sports metadata %q: %w", sourceEvent.ID, err)
 				}

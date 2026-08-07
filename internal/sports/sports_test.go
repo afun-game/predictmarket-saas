@@ -2,13 +2,63 @@ package sports
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/afun-game/predictmarket-saas/internal/event"
 	"github.com/afun-game/predictmarket-saas/pkg/polymarket"
+	"github.com/afun-game/predictmarket-saas/pkg/types"
 )
+
+func TestMemoryRepositoryScopesSourcesByProvider(t *testing.T) {
+	repository := newMemoryRepository()
+	ctx := context.Background()
+	syncedAt := time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC)
+
+	polymarketID, err := repository.UpsertSource(ctx, "polymarket", "846703", &SportsEvent{
+		Event:  &types.Event{ID: "polymarket-event", SourceType: "polymarket", SourceID: "846703"},
+		League: "mlb",
+		Teams:  []Team{{Name: "Polymarket Away", Role: "away"}},
+	}, syncedAt)
+	if err != nil {
+		t.Fatalf("upsert Polymarket sports metadata: %v", err)
+	}
+	lmbID, err := repository.UpsertSource(ctx, "lmb", "846703", &SportsEvent{
+		Event:  &types.Event{ID: "lmb-event", SourceType: "lmb", SourceID: "846703"},
+		League: "lmb",
+		Teams:  []Team{{Name: "LMB Away", Role: "away"}},
+	}, syncedAt)
+	if err != nil {
+		t.Fatalf("upsert LMB sports metadata: %v", err)
+	}
+	if polymarketID == lmbID {
+		t.Fatalf("provider-scoped source IDs collided: %q", polymarketID)
+	}
+
+	polymarket, err := repository.GetByID(ctx, polymarketID)
+	if err != nil {
+		t.Fatalf("get Polymarket sports metadata: %v", err)
+	}
+	if polymarket.Event.SourceType != "polymarket" || polymarket.League != "mlb" || polymarket.Teams[0].Name != "Polymarket Away" {
+		t.Errorf("Polymarket metadata = %#v", polymarket)
+	}
+	lmb, err := repository.GetByID(ctx, lmbID)
+	if err != nil {
+		t.Fatalf("get LMB sports metadata: %v", err)
+	}
+	if lmb.Event.SourceType != "lmb" || lmb.League != "lmb" || lmb.Teams[0].Name != "LMB Away" {
+		t.Errorf("LMB metadata = %#v", lmb)
+	}
+}
+
+func TestNewPostgresRepository(t *testing.T) {
+	repository := NewPostgresRepository(&sql.DB{})
+	if repository == nil {
+		t.Fatal("NewPostgresRepository() returned nil")
+	}
+}
 
 func TestNormalizeSourceEventUsesStructuredSportsFields(t *testing.T) {
 	start := time.Date(2026, 7, 28, 23, 30, 0, 0, time.UTC)
@@ -54,6 +104,9 @@ func TestSportsSyncFiltersCatalogAndPropagatesErrors(t *testing.T) {
 	}
 	if len(sink.requests) != 1 || len(repository.sources) != 1 {
 		t.Errorf("sink calls = %d, repository calls = %d", len(sink.requests), len(repository.sources))
+	}
+	if len(repository.sources) == 1 && repository.sources[0].sourceType != "polymarket" {
+		t.Errorf("sports source type = %q, want polymarket", repository.sources[0].sourceType)
 	}
 
 	sink.err = errors.New("sink unavailable")
@@ -104,12 +157,17 @@ func (s *stubEventSink) SyncSource(_ context.Context, request *event.SyncRequest
 }
 
 type captureRepository struct {
-	sources []string
+	sources []sourceReference
 	err     error
 }
 
-func (r *captureRepository) UpsertSource(_ context.Context, sourceID string, _ *SportsEvent, _ time.Time) (string, error) {
-	r.sources = append(r.sources, sourceID)
+type sourceReference struct {
+	sourceType string
+	sourceID   string
+}
+
+func (r *captureRepository) UpsertSource(_ context.Context, sourceType, sourceID string, _ *SportsEvent, _ time.Time) (string, error) {
+	r.sources = append(r.sources, sourceReference{sourceType: sourceType, sourceID: sourceID})
 	return sourceID, r.err
 }
 func (*captureRepository) GetByID(context.Context, string) (*SportsEvent, error) {

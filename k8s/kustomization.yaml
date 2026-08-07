@@ -4,6 +4,7 @@ resources:
   - namespace.yaml
   - configmap.yaml
   - deployment.yaml
+  - sports-ingest-deployment.yaml
   - service.yaml
   - ingress.yaml
   - pdb.yaml

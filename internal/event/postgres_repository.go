@@ -35,6 +35,11 @@ func newPostgresRepository(database *sql.DB) *postgresRepository {
 	return &postgresRepository{database: database}
 }
 
+// NewPostgresRepository creates an event repository backed by database.
+func NewPostgresRepository(database *sql.DB) Repository {
+	return newPostgresRepository(database)
+}
+
 func (r *postgresRepository) Create(ctx context.Context, value *types.Event) error {
 	const query = `
 INSERT INTO events (

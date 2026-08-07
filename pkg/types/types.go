@@ -48,7 +48,7 @@ type Event struct {
 	twill.AutoMarshal
 
 	ID             string    `json:"id"`
-	SourceType     string    `json:"source_type"` // polymarket, custom
+	SourceType     string    `json:"source_type"` // polymarket, lmb, custom
 	SourceID       string    `json:"source_id"`
 	Title          string    `json:"title"`
 	Description    string    `json:"description"`

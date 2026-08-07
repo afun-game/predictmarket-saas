@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: predictmarket-sports-ingest
+  namespace: predictmarket
+  labels:
+    app.kubernetes.io/name: predictmarket-sports-ingest
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: predictmarket-sports-ingest
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: predictmarket-sports-ingest
+        app.kubernetes.io/component: worker
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sports-ingest
+          image: ghcr.io/your-org/predictmarket-saas:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["./sports-ingest"]
+          envFrom:
+            - configMapRef:
+                name: predictmarket-config
+            - secretRef:
+                name: predictmarket-secrets
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: predictmarket-secrets
+                  key: DATABASE_URL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true

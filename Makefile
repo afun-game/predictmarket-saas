@@ -28,10 +28,19 @@ build: ## Build the application
 	@echo "Building application..."
 	go build -buildvcs=false -o bin/predictmarket ./cmd/api
 
+.PHONY: build-sports-ingest
+build-sports-ingest: ## Build the standalone LMB sports ingest worker
+	@echo "Building sports ingest worker..."
+	go build -mod=vendor -buildvcs=false -o bin/sports-ingest ./cmd/sports-ingest
+
 .PHONY: run
 run: ## Run the application locally
 	@echo "Running application..."
 	SERVICETWILL_CONFIG=$(PROJECT_ROOT)twill.toml go run -buildvcs=false ./cmd/api
+
+.PHONY: run-sports-ingest
+run-sports-ingest: ## Run the standalone LMB sports ingest worker locally
+	go run -mod=vendor -buildvcs=false ./cmd/sports-ingest
 
 .PHONY: merchant-sim
 merchant-sim: ## Run the V3 merchant callback/webhook simulator
@@ -231,8 +240,15 @@ k8s-deploy-plan: ## Generate Kubernetes deployment plan
 
 .PHONY: validate-deployment
 validate-deployment: ## Validate OpenAPI and Kubernetes YAML rendering
+	python3 scripts/validate_sports_ingest.py
 	python3 scripts/validate_openapi.py
-	kubectl kustomize k8s >/dev/null
+	@if command -v kubectl >/dev/null 2>&1; then \
+		kubectl kustomize k8s >/dev/null; \
+	elif command -v kustomize >/dev/null 2>&1; then \
+		kustomize build k8s >/dev/null; \
+	else \
+		echo "Kustomize validation skipped: kubectl and kustomize are not installed"; \
+	fi
 	@for FILE in k8s/*.yaml; do \
 		python3 -c 'import sys, yaml; list(yaml.safe_load_all(open(sys.argv[1], encoding="utf-8")))' "$$FILE"; \
 	done
