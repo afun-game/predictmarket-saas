@@ -14,7 +14,7 @@ const (
 	defaultLMBCalendarTimezone = "Asia/Shanghai"
 	defaultLMBMarketTimezone   = "America/Mexico_City"
 	defaultLMBRequestTimeout   = 15 * time.Second
-	defaultSportsPollInterval  = 5 * time.Minute
+	defaultSportsPollInterval  = 15 * time.Minute
 	defaultSportsLookaheadDays = 7
 	maximumSportsLookaheadDays = 30
 )

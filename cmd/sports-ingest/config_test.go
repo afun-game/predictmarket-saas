@@ -23,8 +23,8 @@ func TestLoadConfigUsesDefaults(t *testing.T) {
 	if config.LMBRequestTimeout != 15*time.Second {
 		t.Errorf("LMBRequestTimeout = %s, want 15s", config.LMBRequestTimeout)
 	}
-	if config.PollInterval != 5*time.Minute {
-		t.Errorf("PollInterval = %s, want 5m", config.PollInterval)
+	if config.PollInterval != 15*time.Minute {
+		t.Errorf("PollInterval = %s, want 15m", config.PollInterval)
 	}
 	if config.LookaheadDays != 7 {
 		t.Errorf("LookaheadDays = %d, want 7", config.LookaheadDays)

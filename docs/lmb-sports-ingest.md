@@ -36,7 +36,7 @@ The worker requires `DATABASE_URL`, supplied from the existing
 | `LMB_CALENDAR_TIMEZONE` | `Asia/Shanghai` | Day used to build LMB calendar query bounds. |
 | `LMB_MARKET_TIMEZONE` | `America/Mexico_City` | LMB market/business display convention. |
 | `LMB_REQUEST_TIMEOUT` | `15s` | Per-request HTTP timeout. |
-| `SPORTS_INGEST_POLL_INTERVAL` | `5m` | Delay between normal synchronization runs. |
+| `SPORTS_INGEST_POLL_INTERVAL` | `15m` | Delay between normal synchronization runs. |
 | `SPORTS_INGEST_LOOKAHEAD_DAYS` | `7` | Inclusive number of future calendar days to query (0–30). |
 | `SPORTS_INGEST_RUN_ONCE` | `false` | Exit after the initial synchronization when `true`. |
 
