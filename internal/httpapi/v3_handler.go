@@ -791,13 +791,11 @@ func (h *v3Handler) listUserOrders(w http.ResponseWriter, r *http.Request) {
 	// into the order history so a refresh shows everything the user
 	// participated in. Bets normalize to order-shaped items with
 	// type "bet" and amount = stake, matching the hosted UI's bet rendering.
-	titles := h.marketTitlesForOrders(r.Context(), page.Orders)
 	items := make([]any, 0, len(page.Orders)+userBetHistoryLimit)
-	for _, order := range orderListWithTitles(page.Orders, titles) {
-		items = append(items, order)
-	}
+	var bets []parimutuel.Bet
 	if h.parimutuel != nil {
-		bets, _, betErr := h.parimutuel.ListBets(r.Context(), parimutuel.ListFilters{
+		var betErr error
+		bets, _, betErr = h.parimutuel.ListBets(r.Context(), parimutuel.ListFilters{
 			MerchantID: browserSession.MerchantID,
 			UserID:     browserSession.UserID,
 			MarketID:   filters.MarketID,
@@ -806,18 +804,22 @@ func (h *v3Handler) listUserOrders(w http.ResponseWriter, r *http.Request) {
 		})
 		if betErr != nil {
 			slog.WarnContext(r.Context(), "user bet history unavailable", "error", betErr)
-		} else {
-			for _, bet := range bets {
-				if filters.Status != "" && bet.Status != filters.Status {
-					continue
-				}
-				view := userBetOrderView(bet)
-				if title := titles[bet.MarketID]; title != "" {
-					view["market_title"] = title
-				}
-				items = append(items, view)
-			}
+			bets = nil
 		}
+	}
+	titles := h.orderMarketTitles(r.Context(), page.Orders, bets)
+	for _, order := range orderListWithTitles(page.Orders, titles) {
+		items = append(items, order)
+	}
+	for _, bet := range bets {
+		if filters.Status != "" && bet.Status != filters.Status {
+			continue
+		}
+		view := userBetOrderView(bet)
+		if title := titles[bet.MarketID]; title != "" {
+			view["market_title"] = title
+		}
+		items = append(items, view)
 	}
 	sort.SliceStable(items, func(i, j int) bool {
 		return userOrderCreatedAt(items[i]).After(userOrderCreatedAt(items[j]))
@@ -839,7 +841,7 @@ type orderWithMarketTitle struct {
 	MarketTitle string `json:"market_title,omitempty"`
 }
 
-// marketTitlesForOrders batches the market questions for a set of order ids'
+// marketTitlesForOrders batches the market questions for a set of orders'
 // markets; failures degrade to an empty map.
 func (h *v3Handler) marketTitlesForOrders(ctx context.Context, orders []*types.Order) map[string]string {
 	titles := map[string]string{}
@@ -856,6 +858,29 @@ func (h *v3Handler) marketTitlesForOrders(ctx context.Context, orders []*types.O
 		return titles
 	}
 	return values
+}
+
+// orderMarketTitles batches market questions for both orders and bets.
+func (h *v3Handler) orderMarketTitles(ctx context.Context, orders []*types.Order, bets []parimutuel.Bet) map[string]string {
+	titles := h.marketTitlesForOrders(ctx, orders)
+	if h.queries == nil || len(bets) == 0 {
+		return titles
+	}
+	ids := make([]string, 0, len(bets))
+	for _, bet := range bets {
+		ids = append(ids, bet.MarketID)
+	}
+	values, err := h.queries.MarketTitles(ctx, ids)
+	if err != nil {
+		slog.WarnContext(ctx, "bet market titles unavailable", "error", err)
+		return titles
+	}
+	for marketID, title := range values {
+		if title != "" {
+			titles[marketID] = title
+		}
+	}
+	return titles
 }
 
 func orderListWithTitles(orders []*types.Order, titles map[string]string) []orderWithMarketTitle {
