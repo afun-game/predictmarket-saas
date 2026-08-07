@@ -19,6 +19,7 @@ const view = {
   marketId: "",
   status: "",
   category: "",
+  sourceType: "",
   eventId: "",
   type: "",
   userTxPage: 1,
@@ -708,7 +709,7 @@ async function userDetailPage(merchantId, userId) {
 
 async function eventsPage() {
   const data = await apiFetch(
-    `/api/v1/admin/events${qs({ q: view.q, category: view.category, status: view.status, page: view.page, limit: view.limit })}`
+    `/api/v1/admin/events${qs({ q: view.q, category: view.category, status: view.status, source_type: view.sourceType, page: view.page, limit: view.limit })}`
   );
   const rows = (data.items ?? [])
     .map(
@@ -716,6 +717,7 @@ async function eventsPage() {
     <tr class="clickable" data-nav="#/events/${escapeHTML(item.id)}">
       <td class="td-strong">${escapeHTML(item.title)}</td>
       <td>${escapeHTML(categoryLabel(item.category))}</td>
+      <td class="td-mono">${escapeHTML(item.source_type ?? "—")}</td>
       <td>${statusBadge(item.status)}</td>
       <td class="td-muted">${formatTime(item.resolution_time)}</td>
     </tr>`
@@ -740,11 +742,12 @@ async function eventsPage() {
         <div class="field field--grow"><label>搜索</label><input class="input" name="q" value="${escapeHTML(view.q)}" placeholder="事件标题" autocomplete="off"></div>
         <div class="field"><label>分类</label><select class="input" name="category">${categoryOptions(view.category)}</select></div>
         <div class="field"><label>状态</label><select class="input" name="status">${statusOptions(["pending", "active", "closed", "resolved"], view.status)}</select></div>
-        <div class="field form-field--actions"><button class="btn btn--primary" type="submit">筛选</button>${view.q || view.category || view.status ? `<button class="btn btn--ghost" type="button" data-action="reset-filters">重置</button>` : ""}</div>
+        <div class="field"><label>来源</label><select class="input" name="source_type"><option value="">全部来源</option><option value="custom"${view.sourceType === "custom" ? " selected" : ""}>custom</option><option value="polymarket"${view.sourceType === "polymarket" ? " selected" : ""}>polymarket</option><option value="lmb"${view.sourceType === "lmb" ? " selected" : ""}>lmb</option><option value="boxrec"${view.sourceType === "boxrec" ? " selected" : ""}>boxrec</option></select></div>
+        <div class="field form-field--actions"><button class="btn btn--primary" type="submit">筛选</button>${view.q || view.category || view.status || view.sourceType ? `<button class="btn btn--ghost" type="button" data-action="reset-filters">重置</button>` : ""}</div>
       </form>
       <div class="section-heading list-heading"><h2>事件列表</h2><button class="btn btn--primary" type="button" data-action="toggle-create-event">${view.showCreateEvent ? "收起表单" : "新建事件"}</button></div>
       ${createForm}
-      ${tableCard(["标题", "分类", "状态", "结算时间"], rows, "暂无事件", 4)}
+      ${tableCard(["标题", "分类", "来源", "状态", "结算时间"], rows, "暂无事件", 5)}
       ${paginationBar(data.total, view.page)}
     </section>`;
 }
@@ -1123,7 +1126,7 @@ async function handleAction(action, target) {
         return render();
       }
       case "reset-filters":
-        Object.assign(view, { q: "", merchantId: "", userId: "", marketId: "", status: "", category: "", eventId: "", type: "" });
+        Object.assign(view, { q: "", merchantId: "", userId: "", marketId: "", status: "", category: "", sourceType: "", eventId: "", type: "" });
         view.page = 1;
         return render();
       case "toggle-create-event":
@@ -1390,6 +1393,7 @@ function applyFilters(form) {
     marketId: String(data.get("market_id") ?? "").trim(),
     status: String(data.get("status") ?? "").trim(),
     category: String(data.get("category") ?? "").trim(),
+    sourceType: String(data.get("source_type") ?? "").trim(),
     eventId: String(data.get("event_id") ?? "").trim(),
     type: String(data.get("type") ?? "").trim(),
   });
@@ -1616,6 +1620,7 @@ async function bootstrap() {
       marketId: "",
       status: "",
       category: "",
+      sourceType: "",
       eventId: "",
       type: "",
       userTxPage: 1,

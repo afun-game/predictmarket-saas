@@ -541,6 +541,7 @@ GROUP BY 1`)
 // EventRow is one event in the console list.
 type EventRow struct {
 	ID             string    `json:"id"`
+	SourceType     string    `json:"source_type"`
 	Title          string    `json:"title"`
 	Description    string    `json:"description"`
 	Category       string    `json:"category"`
@@ -553,26 +554,28 @@ type EventRow struct {
 }
 
 // ListEvents returns paginated events, optionally filtered by keyword,
-// category, or status.
-func (s *Service) ListEvents(ctx context.Context, q, category, status string, page, limit int) ([]EventRow, int, error) {
+// category, status, or source type.
+func (s *Service) ListEvents(ctx context.Context, q, category, status, sourceType string, page, limit int) ([]EventRow, int, error) {
 	if s == nil || s.database == nil {
 		return nil, 0, errors.New("admin query database is not configured")
 	}
 	q = strings.TrimSpace(q)
 	category = strings.TrimSpace(category)
 	status = strings.TrimSpace(status)
+	sourceType = strings.ToLower(strings.TrimSpace(sourceType))
 	const where = `
 WHERE ($1 = '' OR e.title ILIKE '%' || $1 || '%')
   AND ($2 = '' OR e.category = $2)
-  AND ($3 = '' OR e.status = $3)`
+  AND ($3 = '' OR e.status = $3)
+  AND ($4 = '' OR e.source_type = $4)`
 	const selectQuery = `
-SELECT e.id, e.title, e.description, e.category, e.end_time, e.resolution_time,
+SELECT e.id, e.source_type, e.title, e.description, e.category, e.end_time, e.resolution_time,
        e.status, e.outcome, e.created_at,
        (SELECT COUNT(*) FROM markets m WHERE m.event_id = e.id)
 FROM events e` + where + `
 ORDER BY e.created_at DESC
-LIMIT $4 OFFSET $5`
-	rows, err := s.database.QueryContext(ctx, selectQuery, q, category, status, limit, (page-1)*limit)
+LIMIT $5 OFFSET $6`
+	rows, err := s.database.QueryContext(ctx, selectQuery, q, category, status, sourceType, limit, (page-1)*limit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list events: %w", err)
 	}
@@ -581,7 +584,7 @@ LIMIT $4 OFFSET $5`
 	for rows.Next() {
 		item := EventRow{}
 		if err := rows.Scan(
-			&item.ID, &item.Title, &item.Description, &item.Category,
+			&item.ID, &item.SourceType, &item.Title, &item.Description, &item.Category,
 			&item.EndTime, &item.ResolutionTime, &item.Status, &item.Outcome,
 			&item.CreatedAt, &item.MarketCount,
 		); err != nil {
@@ -595,7 +598,7 @@ LIMIT $4 OFFSET $5`
 	var total int
 	if err := s.database.QueryRowContext(ctx,
 		"SELECT COUNT(*) FROM events e "+where,
-		q, category, status).Scan(&total); err != nil {
+		q, category, status, sourceType).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count events: %w", err)
 	}
 	return items, total, nil

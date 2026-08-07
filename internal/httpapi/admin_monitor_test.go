@@ -500,6 +500,19 @@ FROM markets m` + marketsWhere + `
 ORDER BY m.created_at DESC
 LIMIT $5 OFFSET $6`
 
+	eventsWhere = `
+WHERE ($1 = '' OR e.title ILIKE '%' || $1 || '%')
+  AND ($2 = '' OR e.category = $2)
+  AND ($3 = '' OR e.status = $3)
+  AND ($4 = '' OR e.source_type = $4)`
+	eventsSelect = `
+SELECT e.id, e.source_type, e.title, e.description, e.category, e.end_time, e.resolution_time,
+       e.status, e.outcome, e.created_at,
+       (SELECT COUNT(*) FROM markets m WHERE m.event_id = e.id)
+FROM events e` + eventsWhere + `
+ORDER BY e.created_at DESC
+LIMIT $5 OFFSET $6`
+
 	auditLogsSelect = `
 SELECT l.id, l.admin_id, COALESCE(a.username, ''), l.action, l.resource, l.resource_id,
        l.before_state, l.after_state, l.client_ip, l.created_at
@@ -627,6 +640,60 @@ func TestAdminOverviewShape(t *testing.T) {
 	}
 	if !dates["2026-07-30"] {
 		t.Errorf("overview series is missing the reported day 2026-07-30: %v", overview.Series)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet sql expectations: %v", err)
+	}
+}
+
+func TestAdminListEventsFiltersBySourceType(t *testing.T) {
+	t.Parallel()
+
+	database, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer database.Close()
+
+	now := time.Now().UTC()
+	mock.ExpectQuery(eventsSelect).WithArgs("cup", "sports", "active", "lmb", 20, 0).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "source_type", "title", "description", "category", "end_time", "resolution_time",
+			"status", "outcome", "created_at", "market_count",
+		}).AddRow("event-lmb-1", "lmb", "LMB cup", "", "sports", now, now, "active", nil, now, 2))
+	mock.ExpectQuery("SELECT COUNT(*) FROM events e "+eventsWhere).
+		WithArgs("cup", "sports", "active", "lmb").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	manager, token, _ := newAdminSession(t)
+	handler := newAdminTestHandler(
+		t, event.NewService(), market.NewService(),
+		AdminConfig{Accounts: manager, Queries: adminquery.New(database)},
+	)
+
+	recorder := adminRequest(
+		t,
+		handler,
+		http.MethodGet,
+		"/api/v1/admin/events?q=cup&category=sports&status=active&source_type=lmb",
+		nil,
+		token,
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("list events status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	list := decodeAdminData[struct {
+		Items []struct {
+			ID         string `json:"id"`
+			SourceType string `json:"source_type"`
+		} `json:"items"`
+		Total int `json:"total"`
+	}](t, recorder)
+	if list.Total != 1 || len(list.Items) != 1 {
+		t.Fatalf("event list = %+v, want one event", list)
+	}
+	if list.Items[0].ID != "event-lmb-1" || list.Items[0].SourceType != "lmb" {
+		t.Errorf("event item = %+v, want event-lmb-1 from lmb", list.Items[0])
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet sql expectations: %v", err)

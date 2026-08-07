@@ -31,6 +31,7 @@ func (h *adminHandler) listEvents(w http.ResponseWriter, r *http.Request) {
 		r.URL.Query().Get("q"),
 		r.URL.Query().Get("category"),
 		r.URL.Query().Get("status"),
+		r.URL.Query().Get("source_type"),
 		page,
 		limit,
 	)
