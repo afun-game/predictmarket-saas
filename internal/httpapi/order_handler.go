@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 
 	"github.com/afun-game/predictmarket-saas/internal/auth"
@@ -67,29 +66,14 @@ func registerOrderRoutes(
 	)
 }
 
-// orderListWithTitles attaches each order's market question when the
+// orderListWithTitles attaches each order's market context when the
 // enrichment service is available; otherwise the list keeps its classic
 // shape.
 func (h *orderHandler) orderListWithTitles(ctx context.Context, orders []*types.Order) []orderWithMarketTitle {
-	if h.queries == nil || len(orders) == 0 {
-		items := make([]orderWithMarketTitle, 0, len(orders))
-		for _, order := range orders {
-			items = append(items, orderWithMarketTitle{Order: order})
-		}
-		return items
-	}
-	ids := make([]string, 0, len(orders))
-	for _, order := range orders {
-		ids = append(ids, order.MarketID)
-	}
-	titles, err := h.queries.MarketTitles(ctx, ids)
-	if err != nil {
-		slog.WarnContext(ctx, "order market titles unavailable", "error", err)
-		titles = map[string]string{}
-	}
+	ctxData := enrichOrders(ctx, h.queries, orders, nil)
 	items := make([]orderWithMarketTitle, 0, len(orders))
 	for _, order := range orders {
-		items = append(items, orderWithMarketTitle{Order: order, MarketTitle: titles[order.MarketID]})
+		items = append(items, orderViewWithContext(order, ctxData))
 	}
 	return items
 }

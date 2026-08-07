@@ -305,8 +305,12 @@ func (h *v3Handler) listV2Orders(w http.ResponseWriter, r *http.Request) {
 		writeOrderServiceError(w, err)
 		return
 	}
-	titles := h.marketTitlesForOrders(r.Context(), page.Orders)
-	writeJSON(w, http.StatusOK, map[string]any{"data": orderListWithTitles(page.Orders, titles), "meta": map[string]any{"next_cursor": page.NextCursor}})
+	ctxData := enrichOrders(r.Context(), h.queries, page.Orders, nil)
+	items := make([]orderWithMarketTitle, 0, len(page.Orders))
+	for _, order := range page.Orders {
+		items = append(items, orderViewWithContext(order, ctxData))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{"next_cursor": page.NextCursor}})
 }
 
 func (h *v3Handler) getV2Order(w http.ResponseWriter, r *http.Request) {
@@ -807,17 +811,26 @@ func (h *v3Handler) listUserOrders(w http.ResponseWriter, r *http.Request) {
 			bets = nil
 		}
 	}
-	titles := h.orderMarketTitles(r.Context(), page.Orders, bets)
-	for _, order := range orderListWithTitles(page.Orders, titles) {
-		items = append(items, order)
+	ctxData := enrichOrders(r.Context(), h.queries, page.Orders, bets)
+	for _, order := range page.Orders {
+		items = append(items, orderViewWithContext(order, ctxData))
 	}
 	for _, bet := range bets {
 		if filters.Status != "" && bet.Status != filters.Status {
 			continue
 		}
 		view := userBetOrderView(bet)
-		if title := titles[bet.MarketID]; title != "" {
+		if title := ctxData.titles[bet.MarketID]; title != "" {
 			view["market_title"] = title
+		}
+		if info, ok := ctxData.options[bet.MarketID]; ok {
+			view["options"] = info.Options
+			if info.WinningOption != "" {
+				view["winning_option"] = info.WinningOption
+			}
+		}
+		if payout, ok := ctxData.payouts[bet.ID]; ok {
+			view["payout"] = payout
 		}
 		items = append(items, view)
 	}
@@ -834,59 +847,102 @@ func (h *v3Handler) listUserOrders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{"next_cursor": page.NextCursor}})
 }
 
-// orderWithMarketTitle wraps an order with its market title for list
-// rendering without changing the order payload shape.
+// orderWithMarketTitle wraps an order with its market context for list
+// rendering without changing the order payload shape: market title/options,
+// the settlement winner, the order's payout, and the latest fill price.
 type orderWithMarketTitle struct {
 	*types.Order
-	MarketTitle string `json:"market_title,omitempty"`
+	MarketTitle   string   `json:"market_title,omitempty"`
+	Options       []string `json:"options,omitempty"`
+	WinningOption string   `json:"winning_option,omitempty"`
+	Payout        string   `json:"payout,omitempty"`
+	MatchedPrice  *float64 `json:"matched_price,omitempty"`
 }
 
-// marketTitlesForOrders batches the market questions for a set of orders'
-// markets; failures degrade to an empty map.
-func (h *v3Handler) marketTitlesForOrders(ctx context.Context, orders []*types.Order) map[string]string {
-	titles := map[string]string{}
-	if h.queries == nil || len(orders) == 0 {
-		return titles
-	}
-	ids := make([]string, 0, len(orders))
-	for _, order := range orders {
-		ids = append(ids, order.MarketID)
-	}
-	values, err := h.queries.MarketTitles(ctx, ids)
-	if err != nil {
-		slog.WarnContext(ctx, "order market titles unavailable", "error", err)
-		return titles
-	}
-	return values
+// orderListContext holds the batched market context for one order list.
+type orderListContext struct {
+	titles  map[string]string
+	options map[string]v2query.MarketOptionsInfo
+	payouts map[string]string
+	fills   map[string]float64
 }
 
-// orderMarketTitles batches market questions for both orders and bets.
-func (h *v3Handler) orderMarketTitles(ctx context.Context, orders []*types.Order, bets []parimutuel.Bet) map[string]string {
-	titles := h.marketTitlesForOrders(ctx, orders)
-	if h.queries == nil || len(bets) == 0 {
-		return titles
+// enrichOrders batches market titles/options, settlement payouts, and last
+// fill prices for a set of orders (and merged bets). Failures degrade to
+// missing fields.
+func enrichOrders(ctx context.Context, queries v2query.Service, orders []*types.Order, bets []parimutuel.Bet) orderListContext {
+	ctxData := orderListContext{
+		titles:  map[string]string{},
+		options: map[string]v2query.MarketOptionsInfo{},
+		payouts: map[string]string{},
+		fills:   map[string]float64{},
 	}
-	ids := make([]string, 0, len(bets))
-	for _, bet := range bets {
-		ids = append(ids, bet.MarketID)
+	if queries == nil || (len(orders) == 0 && len(bets) == 0) {
+		return ctxData
 	}
-	values, err := h.queries.MarketTitles(ctx, ids)
-	if err != nil {
-		slog.WarnContext(ctx, "bet market titles unavailable", "error", err)
-		return titles
-	}
-	for marketID, title := range values {
-		if title != "" {
-			titles[marketID] = title
+	marketIDs := make([]string, 0, len(orders)+len(bets))
+	orderIDs := make([]string, 0, len(orders)+len(bets))
+	seenMarket := map[string]bool{}
+	seenOrder := map[string]bool{}
+	appendUnique := func(ids *[]string, seen map[string]bool, value string) {
+		if value == "" || seen[value] {
+			return
 		}
+		seen[value] = true
+		*ids = append(*ids, value)
 	}
-	return titles
+	for _, order := range orders {
+		appendUnique(&marketIDs, seenMarket, order.MarketID)
+		appendUnique(&orderIDs, seenOrder, order.ID)
+	}
+	for _, bet := range bets {
+		appendUnique(&marketIDs, seenMarket, bet.MarketID)
+		appendUnique(&orderIDs, seenOrder, bet.ID)
+	}
+	if values, err := queries.MarketTitles(ctx, marketIDs); err == nil {
+		ctxData.titles = values
+	} else {
+		slog.WarnContext(ctx, "order market titles unavailable", "error", err)
+	}
+	if values, err := queries.MarketOptions(ctx, marketIDs); err == nil {
+		ctxData.options = values
+	} else {
+		slog.WarnContext(ctx, "order market options unavailable", "error", err)
+	}
+	if values, err := queries.OrderPayouts(ctx, orderIDs); err == nil {
+		ctxData.payouts = values
+	} else {
+		slog.WarnContext(ctx, "order payouts unavailable", "error", err)
+	}
+	if values, err := queries.OrderLastFill(ctx, orderIDs); err == nil {
+		ctxData.fills = values
+	} else {
+		slog.WarnContext(ctx, "order last fills unavailable", "error", err)
+	}
+	return ctxData
 }
 
+func orderViewWithContext(order *types.Order, ctxData orderListContext) orderWithMarketTitle {
+	view := orderWithMarketTitle{Order: order, MarketTitle: ctxData.titles[order.MarketID]}
+	if info, ok := ctxData.options[order.MarketID]; ok {
+		view.Options = info.Options
+		view.WinningOption = info.WinningOption
+	}
+	view.Payout = ctxData.payouts[order.ID]
+	if price, ok := ctxData.fills[order.ID]; ok {
+		view.MatchedPrice = &price
+	}
+	return view
+}
+
+// orderListWithTitles attaches each order's market title when the
+// enrichment service is available; otherwise the list keeps its classic
+// shape.
 func orderListWithTitles(orders []*types.Order, titles map[string]string) []orderWithMarketTitle {
+	ctxData := orderListContext{titles: titles}
 	items := make([]orderWithMarketTitle, 0, len(orders))
 	for _, order := range orders {
-		items = append(items, orderWithMarketTitle{Order: order, MarketTitle: titles[order.MarketID]})
+		items = append(items, orderViewWithContext(order, ctxData))
 	}
 	return items
 }

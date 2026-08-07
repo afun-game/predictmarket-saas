@@ -36,6 +36,19 @@ type Service interface {
 	MarketHistory(ctx context.Context, marketIDs []string) (map[string]*MarketHistory, error)
 	// MarketTitles returns each market's question (title) for list display.
 	MarketTitles(ctx context.Context, marketIDs []string) (map[string]string, error)
+	// MarketOptions returns each market's option set and settlement winner.
+	MarketOptions(ctx context.Context, marketIDs []string) (map[string]MarketOptionsInfo, error)
+	// OrderPayouts returns each order/bet's settled payout amount keyed by
+	// the order (or bet) ID.
+	OrderPayouts(ctx context.Context, orderIDs []string) (map[string]string, error)
+	// OrderLastFill returns the latest matched price for each order.
+	OrderLastFill(ctx context.Context, orderIDs []string) (map[string]float64, error)
+}
+
+// MarketOptionsInfo is a market's option set plus its settlement winner.
+type MarketOptionsInfo struct {
+	Options       []string `json:"options"`
+	WinningOption string   `json:"winning_option,omitempty"`
 }
 
 // BookQuote is the best executable bid/ask for one market option.

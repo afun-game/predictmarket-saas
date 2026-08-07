@@ -168,6 +168,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- GET orders 接口订单项新增 `options`（市场选项）、`winning_option`（结算
+  胜出方）、`payout`（该单派彩，输家为 0.00）、`matched_price`（最新成交
+  价，订单簿市场）；注单同样携带，前端历史页可展示胜出与盈亏。
 - GET orders 接口（/api/user/orders、/api/v2/orders、/api/v1/orders，含
   并入的注单）新增 `market_title`（市场问题），前端列表直接显示市场
   标题，无需再按 market_id 反查。

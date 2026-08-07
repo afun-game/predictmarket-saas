@@ -81,6 +81,7 @@ type integrationFixture struct {
 	merchantID string
 	userID     string
 	marketID   string
+	orderID    string
 	now        time.Time
 	ids        []string
 }
@@ -104,6 +105,7 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 		merchantID: integrationUUID(t),
 		userID:     "v2-query-user",
 		marketID:   integrationUUID(t),
+		orderID:    integrationUUID(t),
 		now:        time.Now().UTC().Truncate(time.Microsecond),
 		ids:        []string{},
 	}
@@ -117,7 +119,7 @@ func (f *integrationFixture) seed(t *testing.T) {
 	ctx := context.Background()
 	eventID := f.newID(t)
 	walletID := f.newID(t)
-	orderID := f.newID(t)
+	orderID := f.orderID
 	transactions := []struct {
 		id     string
 		typeID string
@@ -455,5 +457,59 @@ func TestMarketTitlesIntegration(t *testing.T) {
 	empty, err := service.MarketTitles(ctx, nil)
 	if err != nil || len(empty) != 0 {
 		t.Fatalf("MarketTitles(nil) = %#v, %v", empty, err)
+	}
+}
+
+func TestOrderListEnrichmentIntegration(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "1" {
+		t.Skip("set INTEGRATION_TEST=1 to run PostgreSQL integration tests")
+	}
+	fixture := newIntegrationFixture(t)
+	ctx := context.Background()
+	service := New(fixture.database)
+
+	options, err := service.MarketOptions(ctx, []string{fixture.marketID})
+	if err != nil {
+		t.Fatalf("MarketOptions() error = %v", err)
+	}
+	info, exists := options[fixture.marketID]
+	if !exists || len(info.Options) != 2 || info.Options[0] != "Yes" {
+		t.Fatalf("market options = %#v", info)
+	}
+	// The fixture market is settled with winner Yes.
+	if info.WinningOption != "Yes" {
+		t.Errorf("winning option = %q, want Yes", info.WinningOption)
+	}
+
+	orderID := fixture.orderID
+	payouts, err := service.OrderPayouts(ctx, []string{orderID})
+	if err != nil {
+		t.Fatalf("OrderPayouts() error = %v", err)
+	}
+	if payouts[orderID] == "" {
+		t.Errorf("payout missing for %s", orderID)
+	}
+	// The fixture has no trades; seed one so the last-fill lookup has data.
+	makerID := integrationUUID(t)
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO orders (
+    id, merchant_id, user_id, market_id, type, option, amount, filled_amount,
+    currency, price, time_in_force, status, created_at
+) VALUES ($1, $2, $3, $4, 'buy', 'Yes', 10, 10, 'USD', 0.5, 'gtc', 'filled', $5)`,
+		makerID, fixture.merchantID, fixture.userID, fixture.marketID, fixture.now); err != nil {
+		t.Fatalf("insert trade maker order: %v", err)
+	}
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO trades (market_id, maker_order_id, taker_order_id, shares, matched_price, created_at)
+VALUES ($1, $2, $3, 1, 0.6, $4)`,
+		fixture.marketID, makerID, orderID, fixture.now); err != nil {
+		t.Fatalf("insert trade fixture: %v", err)
+	}
+	fills, err := service.OrderLastFill(ctx, []string{orderID})
+	if err != nil {
+		t.Fatalf("OrderLastFill() error = %v", err)
+	}
+	if fills[orderID] == 0 {
+		t.Errorf("last fill missing for %s", orderID)
 	}
 }

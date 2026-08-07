@@ -3,6 +3,7 @@ package v2query
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -414,6 +415,95 @@ WHERE id::text = ANY($1)`
 			return nil, fmt.Errorf("scan market title: %w", err)
 		}
 		result[marketID] = question
+	}
+	return result, rows.Err()
+}
+
+// MarketOptions returns each market's option set and settlement winner in
+// one batched query, for order list enrichment.
+func (s *implementation) MarketOptions(ctx context.Context, marketIDs []string) (map[string]MarketOptionsInfo, error) {
+	result := make(map[string]MarketOptionsInfo, len(marketIDs))
+	if len(marketIDs) == 0 {
+		return result, nil
+	}
+	const query = `
+SELECT m.id, m.options::text, COALESCE(ms.winning_option, '')
+FROM markets m
+LEFT JOIN market_settlements ms ON ms.market_id = m.id
+WHERE m.id::text = ANY($1)`
+	rows, err := s.database.QueryContext(ctx, query, marketIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query market options: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var marketID, optionsText, winningOption string
+		if err := rows.Scan(&marketID, &optionsText, &winningOption); err != nil {
+			return nil, fmt.Errorf("scan market options: %w", err)
+		}
+		info := MarketOptionsInfo{WinningOption: winningOption}
+		if err := json.Unmarshal([]byte(optionsText), &info.Options); err != nil {
+			return nil, fmt.Errorf("decode market options: %w", err)
+		}
+		result[marketID] = info
+	}
+	return result, rows.Err()
+}
+
+// OrderPayouts returns each order/bet's settled payout, keyed by the order
+// (or parimutuel bet) ID.
+func (s *implementation) OrderPayouts(ctx context.Context, orderIDs []string) (map[string]string, error) {
+	result := make(map[string]string, len(orderIDs))
+	if len(orderIDs) == 0 {
+		return result, nil
+	}
+	const query = `
+SELECT order_id, payout::text
+FROM settlement_payouts
+WHERE order_id::text = ANY($1)`
+	rows, err := s.database.QueryContext(ctx, query, orderIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query order payouts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var orderID, payout string
+		if err := rows.Scan(&orderID, &payout); err != nil {
+			return nil, fmt.Errorf("scan order payout: %w", err)
+		}
+		result[orderID] = payout
+	}
+	return result, rows.Err()
+}
+
+// OrderLastFill returns each order's latest matched price (binary markets).
+func (s *implementation) OrderLastFill(ctx context.Context, orderIDs []string) (map[string]float64, error) {
+	result := make(map[string]float64, len(orderIDs))
+	if len(orderIDs) == 0 {
+		return result, nil
+	}
+	const query = `
+SELECT DISTINCT ON (order_id) order_id, matched_price
+FROM (
+    SELECT taker_order_id AS order_id, matched_price, created_at
+    FROM trades WHERE taker_order_id::text = ANY($1)
+    UNION ALL
+    SELECT maker_order_id AS order_id, matched_price, created_at
+    FROM trades WHERE maker_order_id::text = ANY($1)
+) AS fills
+ORDER BY order_id, created_at DESC`
+	rows, err := s.database.QueryContext(ctx, query, orderIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query order last fill: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var orderID string
+		var price float64
+		if err := rows.Scan(&orderID, &price); err != nil {
+			return nil, fmt.Errorf("scan order last fill: %w", err)
+		}
+		result[orderID] = price
 	}
 	return result, rows.Err()
 }
