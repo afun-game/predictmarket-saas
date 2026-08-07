@@ -392,6 +392,32 @@ func decodeFloatArray(value string, target *[]float64) error {
 	return nil
 }
 
+// MarketTitles returns each market's question keyed by market ID, used to
+// render order lists with their market title in one pass.
+func (s *implementation) MarketTitles(ctx context.Context, marketIDs []string) (map[string]string, error) {
+	result := make(map[string]string, len(marketIDs))
+	if len(marketIDs) == 0 {
+		return result, nil
+	}
+	const query = `
+SELECT id, question
+FROM markets
+WHERE id::text = ANY($1)`
+	rows, err := s.database.QueryContext(ctx, query, marketIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query market titles: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var marketID, question string
+		if err := rows.Scan(&marketID, &question); err != nil {
+			return nil, fmt.Errorf("scan market title: %w", err)
+		}
+		result[marketID] = question
+	}
+	return result, rows.Err()
+}
+
 func (s *implementation) DailyReport(
 	ctx context.Context,
 	merchantID string,

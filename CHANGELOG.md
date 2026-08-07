@@ -168,6 +168,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- GET orders 接口（/api/user/orders、/api/v2/orders、/api/v1/orders，含
+  并入的注单）新增 `market_title`（市场问题），前端列表直接显示市场
+  标题，无需再按 market_id 反查。
 - 奖池 `pool` 快照补齐全部市场选项：无投注选项不再省略，以 `stake: 0`、
   `odds: "1.00"`（保本）展示——空池首注获胜即返还本金，1x 是数学下界；
   GET /pools、市场列表与下注响应 meta.pool 同步生效。

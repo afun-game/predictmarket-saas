@@ -433,3 +433,27 @@ VALUES ($1, $2, $3, 1, $4, $5)`,
 		t.Fatalf("MarketEventDetails(nil) = %#v, %v", empty, err)
 	}
 }
+
+func TestMarketTitlesIntegration(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "1" {
+		t.Skip("set INTEGRATION_TEST=1 to run PostgreSQL integration tests")
+	}
+	fixture := newIntegrationFixture(t)
+	ctx := context.Background()
+	service := New(fixture.database)
+
+	titles, err := service.MarketTitles(ctx, []string{fixture.marketID, integrationUUID(t)})
+	if err != nil {
+		t.Fatalf("MarketTitles() error = %v", err)
+	}
+	if titles[fixture.marketID] != "Will V2 query pass?" {
+		t.Errorf("market title = %q, want the fixture question", titles[fixture.marketID])
+	}
+	if _, exists := titles[fixture.marketID]; !exists {
+		t.Fatal("market title missing")
+	}
+	empty, err := service.MarketTitles(ctx, nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("MarketTitles(nil) = %#v, %v", empty, err)
+	}
+}

@@ -563,7 +563,7 @@ function ordersPage() {
         <div class="breadcrumb"><button type="button" data-route="/home">${t("common.home")}</button><span>/</span><span>${t("orders.title")}</span></div>
         <section class="section"><p class="section-kicker">${t("orders.account")}</p><h1>${t("orders.title")}</h1>
           <div class="order-list">${state.orders.map((order) => `
-            <article class="info-card"><div class="section-heading"><strong>${escapeHTML(order.market_id ?? t("common.market"))}</strong><span class="status">${escapeHTML(order.status ?? "")}</span></div>
+            <article class="info-card"><div class="section-heading"><strong>${escapeHTML(order.market_title || order.market_id || t("common.market"))}</strong><span class="status">${escapeHTML(order.status ?? "")}</span></div>
               <p>${escapeHTML(order.type ?? "")} · ${escapeHTML(order.option ?? "")} · ${escapeHTML(String(order.amount ?? ""))}</p>
             </article>`).join("")}</div>
         </section>

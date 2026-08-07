@@ -34,6 +34,8 @@ type Service interface {
 	// MarketHistory returns a compact price series per market: the leading
 	// outcome's hourly closing prices over the last 24 hours.
 	MarketHistory(ctx context.Context, marketIDs []string) (map[string]*MarketHistory, error)
+	// MarketTitles returns each market's question (title) for list display.
+	MarketTitles(ctx context.Context, marketIDs []string) (map[string]string, error)
 }
 
 // BookQuote is the best executable bid/ask for one market option.

@@ -110,7 +110,7 @@ func NewHandler(
 	registerEventRoutes(mux, merchantService, eventService, adminAPIKey)
 	registerMarketRoutes(mux, merchantService, marketService, orderService, adminAPIKey, marketParimutuel, marketQueries)
 	registerWalletRoutes(mux, merchantService, walletService)
-	registerOrderRoutes(mux, merchantService, orderService)
+	registerOrderRoutes(mux, merchantService, orderService, marketQueries)
 	registerCurrencyRoutes(mux, merchantService, currencyService, adminAPIKey)
 	for _, optionalService := range optionalServices {
 		switch service := optionalService.(type) {

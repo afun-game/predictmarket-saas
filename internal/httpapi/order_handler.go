@@ -1,13 +1,16 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/afun-game/predictmarket-saas/internal/auth"
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/order"
+	"github.com/afun-game/predictmarket-saas/internal/v2query"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 	"github.com/nxsky/twill/runtime/middleware"
@@ -20,6 +23,9 @@ const (
 
 type orderHandler struct {
 	service order.Service
+	// Optional market-title lookup shared with the hosted market endpoints;
+	// when nil order lists keep their classic field set.
+	queries v2query.Service
 }
 
 type orderCreateRequest struct {
@@ -37,8 +43,9 @@ func registerOrderRoutes(
 	mux *http.ServeMux,
 	merchantService merchant.Service,
 	orderService order.Service,
+	queries v2query.Service,
 ) {
-	handler := &orderHandler{service: orderService}
+	handler := &orderHandler{service: orderService, queries: queries}
 	mux.Handle(
 		"POST /api/v1/orders",
 		auth.RequireMerchant(
@@ -58,6 +65,33 @@ func registerOrderRoutes(
 		"DELETE /api/v1/orders/{orderID}",
 		auth.RequireMerchant(merchantService, http.HandlerFunc(handler.cancel)),
 	)
+}
+
+// orderListWithTitles attaches each order's market question when the
+// enrichment service is available; otherwise the list keeps its classic
+// shape.
+func (h *orderHandler) orderListWithTitles(ctx context.Context, orders []*types.Order) []orderWithMarketTitle {
+	if h.queries == nil || len(orders) == 0 {
+		items := make([]orderWithMarketTitle, 0, len(orders))
+		for _, order := range orders {
+			items = append(items, orderWithMarketTitle{Order: order})
+		}
+		return items
+	}
+	ids := make([]string, 0, len(orders))
+	for _, order := range orders {
+		ids = append(ids, order.MarketID)
+	}
+	titles, err := h.queries.MarketTitles(ctx, ids)
+	if err != nil {
+		slog.WarnContext(ctx, "order market titles unavailable", "error", err)
+		titles = map[string]string{}
+	}
+	items := make([]orderWithMarketTitle, 0, len(orders))
+	for _, order := range orders {
+		items = append(items, orderWithMarketTitle{Order: order, MarketTitle: titles[order.MarketID]})
+	}
+	return items
 }
 
 func (h *orderHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +154,7 @@ func (h *orderHandler) list(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"data": cursorPage.Orders,
+			"data": h.orderListWithTitles(r.Context(), cursorPage.Orders),
 			"meta": map[string]any{"next_cursor": cursorPage.NextCursor},
 		})
 		return
@@ -132,7 +166,7 @@ func (h *orderHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	page, limit = orderPageDefaults(page, limit)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"data": values,
+		"data": h.orderListWithTitles(r.Context(), values),
 		"meta": map[string]any{"pagination": newPagination(page, limit, total)},
 	})
 }

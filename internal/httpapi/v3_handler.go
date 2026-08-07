@@ -305,7 +305,8 @@ func (h *v3Handler) listV2Orders(w http.ResponseWriter, r *http.Request) {
 		writeOrderServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": page.Orders, "meta": map[string]any{"next_cursor": page.NextCursor}})
+	titles := h.marketTitlesForOrders(r.Context(), page.Orders)
+	writeJSON(w, http.StatusOK, map[string]any{"data": orderListWithTitles(page.Orders, titles), "meta": map[string]any{"next_cursor": page.NextCursor}})
 }
 
 func (h *v3Handler) getV2Order(w http.ResponseWriter, r *http.Request) {
@@ -790,8 +791,9 @@ func (h *v3Handler) listUserOrders(w http.ResponseWriter, r *http.Request) {
 	// into the order history so a refresh shows everything the user
 	// participated in. Bets normalize to order-shaped items with
 	// type "bet" and amount = stake, matching the hosted UI's bet rendering.
+	titles := h.marketTitlesForOrders(r.Context(), page.Orders)
 	items := make([]any, 0, len(page.Orders)+userBetHistoryLimit)
-	for _, order := range page.Orders {
+	for _, order := range orderListWithTitles(page.Orders, titles) {
 		items = append(items, order)
 	}
 	if h.parimutuel != nil {
@@ -809,7 +811,11 @@ func (h *v3Handler) listUserOrders(w http.ResponseWriter, r *http.Request) {
 				if filters.Status != "" && bet.Status != filters.Status {
 					continue
 				}
-				items = append(items, userBetOrderView(bet))
+				view := userBetOrderView(bet)
+				if title := titles[bet.MarketID]; title != "" {
+					view["market_title"] = title
+				}
+				items = append(items, view)
 			}
 		}
 	}
@@ -824,6 +830,40 @@ func (h *v3Handler) listUserOrders(w http.ResponseWriter, r *http.Request) {
 		items = items[:limit]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": items, "meta": map[string]any{"next_cursor": page.NextCursor}})
+}
+
+// orderWithMarketTitle wraps an order with its market title for list
+// rendering without changing the order payload shape.
+type orderWithMarketTitle struct {
+	*types.Order
+	MarketTitle string `json:"market_title,omitempty"`
+}
+
+// marketTitlesForOrders batches the market questions for a set of order ids'
+// markets; failures degrade to an empty map.
+func (h *v3Handler) marketTitlesForOrders(ctx context.Context, orders []*types.Order) map[string]string {
+	titles := map[string]string{}
+	if h.queries == nil || len(orders) == 0 {
+		return titles
+	}
+	ids := make([]string, 0, len(orders))
+	for _, order := range orders {
+		ids = append(ids, order.MarketID)
+	}
+	values, err := h.queries.MarketTitles(ctx, ids)
+	if err != nil {
+		slog.WarnContext(ctx, "order market titles unavailable", "error", err)
+		return titles
+	}
+	return values
+}
+
+func orderListWithTitles(orders []*types.Order, titles map[string]string) []orderWithMarketTitle {
+	items := make([]orderWithMarketTitle, 0, len(orders))
+	for _, order := range orders {
+		items = append(items, orderWithMarketTitle{Order: order, MarketTitle: titles[order.MarketID]})
+	}
+	return items
 }
 
 // userBetOrderView renders a parimutuel bet in the /api/user/orders shape.
