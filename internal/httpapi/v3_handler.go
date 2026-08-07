@@ -589,7 +589,7 @@ func (h *v3Handler) createUserBet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		meta := balanceMeta(balance, currency)
-		if snapshot, snapshotErr := h.poolSnapshot(r.Context(), request.MarketID); snapshotErr == nil {
+		if snapshot, snapshotErr := h.poolSnapshot(r.Context(), request.MarketID, marketValue.Options); snapshotErr == nil {
 			meta["pool"] = snapshot
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{"data": bet, "meta": meta})
@@ -620,7 +620,7 @@ func (h *v3Handler) createUserBet(w http.ResponseWriter, r *http.Request) {
 	response := map[string]any{"data": bet}
 	if balance, ok := h.currentPlatformBalance(r, browserSession.MerchantID, browserSession.UserID, currency); ok {
 		meta := balanceMeta(balance, currency)
-		if snapshot, snapshotErr := h.poolSnapshot(r.Context(), request.MarketID); snapshotErr == nil {
+		if snapshot, snapshotErr := h.poolSnapshot(r.Context(), request.MarketID, marketValue.Options); snapshotErr == nil {
 			meta["pool"] = snapshot
 		}
 		response["meta"] = meta
@@ -629,11 +629,13 @@ func (h *v3Handler) createUserBet(w http.ResponseWriter, r *http.Request) {
 }
 
 // formatMarketPool renders a parimutuel pool as the public payload shared by
-// GET /pools, the POST /bets response, and market list summaries. Each option
-// carries its stake and the gross return per unit staked if that option wins:
-// (total_stake - total_fees) / stake. An option with no active stake has
-// odds "0.00" (undefined).
-func formatMarketPool(marketID string, pool parimutuel.MarketPool) map[string]any {
+// GET /pools, the POST /bets response, and market list summaries. Every
+// market option appears: funded options carry their stake and the gross
+// return per unit staked if that option wins ((total_stake - total_fees) /
+// stake); options with no active stake are shown with stake 0 and odds
+// "1.00" (breakeven — the first winning bet on an empty side returns exactly
+// its stake, and the value only rises as the pool grows).
+func formatMarketPool(marketID string, pool parimutuel.MarketPool, allOptions []string) map[string]any {
 	payload := map[string]any{
 		"market_id":   marketID,
 		"currency":    pool.Currency,
@@ -642,15 +644,20 @@ func formatMarketPool(marketID string, pool parimutuel.MarketPool) map[string]an
 		"options":     []any{},
 	}
 	available := pool.TotalStake - pool.TotalFees
-	options := make([]map[string]any, 0, len(pool.Options))
+	stakeByOption := make(map[string]float64, len(pool.Options))
 	for _, stake := range pool.Options {
-		odds := "0.00"
-		if stake.Stake > 0 && available > 0 {
-			odds = formatMoney(available / stake.Stake)
+		stakeByOption[stake.Option] = stake.Stake
+	}
+	options := make([]map[string]any, 0, len(allOptions))
+	for _, option := range allOptions {
+		stake := stakeByOption[option]
+		odds := "1.00"
+		if stake > 0 && available > 0 {
+			odds = formatMoney(available / stake)
 		}
 		options = append(options, map[string]any{
-			"option": stake.Option,
-			"stake":  stake.Stake,
+			"option": option,
+			"stake":  stake,
 			"odds":   odds,
 		})
 	}
@@ -660,7 +667,7 @@ func formatMarketPool(marketID string, pool parimutuel.MarketPool) map[string]an
 
 // poolSnapshot builds the parimutuel pool payload shared by GET /pools and
 // the POST /bets response.
-func (h *v3Handler) poolSnapshot(ctx context.Context, marketID string) (map[string]any, error) {
+func (h *v3Handler) poolSnapshot(ctx context.Context, marketID string, allOptions []string) (map[string]any, error) {
 	pools, err := h.parimutuel.GetPools(ctx, marketID)
 	if err != nil {
 		return nil, err
@@ -675,7 +682,7 @@ func (h *v3Handler) poolSnapshot(ctx context.Context, marketID string) (map[stri
 		pool.TotalStake = pools[0].TotalStake
 		pool.TotalFees = pools[0].TotalFees
 	}
-	return formatMarketPool(marketID, pool), nil
+	return formatMarketPool(marketID, pool, allOptions), nil
 }
 
 // marketSummaries batches every display-ready detail for the given markets:
@@ -704,8 +711,12 @@ func marketSummaries(ctx context.Context, parimutuelService parimutuel.Service, 
 		if err != nil {
 			slog.WarnContext(ctx, "market pool summaries unavailable", "error", err)
 		} else {
+			allOptions := map[string][]string{}
+			for _, marketValue := range markets {
+				allOptions[marketValue.ID] = marketValue.Options
+			}
 			for marketID, pool := range values {
-				pools[marketID] = formatMarketPool(marketID, pool)
+				pools[marketID] = formatMarketPool(marketID, pool, allOptions[marketID])
 			}
 		}
 	}
@@ -753,7 +764,7 @@ func (h *v3Handler) getUserMarketPools(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "parimutuel_unavailable", "parimutuel betting is not configured")
 		return
 	}
-	payload, err := h.poolSnapshot(r.Context(), value.ID)
+	payload, err := h.poolSnapshot(r.Context(), value.ID, value.Options)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "could not load parimutuel pools")
 		return

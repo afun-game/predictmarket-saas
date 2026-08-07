@@ -168,6 +168,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- 奖池 `pool` 快照补齐全部市场选项：无投注选项不再省略，以 `stake: 0`、
+  `odds: "1.00"`（保本）展示——空池首注获胜即返还本金，1x 是数学下界；
+  GET /pools、市场列表与下注响应 meta.pool 同步生效。
 - 市场新增 `resolution_time`（迁移 035，创建时默认继承事件结算时间，可
   显式覆盖）：托管页与 v1 市场接口的 `resolution_time` 优先取市场自身
   字段；管理台创建表单新增结算时间项（事件 ID 自动带入）。

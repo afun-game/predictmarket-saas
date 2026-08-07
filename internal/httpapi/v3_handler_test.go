@@ -757,8 +757,14 @@ func TestV3UserParimutuelBetFlow(t *testing.T) {
 	}
 
 	initial := decodePoolsResponse(t, userPoolsRequest(t, handler, poolMarketID, accessToken).Body.Bytes())
-	if initial.TotalStake != "0.00" || len(initial.Options) != 0 || initial.Currency != "USD" {
+	if initial.TotalStake != "0.00" || len(initial.Options) != 2 || initial.Currency != "USD" {
 		t.Errorf("initial pools = %#v", initial)
+	}
+	// Empty sides render at breakeven odds (1.00) instead of being omitted.
+	for _, option := range initial.Options {
+		if option.Stake != 0 || option.Odds != "1.00" {
+			t.Errorf("initial option = %#v, want stake 0 odds 1.00", option)
+		}
 	}
 
 	first := userBetRequest(t, handler, poolMarketID, "Yes", 5, accessToken, "pool-bet-001")
@@ -774,15 +780,28 @@ func TestV3UserParimutuelBetFlow(t *testing.T) {
 	}
 
 	updated := decodePoolsResponse(t, userPoolsRequest(t, handler, poolMarketID, accessToken).Body.Bytes())
-	if updated.TotalStake != "5.00" || len(updated.Options) != 1 || updated.Options[0].Option != "Yes" || updated.Options[0].Stake != 5 {
+	if updated.TotalStake != "5.00" || len(updated.Options) != 2 {
 		t.Errorf("pools after first bet = %#v", updated)
 	}
-	if updated.Options[0].Odds != "1.00" {
-		t.Errorf("odds after first bet = %q, want 1.00 (pool entirely on Yes)", updated.Options[0].Odds)
+	updatedByOption := map[string]struct {
+		stake float64
+		odds  string
+	}{}
+	for _, option := range updated.Options {
+		updatedByOption[option.Option] = struct {
+			stake float64
+			odds  string
+		}{stake: option.Stake, odds: option.Odds}
+	}
+	if updatedByOption["Yes"].stake != 5 || updatedByOption["Yes"].odds != "1.00" {
+		t.Errorf("Yes after first bet = %#v, want stake 5 odds 1.00", updatedByOption["Yes"])
+	}
+	if updatedByOption["No"].stake != 0 || updatedByOption["No"].odds != "1.00" {
+		t.Errorf("No after first bet = %#v, want stake 0 odds 1.00", updatedByOption["No"])
 	}
 	// The bet response carries the post-bet pool snapshot so the UI can show
 	// the updated return rate without a second request.
-	if firstBet.Meta.Pool.TotalStake != "5.00" || len(firstBet.Meta.Pool.Options) != 1 || firstBet.Meta.Pool.Options[0].Odds != "1.00" {
+	if firstBet.Meta.Pool.TotalStake != "5.00" || len(firstBet.Meta.Pool.Options) != 2 {
 		t.Errorf("first bet meta.pool = %#v", firstBet.Meta.Pool)
 	}
 

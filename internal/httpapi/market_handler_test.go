@@ -476,8 +476,19 @@ func TestV1MarketListEmbedsPoolSummary(t *testing.T) {
 			t.Errorf("v1 pool total_stake = %v, want 20.00", item.Pool["total_stake"])
 		}
 		options, ok := item.Pool["options"].([]any)
-		if !ok || len(options) != 1 || options[0].(map[string]any)["odds"] != "1.00" {
+		if !ok || len(options) != 2 {
 			t.Errorf("v1 pool options = %#v", item.Pool["options"])
+		}
+		byOption := map[string]map[string]any{}
+		for _, raw := range options {
+			entry := raw.(map[string]any)
+			byOption[entry["option"].(string)] = entry
+		}
+		if byOption["Yes"]["stake"] != 20.0 || byOption["Yes"]["odds"] != "1.00" {
+			t.Errorf("v1 pool Yes = %#v", byOption["Yes"])
+		}
+		if byOption["No"]["stake"] != 0.0 || byOption["No"]["odds"] != "1.00" {
+			t.Errorf("v1 pool No = %#v", byOption["No"])
 		}
 	}
 	if !found {
