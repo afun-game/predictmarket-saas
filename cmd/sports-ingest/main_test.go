@@ -93,17 +93,20 @@ type recordingJob struct {
 	mu      sync.Mutex
 	calls   []syncCall
 	started chan struct{}
+	once    sync.Once
 }
 
 func (j *recordingJob) Sync(_ context.Context, day time.Time, lookaheadDays int) (sportsingest.Result, error) {
 	j.mu.Lock()
 	j.calls = append(j.calls, syncCall{day: day, lookaheadDays: lookaheadDays})
-	started := j.started
-	j.started = nil
 	j.mu.Unlock()
-	if started != nil {
-		close(started)
-	}
+	// start is closed exactly once; the field is never reassigned so the
+	// test's unlocked receive races nothing.
+	j.once.Do(func() {
+		if j.started != nil {
+			close(j.started)
+		}
+	})
 	return sportsingest.Result{}, nil
 }
 
