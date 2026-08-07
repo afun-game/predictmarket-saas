@@ -42,6 +42,8 @@ spec:
                 secretKeyRef:
                   name: predictmarket-secrets
                   key: DATABASE_URL
+            - name: SERVICETWILL_CONFIG
+              value: /etc/predictmarket/twill.toml
           resources:
             requests:
               cpu: 50m
@@ -49,8 +51,25 @@ spec:
             limits:
               cpu: 250m
               memory: 256Mi
+          volumeMounts:
+            - name: twill-config
+              mountPath: /etc/predictmarket
+              readOnly: true
+            - name: runtime-data
+              mountPath: /tmp
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
             readOnlyRootFilesystem: true
+      volumes:
+        - name: twill-config
+          configMap:
+            name: predictmarket-config
+            defaultMode: 420
+            items:
+              - key: twill.toml
+                path: twill.toml
+        - name: runtime-data
+          emptyDir:
+            sizeLimit: 32Mi
