@@ -243,6 +243,8 @@ type fakeSettlementService struct {
 
 func (f *fakeSettlementService) SettleEvent(context.Context, string) error { return nil }
 
+func (f *fakeSettlementService) SettleMarket(context.Context, string, string) error { return nil }
+
 func (f *fakeSettlementService) VoidMarket(_ context.Context, marketID string) error {
 	f.voided = append(f.voided, marketID)
 	return nil

@@ -544,3 +544,37 @@ WHERE merchant_id = $1
 		t.Fatalf("void webhooks = %d, want 6", voidWebhooks)
 	}
 }
+
+func TestSettlementPostgresSingleMarketSettle(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "1" {
+		t.Skip("set INTEGRATION_TEST=1 to run PostgreSQL integration tests")
+	}
+	fixture := newSettlementFixture(t)
+	ctx := context.Background()
+
+	if err := fixture.service.SettleMarket(ctx, fixture.marketIDs[0], "Yes"); err != nil {
+		t.Fatalf("SettleMarket() error = %v", err)
+	}
+	fixture.assertMarketSettlementStatus(t, fixture.marketIDs[0], "settled", true)
+	// The owning event stays open; the second market is untouched.
+	fixture.assertMarketSettlementStatus(t, fixture.marketIDs[1], "active", false)
+
+	var payoutCount int
+	if err := fixture.database.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM settlement_payouts WHERE market_id = $1", fixture.marketIDs[0]).Scan(&payoutCount); err != nil {
+		t.Fatalf("count payouts: %v", err)
+	}
+	if payoutCount == 0 {
+		t.Error("single-market settle wrote no settlement_payouts rows")
+	}
+
+	if err := fixture.service.SettleMarket(ctx, fixture.marketIDs[0], "Yes"); !errors.Is(err, ErrMarketAlreadySettled) {
+		t.Errorf("second settle error = %v, want ErrMarketAlreadySettled", err)
+	}
+	if err := fixture.service.SettleMarket(ctx, fixture.marketIDs[1], "Maybe"); !errors.Is(err, ErrOutcomeNotOption) {
+		t.Errorf("invalid option error = %v, want ErrOutcomeNotOption", err)
+	}
+	if err := fixture.service.SettleMarket(ctx, integrationUUID(t), "Yes"); !errors.Is(err, ErrMarketNotFound) {
+		t.Errorf("unknown market error = %v, want ErrMarketNotFound", err)
+	}
+}

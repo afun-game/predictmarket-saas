@@ -25,11 +25,20 @@ import (
 
 // settlementStub lets voidMarket tests drive the settlement boundary.
 type settlementStub struct {
-	voidErr error
+	voidErr    error
+	settleErr  error
+	settledIDs []string
 }
 
 func (s settlementStub) SettleEvent(context.Context, string) error { return nil }
-func (s settlementStub) VoidMarket(context.Context, string) error  { return s.voidErr }
+func (s settlementStub) SettleMarket(_ context.Context, marketID, _ string) error {
+	if s.settleErr != nil {
+		return s.settleErr
+	}
+	return nil
+}
+func (s settlementStub) SettledMarketIDs() []string               { return s.settledIDs }
+func (s settlementStub) VoidMarket(context.Context, string) error { return s.voidErr }
 
 // newAdminSession creates a super-admin account, logs it in, and returns the
 // manager, session token, and in-memory action log.
@@ -860,4 +869,90 @@ func TestAdminListMarketsFilters(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet sql expectations: %v", err)
 	}
+}
+
+func TestAdminSettleMarket(t *testing.T) {
+	t.Parallel()
+
+	marketID := "11111111-2222-4333-8444-555555555555"
+	t.Run("settle success", func(t *testing.T) {
+		manager, token, _ := newAdminSession(t)
+		handler := newAdminTestHandler(
+			t, event.NewService(), market.NewService(),
+			AdminConfig{Accounts: manager, Settlement: settlementStub{}},
+		)
+		recorder := adminRequest(
+			t, handler, http.MethodPost,
+			"/api/v1/admin/markets/"+marketID+"/settle",
+			[]byte(`{"winning_option":"Yes","confirm":"settle"}`),
+			token,
+		)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("settle status = %d, body = %s", recorder.Code, recorder.Body.String())
+		}
+		var payload struct {
+			Data struct {
+				ID            string `json:"id"`
+				Status        string `json:"status"`
+				WinningOption string `json:"winning_option"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("decode settle response: %v", err)
+		}
+		if payload.Data.ID != marketID || payload.Data.Status != "settled" || payload.Data.WinningOption != "Yes" {
+			t.Errorf("settle response = %#v", payload.Data)
+		}
+	})
+
+	t.Run("missing confirm returns 400", func(t *testing.T) {
+		manager, token, _ := newAdminSession(t)
+		handler := newAdminTestHandler(
+			t, event.NewService(), market.NewService(),
+			AdminConfig{Accounts: manager, Settlement: settlementStub{}},
+		)
+		recorder := adminRequest(
+			t, handler, http.MethodPost,
+			"/api/v1/admin/markets/"+marketID+"/settle",
+			[]byte(`{"winning_option":"Yes"}`),
+			token,
+		)
+		if recorder.Code != http.StatusBadRequest {
+			t.Errorf("settle without confirm status = %d, want 400", recorder.Code)
+		}
+	})
+
+	t.Run("already settled returns 409", func(t *testing.T) {
+		manager, token, _ := newAdminSession(t)
+		handler := newAdminTestHandler(
+			t, event.NewService(), market.NewService(),
+			AdminConfig{Accounts: manager, Settlement: settlementStub{settleErr: settlement.ErrMarketAlreadySettled}},
+		)
+		recorder := adminRequest(
+			t, handler, http.MethodPost,
+			"/api/v1/admin/markets/"+marketID+"/settle",
+			[]byte(`{"winning_option":"Yes","confirm":"settle"}`),
+			token,
+		)
+		if recorder.Code != http.StatusConflict {
+			t.Errorf("settle already settled status = %d, want 409", recorder.Code)
+		}
+	})
+
+	t.Run("invalid option returns 400", func(t *testing.T) {
+		manager, token, _ := newAdminSession(t)
+		handler := newAdminTestHandler(
+			t, event.NewService(), market.NewService(),
+			AdminConfig{Accounts: manager, Settlement: settlementStub{settleErr: settlement.ErrOutcomeNotOption}},
+		)
+		recorder := adminRequest(
+			t, handler, http.MethodPost,
+			"/api/v1/admin/markets/"+marketID+"/settle",
+			[]byte(`{"winning_option":"Maybe","confirm":"settle"}`),
+			token,
+		)
+		if recorder.Code != http.StatusBadRequest {
+			t.Errorf("settle invalid option status = %d, want 400", recorder.Code)
+		}
+	})
 }

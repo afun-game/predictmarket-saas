@@ -299,6 +299,40 @@ func enqueueMarketVoidedWebhook(
 	return nil
 }
 
+// SettleMarket settles one market immediately with the given winning
+// option, regardless of the owning event's status. The market must be
+// unsettled and the option must be offered by the market.
+func (r *postgresRepository) SettleMarket(
+	ctx context.Context,
+	marketID string,
+	winningOption string,
+	settledAt time.Time,
+) error {
+	var eventID string
+	if err := r.database.QueryRowContext(
+		ctx,
+		"SELECT event_id FROM markets WHERE id = $1",
+		marketID,
+	).Scan(&eventID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrMarketNotFound
+		}
+		return fmt.Errorf("get settle market event: %w", err)
+	}
+	var alreadySettled bool
+	if err := r.database.QueryRowContext(
+		ctx,
+		"SELECT EXISTS (SELECT 1 FROM market_settlements WHERE market_id = $1)",
+		marketID,
+	).Scan(&alreadySettled); err != nil {
+		return fmt.Errorf("check single market settlement: %w", err)
+	}
+	if alreadySettled {
+		return ErrMarketAlreadySettled
+	}
+	return r.settleMarket(ctx, marketID, eventID, winningOption, settledAt)
+}
+
 func (r *postgresRepository) SettleEvent(
 	ctx context.Context,
 	eventID string,

@@ -119,6 +119,8 @@ type stubRepository struct{ err error }
 
 func (r *stubRepository) SettleEvent(context.Context, string, time.Time) error { return r.err }
 
+func (r *stubRepository) SettleMarket(context.Context, string, string, time.Time) error { return r.err }
+
 func (r *stubRepository) VoidMarket(context.Context, string, time.Time) error { return r.err }
 
 func newTestOrder(

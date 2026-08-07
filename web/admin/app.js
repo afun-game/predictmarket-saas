@@ -845,6 +845,7 @@ async function marketsPage() {
         <div class="field"><label>事件 ID *</label><input class="input" name="event_id" required></div>
         <div class="field"><label>类型 *</label><select class="input" name="type"><option value="binary" selected>订单簿</option><option value="parimutuel">奖池</option></select></div>
         <div class="field"><label>分类</label><select class="input" name="category">${categoryOptions("")}</select></div>
+        <div class="field"><label>结算时间</label><input class="input" name="resolution_time" type="datetime-local"><p class="field-hint">留空则继承事件结算时间；填写事件 ID 后自动带入</p></div>
         <div class="field" data-liquidity-field><label>初始流动性</label><input class="input" name="liquidity_pool" type="number" min="0" step="any"></div>
         <div class="field" data-liquidity-hint hidden><label>初始流动性</label><p class="field-hint">奖池市场无需初始流动性</p></div>
         <div class="field field--span2"><label>问题 *</label><input class="input" name="question" placeholder="例如：BTC 将在 7 月收于 6 万美元以上吗？" required></div>
@@ -883,6 +884,7 @@ async function marketDetailPage(id) {
     if (market.type !== "parimutuel") {
       actions.push(`<button class="btn btn--primary" type="button" data-action="market-liquidity" data-id="${escapeHTML(id)}">注入流动性</button>`);
     }
+    actions.push(`<button class="btn btn--success" type="button" data-action="market-settle" data-id="${escapeHTML(id)}" data-options="${escapeHTML((market.options ?? []).join(","))}">立即结算</button>`);
     actions.push(`<button class="btn btn--danger" type="button" data-action="market-void" data-id="${escapeHTML(id)}">作废市场</button>`);
   }
   const options = Array.isArray(market.options) ? market.options.join(" / ") : market.options ?? "—";
@@ -893,6 +895,7 @@ async function marketDetailPage(id) {
     ["事件 ID", escapeHTML(market.event_id ?? "—")],
     ["类型", marketTypeBadge(market.type)],
     ["分类", categoryLabel(market.category)],
+    ["结算时间", formatTime(market.resolution_time)],
     ["选项", escapeHTML(options)],
     ["状态", statusBadge(market.status)],
     ["交易量", formatMoney(market.total_volume)],
@@ -1156,6 +1159,8 @@ async function handleAction(action, target) {
         return marketStatus(target);
       case "market-liquidity":
         return marketLiquidity(target);
+      case "market-settle":
+        return marketSettle(target);
       case "market-void":
         return marketVoid(target);
       case "retry":
@@ -1168,8 +1173,23 @@ async function handleAction(action, target) {
   }
 }
 
-document.addEventListener("change", (event) => {
+document.addEventListener("change", async (event) => {
   const target = event.target;
+  if (target?.name === "event_id" && target instanceof HTMLInputElement) {
+    const eventId = target.value.trim();
+    const form = target.closest('form[data-action="create-market"]');
+    const resolutionField = form?.querySelector('input[name="resolution_time"]');
+    if (eventId && form && resolutionField && !resolutionField.value) {
+      try {
+        const eventInfo = await apiFetch(`/api/v1/admin/events/${encodeURIComponent(eventId)}`);
+        if (eventInfo?.resolution_time) {
+          resolutionField.value = eventInfo.resolution_time.slice(0, 16);
+        }
+      } catch {
+        /* 事件不存在时保持留空，创建时后端会继承 */
+      }
+    }
+  }
   if (!(target instanceof HTMLSelectElement)) return;
   // 市场类型切换：奖池市场隐藏初始流动性。
   if (target.name === "type") {
@@ -1335,6 +1355,21 @@ async function marketLiquidity(target) {
   render();
 }
 
+async function marketSettle(target) {
+  const id = target.dataset.id;
+  const options = (target.dataset.options ?? "").split(",").filter(Boolean);
+  const option = window.prompt(`选择胜出方（${options.join(" / ")}）：`);
+  if (!option || !options.includes(option)) {
+    toast("胜出方必须来自市场选项", "error");
+    return;
+  }
+  const input = window.prompt(`确认立即结算该市场（胜出方：${option}）？\n请输入确认词：settle`);
+  if (input !== "settle") return;
+  await apiFetch(`/api/v1/admin/markets/${id}/settle`, { method: "POST", body: JSON.stringify({ winning_option: option, confirm: "settle" }) });
+  toast("市场已结算");
+  render();
+}
+
 async function marketVoid(target) {
   const id = target.dataset.id;
   const input = window.prompt("确认作废该市场？\n请输入确认词：void");
@@ -1495,6 +1530,11 @@ async function createMarket(form) {
   const body = { event_id: eventId, merchant_id: merchantId, type, question, options };
   const category = String(data.get("category") ?? "").trim();
   if (category) body.category = category;
+  const resolutionRaw = String(data.get("resolution_time") ?? "").trim();
+  if (resolutionRaw) {
+    const resolution = new Date(resolutionRaw);
+    if (Number.isFinite(resolution.getTime())) body.resolution_time = resolution.toISOString();
+  }
   if (type === "parimutuel") {
     body.liquidity_pool = 0;
   } else if (pool) {

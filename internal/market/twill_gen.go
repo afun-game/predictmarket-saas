@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"reflect"
+	"time"
 )
 
 func init() {
@@ -778,13 +779,14 @@ var _ codegen.AutoMarshal = (*CreateRequest)(nil)
 
 type __is_CreateRequest[T ~struct {
 	twill.AutoMarshal
-	MerchantID    string   "json:\"merchant_id\""
-	EventID       string   "json:\"event_id\""
-	Type          string   "json:\"type\""
-	Category      string   "json:\"category,omitempty\""
-	Question      string   "json:\"question\""
-	Options       []string "json:\"options\""
-	LiquidityPool float64  "json:\"liquidity_pool\""
+	MerchantID     string    "json:\"merchant_id\""
+	EventID        string    "json:\"event_id\""
+	Type           string    "json:\"type\""
+	Category       string    "json:\"category,omitempty\""
+	ResolutionTime time.Time "json:\"resolution_time,omitempty\""
+	Question       string    "json:\"question\""
+	Options        []string  "json:\"options\""
+	LiquidityPool  float64   "json:\"liquidity_pool\""
 }] struct{}
 
 var _ __is_CreateRequest[CreateRequest]
@@ -797,6 +799,7 @@ func (x *CreateRequest) WeaverMarshal(enc *codegen.Encoder) {
 	enc.String(x.EventID)
 	enc.String(x.Type)
 	enc.String(x.Category)
+	enc.EncodeBinaryMarshaler(&x.ResolutionTime)
 	enc.String(x.Question)
 	servicetwill_enc_slice_string_4af10117(enc, x.Options)
 	enc.Float64(x.LiquidityPool)
@@ -810,6 +813,7 @@ func (x *CreateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.EventID = dec.String()
 	x.Type = dec.String()
 	x.Category = dec.String()
+	dec.DecodeBinaryUnmarshaler(&x.ResolutionTime)
 	x.Question = dec.String()
 	x.Options = servicetwill_dec_slice_string_4af10117(dec)
 	x.LiquidityPool = dec.Float64()

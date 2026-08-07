@@ -27,6 +27,10 @@ var (
 // unsettled markets when a resolution is withdrawn.
 type Service interface {
 	SettleEvent(ctx context.Context, eventID string) error
+	// SettleMarket settles a single market immediately with the given
+	// winning option, without resolving the owning event. Used by the admin
+	// console for one-market settlement while the event stays open.
+	SettleMarket(ctx context.Context, marketID, winningOption string) error
 	// VoidMarket refunds every order on an unsettled market in full and marks
 	// the market voided (V3 §5.1 order.voided / market.voided events).
 	VoidMarket(ctx context.Context, marketID string) error
@@ -75,6 +79,20 @@ func (s *implementation) SettleEvent(ctx context.Context, eventID string) error 
 	return nil
 }
 
+func (s *implementation) SettleMarket(ctx context.Context, marketID, winningOption string) error {
+	marketID = strings.TrimSpace(marketID)
+	if !isUUID(marketID) {
+		return fmt.Errorf("invalid market_id: must be a UUID")
+	}
+	if strings.TrimSpace(winningOption) == "" {
+		return errors.New("winning_option is required")
+	}
+	if err := s.repository.SettleMarket(ctx, marketID, strings.TrimSpace(winningOption), s.now().UTC()); err != nil {
+		return fmt.Errorf("settle market: %w", err)
+	}
+	return nil
+}
+
 func (s *implementation) VoidMarket(ctx context.Context, marketID string) error {
 	marketID = strings.TrimSpace(marketID)
 	if !isUUID(marketID) {
@@ -89,6 +107,7 @@ func (s *implementation) VoidMarket(ctx context.Context, marketID string) error 
 // Repository settles an event as independently atomic market transactions.
 type Repository interface {
 	SettleEvent(ctx context.Context, eventID string, settledAt time.Time) error
+	SettleMarket(ctx context.Context, marketID, winningOption string, settledAt time.Time) error
 	VoidMarket(ctx context.Context, marketID string, voidedAt time.Time) error
 }
 

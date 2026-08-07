@@ -54,6 +54,11 @@ func TestMarketPostgresIntegration(t *testing.T) {
 	if stored.Category != "integration" {
 		t.Errorf("stored category = %q, want inherited event category integration", stored.Category)
 	}
+	// The fixture event resolves at now+2h; a market without an explicit
+	// resolution time inherits it.
+	if stored.ResolutionTime == nil || !stored.ResolutionTime.Truncate(time.Second).Equal(fixture.eventResolution().Truncate(time.Second)) {
+		t.Errorf("stored resolution_time = %v, want inherited event resolution %v", stored.ResolutionTime, fixture.eventResolution())
+	}
 	values, total, err := fixture.service.List(ctx, &ListFilters{
 		MerchantID: fixture.merchantID,
 		EventID:    fixture.eventID,
@@ -239,11 +244,15 @@ func (f *marketIntegrationFixture) insertReferences(t *testing.T, ctx context.Co
 		"market-integration-"+f.suffix,
 		"Market integration event",
 		time.Now().UTC().Add(time.Hour),
-		time.Now().UTC().Add(2*time.Hour),
+		f.eventResolution(),
 	)
 	if err != nil {
 		t.Fatalf("insert event fixture: %v", err)
 	}
+}
+
+func (f *marketIntegrationFixture) eventResolution() time.Time {
+	return time.Now().UTC().Add(2 * time.Hour)
 }
 
 func (f *marketIntegrationFixture) assertInactiveReferenceRejected(

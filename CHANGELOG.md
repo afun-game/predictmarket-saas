@@ -168,6 +168,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- 市场新增 `resolution_time`（迁移 035，创建时默认继承事件结算时间，可
+  显式覆盖）：托管页与 v1 市场接口的 `resolution_time` 优先取市场自身
+  字段；管理台创建表单新增结算时间项（事件 ID 自动带入）。
+- 管理台市场详情新增「立即结算」：`POST /api/v1/admin/markets/{id}/settle`
+  （super_admin，`winning_option` + `confirm:"settle"`），单市场即时结算
+  并记录 `market_settlements`，不影响同事件其它市场；方便测试。
 - `/api/v1/markets` 与 `/api/v1/markets/{id}` 与托管页接口对齐：新增
   `resolution_time`、`event_title`/`event_description`、`league` 与
   `pool`/`book`/`history` 行情摘要（装配 V3 服务时生效；未装配保持经典

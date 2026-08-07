@@ -108,6 +108,7 @@ func registerAdminRoutes(
 	mux.Handle("PATCH /api/v1/admin/markets/{marketID}/status", session(http.HandlerFunc(handler.updateMarketStatus)))
 	mux.Handle("POST /api/v1/admin/markets/{marketID}/liquidity", session(super(http.HandlerFunc(handler.addMarketLiquidity))))
 	mux.Handle("POST /api/v1/admin/markets/{marketID}/void", session(super(http.HandlerFunc(handler.voidMarket))))
+	mux.Handle("POST /api/v1/admin/markets/{marketID}/settle", session(super(http.HandlerFunc(handler.settleMarket))))
 
 	mux.Handle("GET /api/v1/admin/orders", session(http.HandlerFunc(handler.listOrders)))
 	mux.Handle("GET /api/v1/admin/transactions", session(http.HandlerFunc(handler.listTransactions)))

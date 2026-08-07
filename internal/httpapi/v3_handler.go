@@ -1826,8 +1826,12 @@ func userMarketFrom(
 		Book:        book,
 		History:     history,
 	}
-	if event.Title != "" {
+	if value.ResolutionTime != nil {
+		item.ResolutionTime = *value.ResolutionTime
+	} else if event.Title != "" {
 		item.ResolutionTime = event.ResolutionTime
+	}
+	if event.Title != "" {
 		item.EventTitle = event.Title
 		item.EventDescription = event.Description
 		item.League = event.League

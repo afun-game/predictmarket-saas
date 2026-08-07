@@ -3,6 +3,7 @@ package market
 import (
 	"context"
 	"database/sql"
+	"time"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ const marketColumns = `
     event_id,
     type,
     category,
+    resolution_time,
     question,
     options,
     status,
@@ -39,7 +41,7 @@ func (r *postgresRepository) ValidateReferences(
 	ctx context.Context,
 	merchantID string,
 	eventID string,
-) (string, error) {
+) (string, time.Time, error) {
 	const query = `
 SELECT EXISTS (
            SELECT 1 FROM merchants WHERE id = $1 AND status = 'active'
@@ -50,27 +52,30 @@ SELECT EXISTS (
        EXISTS (
            SELECT 1 FROM events WHERE id = $2 AND resolution_time > now()
        ),
-       COALESCE((SELECT category FROM events WHERE id = $2), '')`
+       COALESCE((SELECT category FROM events WHERE id = $2), ''),
+       COALESCE((SELECT resolution_time FROM events WHERE id = $2), 'epoch')`
 
 	var merchantActive bool
 	var eventActive bool
 	var eventNotExpired bool
 	var eventCategory string
+	var eventResolutionTime time.Time
 	if err := r.database.QueryRowContext(ctx, query, merchantID, eventID).Scan(
 		&merchantActive,
 		&eventActive,
 		&eventNotExpired,
 		&eventCategory,
+		&eventResolutionTime,
 	); err != nil {
-		return "", fmt.Errorf("query market references: %w", err)
+		return "", time.Time{}, fmt.Errorf("query market references: %w", err)
 	}
 	if !merchantActive || !eventActive {
-		return "", ErrInvalidReference
+		return "", time.Time{}, ErrInvalidReference
 	}
 	if !eventNotExpired {
-		return "", ErrEventExpired
+		return "", time.Time{}, ErrEventExpired
 	}
-	return eventCategory, nil
+	return eventCategory, eventResolutionTime, nil
 }
 
 func (r *postgresRepository) Create(ctx context.Context, value *types.Market) error {
@@ -85,6 +90,7 @@ INSERT INTO markets (
     event_id,
     type,
     category,
+    resolution_time,
     question,
     options,
     status,
@@ -94,7 +100,7 @@ INSERT INTO markets (
     platform_fee_rate,
     created_at,
     settled_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`
 
 	_, err = r.database.ExecContext(
 		ctx,
@@ -104,6 +110,7 @@ INSERT INTO markets (
 		value.EventID,
 		value.Type,
 		value.Category,
+		value.ResolutionTime,
 		value.Question,
 		options,
 		value.Status,
@@ -250,6 +257,7 @@ func scanMarket(row rowScanner) (*types.Market, error) {
 		&value.EventID,
 		&value.Type,
 		&value.Category,
+		&value.ResolutionTime,
 		&value.Question,
 		&options,
 		&value.Status,

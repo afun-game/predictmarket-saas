@@ -175,6 +175,53 @@ func (h *adminHandler) addMarketLiquidity(w http.ResponseWriter, r *http.Request
 	}})
 }
 
+// settleMarket settles one market immediately with a chosen winning option.
+// The owning event stays open; other markets on it are unaffected. Intended
+// for console/testing settlement of a single market.
+func (h *adminHandler) settleMarket(w http.ResponseWriter, r *http.Request) {
+	if h.config.Settlement == nil {
+		writeError(w, http.StatusServiceUnavailable, "service_unavailable", "settlement service is not available")
+		return
+	}
+	request := struct {
+		WinningOption string `json:"winning_option"`
+		Confirm       string `json:"confirm"`
+	}{}
+	if !readConfirm(w, r, "settle") {
+		writeError(w, http.StatusBadRequest, "validation_error", "confirmation is required")
+		return
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	marketID := r.PathValue("marketID")
+	if err := h.config.Settlement.SettleMarket(r.Context(), marketID, request.WinningOption); err != nil {
+		switch {
+		case errors.Is(err, settlement.ErrMarketNotFound):
+			writeError(w, http.StatusNotFound, "not_found", "market was not found")
+		case errors.Is(err, settlement.ErrMarketAlreadySettled):
+			writeError(w, http.StatusConflict, "already_settled", "market has already been settled or voided")
+		case errors.Is(err, settlement.ErrOutcomeNotOption):
+			writeError(w, http.StatusBadRequest, "validation_error", "winning option is not offered by the market")
+		case strings.Contains(err.Error(), "winning_option is required"):
+			writeError(w, http.StatusBadRequest, "validation_error", "winning_option is required")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal_error", "could not settle market")
+		}
+		return
+	}
+	if principal, ok := auth.AdminPrincipalFromContext(r.Context()); ok {
+		h.adminAudit(principal, "settle.market", "market", marketID, nil,
+			map[string]any{"id": marketID, "status": "settled", "winning_option": request.WinningOption},
+			r,
+		)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": map[string]any{"id": marketID, "status": "settled", "winning_option": request.WinningOption},
+	})
+}
+
 // voidMarket refunds every order on an unsettled market and voids it.
 func (h *adminHandler) voidMarket(w http.ResponseWriter, r *http.Request) {
 	if h.config.Settlement == nil {

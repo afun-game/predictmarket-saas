@@ -54,8 +54,12 @@ func v1MarketViewFrom(
 		Pool:    pool,
 		Book:    book,
 	}
-	if event.Title != "" {
+	if value.ResolutionTime != nil {
+		view.ResolutionTime = *value.ResolutionTime
+	} else if event.Title != "" {
 		view.ResolutionTime = event.ResolutionTime
+	}
+	if event.Title != "" {
 		view.EventTitle = event.Title
 		view.EventDescription = event.Description
 		view.League = event.League

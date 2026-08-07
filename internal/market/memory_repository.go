@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 )
@@ -18,10 +19,10 @@ func newMemoryRepository() *memoryRepository {
 	return &memoryRepository{byID: map[string]*types.Market{}}
 }
 
-func (r *memoryRepository) ValidateReferences(ctx context.Context, _, _ string) (string, error) {
-	// The in-memory repository has no events; callers set the category
-	// explicitly in tests.
-	return "", ctx.Err()
+func (r *memoryRepository) ValidateReferences(ctx context.Context, _, _ string) (string, time.Time, error) {
+	// The in-memory repository has no events; callers set the category and
+	// resolution time explicitly in tests.
+	return "", time.Time{}, ctx.Err()
 }
 
 func (r *memoryRepository) Create(ctx context.Context, value *types.Market) error {

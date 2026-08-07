@@ -173,6 +173,7 @@ type __is_Market[T ~struct {
 	Status          string     "json:\"status\""
 	TotalVolume     float64    "json:\"total_volume\""
 	LiquidityPool   float64    "json:\"liquidity_pool\""
+	ResolutionTime  *time.Time "json:\"resolution_time,omitempty\""
 	MerchantFeeRate float64    "json:\"-\""
 	PlatformFeeRate float64    "json:\"-\""
 	CreatedAt       time.Time  "json:\"created_at\""
@@ -195,6 +196,7 @@ func (x *Market) WeaverMarshal(enc *codegen.Encoder) {
 	enc.String(x.Status)
 	enc.Float64(x.TotalVolume)
 	enc.Float64(x.LiquidityPool)
+	servicetwill_enc_ptr_Time_7d81a94d(enc, x.ResolutionTime)
 	enc.Float64(x.MerchantFeeRate)
 	enc.Float64(x.PlatformFeeRate)
 	enc.EncodeBinaryMarshaler(&x.CreatedAt)
@@ -215,6 +217,7 @@ func (x *Market) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.Status = dec.String()
 	x.TotalVolume = dec.Float64()
 	x.LiquidityPool = dec.Float64()
+	x.ResolutionTime = servicetwill_dec_ptr_Time_7d81a94d(dec)
 	x.MerchantFeeRate = dec.Float64()
 	x.PlatformFeeRate = dec.Float64()
 	dec.DecodeBinaryUnmarshaler(&x.CreatedAt)

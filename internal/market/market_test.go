@@ -282,24 +282,24 @@ type invalidReferenceRepository struct {
 	Repository
 }
 
-func (r *invalidReferenceRepository) ValidateReferences(context.Context, string, string) (string, error) {
-	return "", ErrInvalidReference
+func (r *invalidReferenceRepository) ValidateReferences(context.Context, string, string) (string, time.Time, error) {
+	return "", time.Time{}, ErrInvalidReference
 }
 
 type expiredEventRepository struct {
 	Repository
 }
 
-func (r *expiredEventRepository) ValidateReferences(context.Context, string, string) (string, error) {
-	return "", ErrEventExpired
+func (r *expiredEventRepository) ValidateReferences(context.Context, string, string) (string, time.Time, error) {
+	return "", time.Time{}, ErrEventExpired
 }
 
 type categorizedEventRepository struct {
 	Repository
 }
 
-func (r *categorizedEventRepository) ValidateReferences(context.Context, string, string) (string, error) {
-	return "sports", nil
+func (r *categorizedEventRepository) ValidateReferences(context.Context, string, string) (string, time.Time, error) {
+	return "sports", time.Date(2026, 8, 20, 13, 0, 0, 0, time.UTC), nil
 }
 
 func validCreateRequest() *CreateRequest {

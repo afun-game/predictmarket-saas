@@ -46,13 +46,16 @@ type Service interface {
 type CreateRequest struct {
 	twill.AutoMarshal
 
-	MerchantID    string   `json:"merchant_id"`
-	EventID       string   `json:"event_id"`
-	Type          string   `json:"type"`
-	Category      string   `json:"category,omitempty"`
-	Question      string   `json:"question"`
-	Options       []string `json:"options"`
-	LiquidityPool float64  `json:"liquidity_pool"`
+	MerchantID string `json:"merchant_id"`
+	EventID    string `json:"event_id"`
+	Type       string `json:"type"`
+	Category   string `json:"category,omitempty"`
+	// ResolutionTime is optional; when zero the owning event's resolution
+	// time is inherited.
+	ResolutionTime time.Time `json:"resolution_time,omitempty"`
+	Question       string    `json:"question"`
+	Options        []string  `json:"options"`
+	LiquidityPool  float64   `json:"liquidity_pool"`
 }
 
 type ListFilters struct {
@@ -141,14 +144,17 @@ func (s *implementation) Create(
 	if err != nil {
 		return nil, err
 	}
-	eventCategory, err := s.repository.ValidateReferences(ctx, input.MerchantID, input.EventID)
+	eventCategory, eventResolutionTime, err := s.repository.ValidateReferences(ctx, input.MerchantID, input.EventID)
 	if err != nil {
 		return nil, fmt.Errorf("validate market references: %w", err)
 	}
-	// A market without its own category inherits the event's, so list pages
-	// can render market categories without joining events.
+	// A market without its own category or settlement time inherits the
+	// event's, so list pages can render them without joining events.
 	if input.Category == "" {
 		input.Category = eventCategory
+	}
+	if input.ResolutionTime.IsZero() {
+		input.ResolutionTime = eventResolutionTime
 	}
 
 	marketID, err := generateMarketID(s.random)
@@ -161,6 +167,7 @@ func (s *implementation) Create(
 		EventID:         input.EventID,
 		Type:            input.Type,
 		Category:        input.Category,
+		ResolutionTime:  &input.ResolutionTime,
 		Question:        input.Question,
 		Options:         append([]string{}, input.Options...),
 		Status:          "active",

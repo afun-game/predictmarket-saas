@@ -75,6 +75,9 @@ type Market struct {
 	Status        string   `json:"status"` // active, suspended, closed, settled
 	TotalVolume   float64  `json:"total_volume"`
 	LiquidityPool float64  `json:"liquidity_pool"`
+	// ResolutionTime is the market's settlement time; creation defaults it
+	// to the owning event's resolution time.
+	ResolutionTime *time.Time `json:"resolution_time,omitempty"`
 	// Fee rates are immutable market terms. They are kept internal until the
 	// administrator fee-configuration API is available.
 	MerchantFeeRate float64    `json:"-"`
