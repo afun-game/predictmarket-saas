@@ -168,6 +168,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- `/api/v1/markets` 与 `/api/v1/markets/{id}` 与托管页接口对齐：新增
+  `resolution_time`、`event_title`/`event_description`、`league` 与
+  `pool`/`book`/`history` 行情摘要（装配 V3 服务时生效；未装配保持经典
+  字段集），共享 `marketSummaries` 批量聚合。
 - 市场列表/详情接口补充事件上下文与行情（参考 Polymarket Gamma）：
   `resolution_time`（结算时间）、`event_title`/`event_description`（所属
   主题）、`league`/`game_id`/`start_time`（体育联赛，来自 sports_events），

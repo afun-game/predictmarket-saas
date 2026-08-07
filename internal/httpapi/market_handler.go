@@ -3,11 +3,14 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/afun-game/predictmarket-saas/internal/auth"
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/order"
+	"github.com/afun-game/predictmarket-saas/internal/parimutuel"
+	"github.com/afun-game/predictmarket-saas/internal/v2query"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 )
 
@@ -19,6 +22,45 @@ const (
 type marketHandler struct {
 	service      market.Service
 	orderService order.Service
+	// Optional enrichment services shared with the hosted market endpoints;
+	// when nil the v1 responses keep their classic field set.
+	parimutuelService parimutuel.Service
+	queries           v2query.Service
+}
+
+// v1MarketView is the merchant market payload: the classic market fields
+// plus the event context and行情 summaries shared with the hosted endpoints.
+type v1MarketView struct {
+	*types.Market
+	ResolutionTime   time.Time              `json:"resolution_time,omitempty"`
+	EventTitle       string                 `json:"event_title,omitempty"`
+	EventDescription string                 `json:"event_description,omitempty"`
+	League           string                 `json:"league,omitempty"`
+	History          *v2query.MarketHistory `json:"history,omitempty"`
+	Pool             map[string]any         `json:"pool,omitempty"`
+	Book             []v2query.BookQuote    `json:"book,omitempty"`
+}
+
+func v1MarketViewFrom(
+	value *types.Market,
+	pool map[string]any,
+	book []v2query.BookQuote,
+	event v2query.MarketEventInfo,
+	history *v2query.MarketHistory,
+) v1MarketView {
+	view := v1MarketView{
+		Market:  value,
+		History: history,
+		Pool:    pool,
+		Book:    book,
+	}
+	if event.Title != "" {
+		view.ResolutionTime = event.ResolutionTime
+		view.EventTitle = event.Title
+		view.EventDescription = event.Description
+		view.League = event.League
+	}
+	return view
 }
 
 type marketStatusRequest struct {
@@ -35,8 +77,15 @@ func registerMarketRoutes(
 	marketService market.Service,
 	orderService order.Service,
 	adminAPIKey string,
+	parimutuelService parimutuel.Service,
+	queries v2query.Service,
 ) {
-	handler := &marketHandler{service: marketService, orderService: orderService}
+	handler := &marketHandler{
+		service:           marketService,
+		orderService:      orderService,
+		parimutuelService: parimutuelService,
+		queries:           queries,
+	}
 	mux.Handle(
 		"POST /api/v1/markets",
 		auth.RequireAdmin(adminAPIKey, http.HandlerFunc(handler.create)),
@@ -109,8 +158,15 @@ func (h *marketHandler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	page, limit = marketPageDefaults(page, limit)
+	result := make([]v1MarketView, 0, len(values))
+	if len(values) > 0 {
+		pools, book, events, history := marketSummaries(r.Context(), h.parimutuelService, h.queries, values)
+		for _, value := range values {
+			result = append(result, v1MarketViewFrom(value, pools[value.ID], book[value.ID], events[value.ID], history[value.ID]))
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"data": values,
+		"data": result,
 		"meta": map[string]any{
 			"pagination": newPagination(page, limit, total),
 		},
@@ -122,7 +178,8 @@ func (h *marketHandler) get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": value})
+	pools, book, events, history := marketSummaries(r.Context(), h.parimutuelService, h.queries, []*types.Market{value})
+	writeJSON(w, http.StatusOK, map[string]any{"data": v1MarketViewFrom(value, pools[value.ID], book[value.ID], events[value.ID], history[value.ID])})
 }
 
 func (h *marketHandler) getOrderBook(w http.ResponseWriter, r *http.Request) {

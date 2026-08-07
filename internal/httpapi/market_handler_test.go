@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/order"
+	"github.com/afun-game/predictmarket-saas/internal/parimutuel"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 )
 
@@ -408,5 +410,77 @@ func TestWriteMarketServiceErrorMapsExpiredEvent(t *testing.T) {
 	}
 	if payload.Error.Code != "event_expired" {
 		t.Errorf("code = %q, want event_expired", payload.Error.Code)
+	}
+}
+
+// TestV1MarketListEmbedsPoolSummary pins the merchant market list carrying
+// the same parimutuel pool summary as the hosted endpoints when the V3
+// enrichment services are wired.
+func TestV1MarketListEmbedsPoolSummary(t *testing.T) {
+	t.Parallel()
+
+	merchantService := merchant.NewService()
+	eventService := event.NewService()
+	marketService := market.NewService()
+	walletService := wallet.NewService()
+	orderService := order.NewServiceWithDependencies(marketService, walletService)
+	parimutuelRepo := parimutuel.NewMemoryRepository()
+	parimutuelService := parimutuel.NewServiceWithRepository(parimutuelRepo)
+	handler := NewHandler(
+		merchantService,
+		eventService,
+		marketService,
+		walletService,
+		orderService,
+		currency.NewService(),
+		"admin-secret",
+		V3Config{Parimutuel: parimutuelService},
+	)
+	credentials := registerMerchant(t, handler, "V1 Pool Tenant", "v1-pool@example.test")
+	eventID := createActiveEventForMarket(t, handler, "v1-pool-event")
+	marketID := createParimutuelMarketForMerchant(t, handler, credentials.Data.MerchantID, eventID)
+	parimutuelRepo.SeedMarket(marketID, "parimutuel", "active", "active", []string{"Yes", "No"})
+	if err := parimutuelService.CreatePools(context.Background(), marketID, "USD"); err != nil {
+		t.Fatalf("CreatePools() error = %v", err)
+	}
+	if _, err := parimutuelService.PlaceBet(context.Background(), parimutuel.Bet{
+		MarketID: marketID, MerchantID: credentials.Data.MerchantID, UserID: "v1-pool-user",
+		Option: "Yes", Stake: 20, Currency: "USD",
+	}); err != nil {
+		t.Fatalf("PlaceBet() error = %v", err)
+	}
+
+	response := performRequest(t, handler, http.MethodGet, "/api/v1/markets", nil, "Bearer "+credentials.Data.APIKey)
+	if response.Code != http.StatusOK {
+		t.Fatalf("v1 markets status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Data []struct {
+			ID   string         `json:"id"`
+			Pool map[string]any `json:"pool"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode v1 markets: %v", err)
+	}
+	var found bool
+	for _, item := range payload.Data {
+		if item.ID != marketID {
+			continue
+		}
+		found = true
+		if item.Pool == nil {
+			t.Fatal("v1 market item is missing the pool summary")
+		}
+		if item.Pool["total_stake"] != "20.00" {
+			t.Errorf("v1 pool total_stake = %v, want 20.00", item.Pool["total_stake"])
+		}
+		options, ok := item.Pool["options"].([]any)
+		if !ok || len(options) != 1 || options[0].(map[string]any)["odds"] != "1.00" {
+			t.Errorf("v1 pool options = %#v", item.Pool["options"])
+		}
+	}
+	if !found {
+		t.Fatalf("v1 market list did not include %s", marketID)
 	}
 }

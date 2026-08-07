@@ -681,8 +681,9 @@ func (h *v3Handler) poolSnapshot(ctx context.Context, marketID string) (map[stri
 // marketSummaries batches every display-ready detail for the given markets:
 // parimutuel pool snapshots, top-of-book quotes, owning event context, and
 // the leading outcome's price history. Failures degrade to missing fields;
-// the frontend falls back to the dedicated endpoints.
-func (h *v3Handler) marketSummaries(ctx context.Context, markets []*types.Market) (pools map[string]map[string]any, book map[string][]v2query.BookQuote, events map[string]v2query.MarketEventInfo, history map[string]*v2query.MarketHistory) {
+// the frontend falls back to the dedicated endpoints. Shared by the hosted
+// (/api/user) and merchant (/api/v1) market endpoints.
+func marketSummaries(ctx context.Context, parimutuelService parimutuel.Service, queries v2query.Service, markets []*types.Market) (pools map[string]map[string]any, book map[string][]v2query.BookQuote, events map[string]v2query.MarketEventInfo, history map[string]*v2query.MarketHistory) {
 	pools = map[string]map[string]any{}
 	book = map[string][]v2query.BookQuote{}
 	events = map[string]v2query.MarketEventInfo{}
@@ -698,8 +699,8 @@ func (h *v3Handler) marketSummaries(ctx context.Context, markets []*types.Market
 			bookIDs = append(bookIDs, value.ID)
 		}
 	}
-	if len(poolIDs) > 0 && h.parimutuel != nil {
-		values, err := h.parimutuel.MarketPools(ctx, poolIDs)
+	if len(poolIDs) > 0 && parimutuelService != nil {
+		values, err := parimutuelService.MarketPools(ctx, poolIDs)
 		if err != nil {
 			slog.WarnContext(ctx, "market pool summaries unavailable", "error", err)
 		} else {
@@ -708,20 +709,20 @@ func (h *v3Handler) marketSummaries(ctx context.Context, markets []*types.Market
 			}
 		}
 	}
-	if h.queries != nil && len(ids) > 0 {
-		values, err := h.queries.TopOfBook(ctx, bookIDs)
+	if queries != nil && len(ids) > 0 {
+		values, err := queries.TopOfBook(ctx, bookIDs)
 		if err != nil {
 			slog.WarnContext(ctx, "market book summaries unavailable", "error", err)
 		} else {
 			book = values
 		}
-		eventValues, err := h.queries.MarketEventDetails(ctx, ids)
+		eventValues, err := queries.MarketEventDetails(ctx, ids)
 		if err != nil {
 			slog.WarnContext(ctx, "market event details unavailable", "error", err)
 		} else {
 			events = eventValues
 		}
-		historyValues, err := h.queries.MarketHistory(ctx, bookIDs)
+		historyValues, err := queries.MarketHistory(ctx, bookIDs)
 		if err != nil {
 			slog.WarnContext(ctx, "market price history unavailable", "error", err)
 		} else {
@@ -729,6 +730,12 @@ func (h *v3Handler) marketSummaries(ctx context.Context, markets []*types.Market
 		}
 	}
 	return pools, book, events, history
+}
+
+// marketSummaries delegates the shared enrichment with this handler's
+// configured services.
+func (h *v3Handler) marketSummaries(ctx context.Context, markets []*types.Market) (map[string]map[string]any, map[string][]v2query.BookQuote, map[string]v2query.MarketEventInfo, map[string]*v2query.MarketHistory) {
+	return marketSummaries(ctx, h.parimutuel, h.queries, markets)
 }
 
 // getUserMarketPools exposes a parimutuel market's pool totals and per-option

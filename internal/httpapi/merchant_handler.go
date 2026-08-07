@@ -19,7 +19,9 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/market"
 	"github.com/afun-game/predictmarket-saas/internal/merchant"
 	"github.com/afun-game/predictmarket-saas/internal/order"
+	"github.com/afun-game/predictmarket-saas/internal/parimutuel"
 	"github.com/afun-game/predictmarket-saas/internal/sports"
+	"github.com/afun-game/predictmarket-saas/internal/v2query"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 	"github.com/nxsky/twill/runtime/middleware"
@@ -94,8 +96,19 @@ func NewHandler(
 		"PUT /api/v1/merchants/{merchantID}/integration",
 		auth.RequireAdmin(adminAPIKey, http.HandlerFunc(handler.configureIntegration)),
 	)
+	// Pull the optional enrichment services out of the V3 config so the
+	// merchant market endpoints can embed pool/book/event context like the
+	// hosted ones; without them the v1 responses keep the classic fields.
+	var marketParimutuel parimutuel.Service
+	var marketQueries v2query.Service
+	for _, optionalService := range optionalServices {
+		if config, ok := optionalService.(V3Config); ok {
+			marketParimutuel = config.Parimutuel
+			marketQueries = config.Queries
+		}
+	}
 	registerEventRoutes(mux, merchantService, eventService, adminAPIKey)
-	registerMarketRoutes(mux, merchantService, marketService, orderService, adminAPIKey)
+	registerMarketRoutes(mux, merchantService, marketService, orderService, adminAPIKey, marketParimutuel, marketQueries)
 	registerWalletRoutes(mux, merchantService, walletService)
 	registerOrderRoutes(mux, merchantService, orderService)
 	registerCurrencyRoutes(mux, merchantService, currencyService, adminAPIKey)
