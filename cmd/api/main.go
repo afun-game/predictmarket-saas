@@ -41,6 +41,7 @@ import (
 	"github.com/afun-game/predictmarket-saas/internal/settlementmonitor"
 	"github.com/afun-game/predictmarket-saas/internal/settlementworker"
 	"github.com/afun-game/predictmarket-saas/internal/sports"
+	"github.com/afun-game/predictmarket-saas/internal/sportsingest"
 	"github.com/afun-game/predictmarket-saas/internal/v2auth"
 	"github.com/afun-game/predictmarket-saas/internal/v2query"
 	"github.com/afun-game/predictmarket-saas/internal/wallet"
@@ -158,6 +159,14 @@ func run(
 	mux.HandleFunc("GET /readyz", checker.Readiness)
 	mux.Handle("GET /metrics", metrics.Handler())
 	optionalServices := []any{app.sports.Get(), app.analytics.Get(), app.settlement.Get()}
+	boxRecIntake, closeBoxRecIntake, boxRecEnabled, err := configuredBoxRecIntake(resources)
+	if err != nil {
+		slog.Warn("BoxRec intake is disabled", "error", err)
+	}
+	if boxRecEnabled {
+		defer closeBoxRecIntake()
+		optionalServices = append(optionalServices, boxRecIntake)
+	}
 	v3Config, closeV3, enabled, err := configuredV3(resources)
 	if err != nil {
 		slog.Warn("V3 hosted API is disabled", "error", err)
@@ -211,6 +220,25 @@ func run(
 	api = middleware.RequestID()(api)
 	mux.Handle("/", api)
 	return serveHTTP(ctx, app.public, mux)
+}
+
+// configuredBoxRecIntake builds the BoxRec schedule intake service over the
+// shared event and sports repositories. It is enabled by default when the
+// database is reachable; set BOXREC_INTAKE_DISABLED=true to turn it off.
+func configuredBoxRecIntake(
+	resources resourceEndpoints,
+) (*sportsingest.Service, func(), bool, error) {
+	if os.Getenv("BOXREC_INTAKE_DISABLED") == "true" {
+		return nil, func() {}, false, nil
+	}
+	database, err := sql.Open("pgx", resources.databaseURL)
+	if err != nil {
+		return nil, func() {}, false, fmt.Errorf("open boxrec intake database: %w", err)
+	}
+	events := event.NewSourceSynchronizer(event.NewPostgresRepository(database))
+	metadata := sports.NewPostgresRepository(database)
+	service := sportsingest.New(nil, events, metadata)
+	return service, func() { _ = database.Close() }, true, nil
 }
 
 // configuredAdmin builds the admin console backend over the session JWT

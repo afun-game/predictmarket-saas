@@ -175,6 +175,8 @@ func NewHandler(
 			}
 		case sports.Service:
 			registerSportsRoutes(mux, merchantService, service, adminAPIKey)
+		case boxrecIntaker:
+			registerBoxRecIntakeRoutes(mux, service, adminAPIKey)
 		case analytics.Service:
 			registerAnalyticsRoutes(
 				mux,

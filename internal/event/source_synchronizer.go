@@ -70,7 +70,7 @@ func validateSourceSyncRequest(
 	if !validSourceType(sourceType) {
 		return "", nil, time.Time{}, time.Time{}, &ValidationError{
 			Field:   "source_type",
-			Message: "must be polymarket, lmb, or custom",
+			Message: "must be polymarket, lmb, custom, or boxrec",
 		}
 	}
 	if req == nil {

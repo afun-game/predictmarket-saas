@@ -21,6 +21,9 @@ type Result struct {
 	Skipped int
 }
 
+// ErrInvalidBoxRecJSON reports an unparseable BoxRec schedule document.
+var ErrInvalidBoxRecJSON = errors.New("invalid boxrec schedule JSON")
+
 // eventSink stores an event under an explicit external source identity.
 type eventSink interface {
 	Sync(ctx context.Context, sourceType string, request *event.SyncRequest) error
@@ -83,33 +86,65 @@ func (s *Service) Sync(ctx context.Context, startDay time.Time, lookaheadDays in
 			return result, fmt.Errorf("fetch fixtures for %s: %w", day.Format("2006-01-02"), err)
 		}
 		result.Fetched += len(fixtures)
-
-		for _, fixture := range fixtures {
-			request, metadata, ok := projectFixture(fixture)
-			if !ok {
-				result.Skipped++
-				continue
-			}
-			if err := s.events.Sync(ctx, fixture.SourceType, request); err != nil {
-				return result, fmt.Errorf("sync source event %q: %w", fixture.SourceID, err)
-			}
-			result.Synced++
-
-			if fixture.State == provider.StateClosed {
-				continue
-			}
-			if _, err := s.metadata.UpsertSource(
-				ctx,
-				fixture.SourceType,
-				fixture.SourceID,
-				metadata,
-				s.now().UTC(),
-			); err != nil {
-				return result, fmt.Errorf("upsert sports metadata for source event %q: %w", fixture.SourceID, err)
-			}
+		if err := s.projectFixtures(ctx, fixtures, &result); err != nil {
+			return result, err
 		}
 	}
 	return result, nil
+}
+
+// IngestBoxRec projects a captured BoxRec schedule document into prediction
+// events using the same projection and deduplication path as day-based sync.
+func (s *Service) IngestBoxRec(ctx context.Context, data []byte) (Result, error) {
+	if s == nil {
+		return Result{}, errors.New("sports ingestion service is required")
+	}
+	if s.events == nil {
+		return Result{}, errors.New("external event sink is required")
+	}
+	if s.metadata == nil {
+		return Result{}, errors.New("sports metadata sink is required")
+	}
+	fixtures, err := provider.ParseBoxRecSchedule(data)
+	if err != nil {
+		return Result{}, fmt.Errorf("%w: %v", ErrInvalidBoxRecJSON, err)
+	}
+	result := Result{Fetched: len(fixtures)}
+	if err := s.projectFixtures(ctx, fixtures, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+// projectFixtures runs the shared projection for a batch of fixtures:
+// convert to a SyncRequest, persist via the event sink (deduplicated by
+// source type + id), and upsert sports metadata for non-closed fixtures.
+func (s *Service) projectFixtures(ctx context.Context, fixtures []provider.Fixture, result *Result) error {
+	for _, fixture := range fixtures {
+		request, metadata, ok := projectFixture(fixture)
+		if !ok {
+			result.Skipped++
+			continue
+		}
+		if err := s.events.Sync(ctx, fixture.SourceType, request); err != nil {
+			return fmt.Errorf("sync source event %q: %w", fixture.SourceID, err)
+		}
+		result.Synced++
+
+		if fixture.State == provider.StateClosed {
+			continue
+		}
+		if _, err := s.metadata.UpsertSource(
+			ctx,
+			fixture.SourceType,
+			fixture.SourceID,
+			metadata,
+			s.now().UTC(),
+		); err != nil {
+			return fmt.Errorf("upsert sports metadata for source event %q: %w", fixture.SourceID, err)
+		}
+	}
+	return nil
 }
 
 func projectFixture(fixture provider.Fixture) (*event.SyncRequest, *sports.SportsEvent, bool) {

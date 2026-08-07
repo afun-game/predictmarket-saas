@@ -405,7 +405,7 @@ func validateCreateRequest(
 	if !validSourceType(input.SourceType) {
 		return nil, time.Time{}, time.Time{}, &ValidationError{
 			Field:   "source_type",
-			Message: "must be polymarket, lmb, or custom",
+			Message: "must be polymarket, lmb, custom, or boxrec",
 		}
 	}
 	if input.SourceID == "" {
@@ -512,7 +512,7 @@ func normalizeFilters(filters *ListFilters) (ListFilters, error) {
 }
 
 func validSourceType(value string) bool {
-	return value == "polymarket" || value == "lmb" || value == "custom"
+	return value == "polymarket" || value == "lmb" || value == "custom" || value == "boxrec"
 }
 
 func validStatus(value string) bool {
