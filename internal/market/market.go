@@ -395,7 +395,7 @@ func validateMoney(field string, value float64, allowZero bool) error {
 
 func validStatus(status string) bool {
 	switch status {
-	case "active", "suspended", "closed", "settled":
+	case "active", "suspended", "closed", "settled", "voided":
 		return true
 	default:
 		return false
