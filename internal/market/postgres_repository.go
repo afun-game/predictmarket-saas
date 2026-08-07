@@ -3,10 +3,10 @@ package market
 import (
 	"context"
 	"database/sql"
-	"time"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 	"github.com/jackc/pgx/v5/pgconn"
