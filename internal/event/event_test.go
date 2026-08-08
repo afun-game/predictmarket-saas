@@ -2,9 +2,9 @@ package event
 
 import (
 	"context"
-	"github.com/afun-game/predictmarket-saas/pkg/types"
 	"errors"
 	"fmt"
+	"github.com/afun-game/predictmarket-saas/pkg/types"
 	"testing"
 	"time"
 )
