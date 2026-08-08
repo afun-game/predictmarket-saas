@@ -1810,8 +1810,10 @@ func (h *v3Handler) listMarkets(w http.ResponseWriter, r *http.Request) {
 	result := make([]v3UserMarket, 0, len(values))
 	if len(values) > 0 {
 		pools, book, events, history := h.marketSummaries(r.Context(), values)
+		acceptLanguage := r.Header.Get("Accept-Language")
 		for _, value := range values {
-			result = append(result, userMarketFrom(value, pools[value.ID], book[value.ID], events[value.ID], history[value.ID]))
+			event := localizedEventInfo(events[value.ID], acceptLanguage)
+			result = append(result, userMarketFrom(value, pools[value.ID], book[value.ID], event, history[value.ID]))
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
