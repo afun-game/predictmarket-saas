@@ -47,13 +47,13 @@ func TestSyncNormalizesAndWritesEvents(t *testing.T) {
 		t.Fatalf("synced requests = %d, want 2", len(sink.requests))
 	}
 	first := sink.requests[0]
-	if first.Category != "politics" || first.Status != "active" {
+	if first.Category != "other" || first.Status != "active" {
 		t.Errorf("first request = %#v", first)
 	}
 	if first.EndTime != "2026-08-10T04:00:00Z" || first.ResolutionTime != first.EndTime {
 		t.Errorf("first request timestamps = %q / %q", first.EndTime, first.ResolutionTime)
 	}
-	if sink.requests[1].Category != "crypto" {
+	if sink.requests[1].Category != "bitcoin" {
 		t.Errorf("second request category = %q", sink.requests[1].Category)
 	}
 	if len(source.options) != 2 {

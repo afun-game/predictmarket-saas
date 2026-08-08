@@ -73,7 +73,7 @@ func TestNormalizeSourceEventUsesStructuredSportsFields(t *testing.T) {
 	if !ok {
 		t.Fatal("normalizeSourceEvent() rejected valid event")
 	}
-	if request.Category != "sports" || request.Status != "active" || request.EndTime != start.Format(time.RFC3339) {
+	if request.Category != "basketball" || request.Status != "active" || request.EndTime != start.Format(time.RFC3339) {
 		t.Errorf("request = %#v", request)
 	}
 	if metadata.League != "wnba" || metadata.GameID != "13002430" || len(metadata.Teams) != 2 {

@@ -77,11 +77,14 @@ const STATUS_KIND = {
 };
 
 const CATEGORY_LABELS = {
-  sports: "体育",
-  crypto: "加密",
-  world: "时事",
-  entertainment: "娱乐",
-  technology: "科技",
+  hot: "热门",
+  football: "足球",
+  basketball: "篮球",
+  baseball: "棒球",
+  boxing: "拳击",
+  weather: "天气",
+  bitcoin: "比特币",
+  other: "其它",
 };
 
 const MARKET_TYPE_LABELS = {

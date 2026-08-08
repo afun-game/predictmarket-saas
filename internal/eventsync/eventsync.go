@@ -276,12 +276,12 @@ func normalizeSourceEvent(source polymarket.Event) (*event.SyncRequest, bool) {
 
 func sourceCategory(source polymarket.Event) string {
 	if category := strings.ToLower(strings.TrimSpace(source.Category)); category != "" {
-		return category
+		return event.NormalizeCategory(category)
 	}
 	for _, tag := range source.Tags {
 		if slug := strings.ToLower(strings.TrimSpace(tag.Slug)); slug != "" {
-			return slug
+			return event.NormalizeCategory(slug)
 		}
 	}
-	return "other"
+	return event.CategoryOther
 }

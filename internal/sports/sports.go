@@ -258,7 +258,7 @@ func normalizeSourceEvent(league string, source polymarket.Event) (*event.SyncRe
 	formattedEnd := endTime.UTC().Format(time.RFC3339)
 	request := &event.SyncRequest{
 		SourceID: source.ID, Title: source.Title, Description: source.Description,
-		Category: "sports", EndTime: formattedEnd, ResolutionTime: formattedEnd, Status: status,
+		Category: event.CategoryForLeague(league), EndTime: formattedEnd, ResolutionTime: formattedEnd, Status: status,
 	}
 	metadata := &SportsEvent{League: league, Teams: make([]Team, 0, len(source.Teams))}
 	if source.GameID != 0 {
