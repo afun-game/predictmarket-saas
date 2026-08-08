@@ -473,9 +473,40 @@ WHERE ($1 = '' OR merchant_id::text = $1)
 	ordersSelect = `
 SELECT id, merchant_id, user_id, market_id, type, option, amount, filled_amount,
        currency, price, status, created_at, filled_at
-FROM orders` + ordersWhere + `
+FROM (
+    SELECT o.id, o.merchant_id::text, o.user_id, o.market_id::text, o.type, o.option,
+           o.amount, o.filled_amount, o.currency, o.price, o.status, o.created_at, o.filled_at
+    FROM orders o
+    WHERE ($1 = '' OR o.merchant_id::text = $1)
+      AND ($2 = '' OR o.user_id = $2)
+      AND ($3 = '' OR o.market_id::text = $3)
+      AND ($4 = '' OR o.status = $4)
+    UNION ALL
+    SELECT b.id, b.merchant_id::text, b.user_id, b.market_id::text, 'bet' AS type, b.option,
+           b.stake, b.stake, b.currency, 0, b.status, b.created_at, b.settled_at
+    FROM parimutuel_bets b
+    WHERE ($1 = '' OR b.merchant_id::text = $1)
+      AND ($2 = '' OR b.user_id = $2)
+      AND ($3 = '' OR b.market_id::text = $3)
+      AND ($4 = '' OR b.status = $4)
+) AS merged
 ORDER BY created_at DESC
 LIMIT $5 OFFSET $6`
+
+	ordersCount = `
+SELECT COUNT(*) FROM (
+    SELECT o.id FROM orders o
+    WHERE ($1 = '' OR o.merchant_id::text = $1)
+      AND ($2 = '' OR o.user_id = $2)
+      AND ($3 = '' OR o.market_id::text = $3)
+      AND ($4 = '' OR o.status = $4)
+    UNION ALL
+    SELECT b.id FROM parimutuel_bets b
+    WHERE ($1 = '' OR b.merchant_id::text = $1)
+      AND ($2 = '' OR b.user_id = $2)
+      AND ($3 = '' OR b.market_id::text = $3)
+      AND ($4 = '' OR b.status = $4)
+) AS merged`
 
 	transactionsWhere = `
 WHERE ($1 = '' OR w.merchant_id::text = $1)
@@ -717,7 +748,7 @@ func TestAdminListOrdersFilters(t *testing.T) {
 			"created_at", "filled_at",
 		}).AddRow("ord-1", "m-1", "u-1", "mk-1", "buy", "Yes",
 			100.0, 100.0, "USD", 0.65, "filled", now, now))
-	mock.ExpectQuery("SELECT COUNT(*) FROM orders "+ordersWhere).
+	mock.ExpectQuery(ordersCount).
 		WithArgs("m-1", "u-1", "mk-1", "filled").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
