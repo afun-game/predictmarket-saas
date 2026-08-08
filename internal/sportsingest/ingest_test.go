@@ -38,7 +38,7 @@ func TestServiceSyncProjectsPendingFixtureIntoEventAndSportsMetadata(t *testing.
 			SourceID:       "846703",
 			Title:          "Will Saraperos defeat Algodoneros?",
 			Description:    "Official LMB fixture. Away: Saraperos (SLW). Home: Algodoneros (LAG). LMB game ID: 846703.",
-			Category:       "sports",
+			Category:       "baseball",
 			EndTime:        fixture.ScheduledAt.UTC().Format(time.RFC3339),
 			ResolutionTime: fixture.ScheduledAt.UTC().Format(time.RFC3339),
 			Status:         "pending",

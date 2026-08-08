@@ -175,7 +175,7 @@ func projectFixture(fixture provider.Fixture) (*event.SyncRequest, *sports.Sport
 		SourceID:       sourceID,
 		Title:          fmt.Sprintf("Will %s defeat %s?", awayName, homeName),
 		Description:    fmt.Sprintf("Official LMB fixture. Away: %s (%s). Home: %s (%s). LMB game ID: %s.", awayName, strings.TrimSpace(fixture.Away.Abbreviation), homeName, strings.TrimSpace(fixture.Home.Abbreviation), sourceID),
-		Category:       "sports",
+		Category:       event.CategoryForLeague(league),
 		EndTime:        formattedTime,
 		ResolutionTime: formattedTime,
 		Status:         status,

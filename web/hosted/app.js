@@ -470,8 +470,13 @@ function categoryChips(activeCategory) {
 }
 
 function categoryPage(category) {
-  const eventMatches = category === "all" ? events : events.filter((event) => event.category === category);
-  const marketMatches = category === "all" ? markets : markets.filter((market) => events.find((event) => event.id === market.eventId)?.category === category);
+  const tradingEventIds = new Set(markets.filter((market) => market.status === "active").map((market) => market.eventId));
+  const eventMatches = category === "all" ? events : category === "hot"
+    ? events.filter((event) => tradingEventIds.has(event.id))
+    : events.filter((event) => event.category === category);
+  const marketMatches = category === "all" ? markets : category === "hot"
+    ? markets.filter((market) => market.status === "active")
+    : markets.filter((market) => events.find((event) => event.id === market.eventId)?.category === category);
   const title = category === "all" ? t("category.allTitle") : t("category.titleSuffix", { label: categoryLabel(category) });
   return shell(`
     <section class="page">
@@ -710,7 +715,7 @@ function deadlineLabel(value) {
 function normalizeEvent(value) {
   return {
     ...value,
-    icon: value.category === "sports" ? "⚽" : value.category === "technology" ? "✦" : "◈",
+    icon: { hot: "🔥", football: "⚽", basketball: "🏀", baseball: "⚾", boxing: "🥊", weather: "🌦", bitcoin: "₿" }[value.category] ?? "◈",
     resolutionTime: value.resolution_time,
     markets: [],
   };

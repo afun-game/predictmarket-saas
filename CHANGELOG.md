@@ -172,7 +172,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   体育事件按联赛自动归类（NBA/WNBA→篮球、MLB/LMB→棒球、EPL→足球、
   boxing→拳击），Polymarket 与自定义事件经规范化映射（crypto/ethereum→
   比特币，其余→其它）；迁移 038 将存量事件与市场分类重映射到新目录；
-  托管页目录与 admin 管理台分类选项同步更新。
+  托管页目录与 admin 管理台分类选项同步更新；托管页「热门」= 正在交易
+  （有活跃市场）的事件与市场。
 - 市场创建支持费率与多语言：`POST /api/v1/admin/markets` 与创建接口新增
   `merchant_fee_rate` / `platform_fee_rate`（结算时按比例拆账，0–1 校验）与
   `translations`（BCP-47 语言代码 → 问题/选项，选项数量须与默认语言一致）；
