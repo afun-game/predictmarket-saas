@@ -303,12 +303,12 @@ FROM parimutuel_pools WHERE market_id = $1`
 		if err := rows.Scan(&pool.MarketID, &pool.Currency, &totalStakeText, &totalFeesText); err != nil {
 			return nil, fmt.Errorf("scan parimutuel pool: %w", err)
 		}
-		stakeCents, err := fixed.CentsFromString(totalStakeText)
+		stakeCents, err := parsePoolAmount(totalStakeText)
 		if err != nil {
 			return nil, fmt.Errorf("parse pool total stake: %w", err)
 		}
 		pool.TotalStake = fixed.CentsToFloat(stakeCents)
-		feesCents, err := fixed.CentsFromString(totalFeesText)
+		feesCents, err := parsePoolAmount(totalFeesText)
 		if err != nil {
 			return nil, fmt.Errorf("parse pool total fees: %w", err)
 		}
@@ -418,4 +418,13 @@ func normalizePage(page, limit int) (int, int) {
 		limit = 20
 	}
 	return page, limit
+}
+
+// parsePoolAmount parses a pool amount that may legitimately be zero (an
+// empty pool), which fixed.CentsFromString rejects.
+func parsePoolAmount(value string) (int64, error) {
+	if value == "0" || value == "0.00" {
+		return 0, nil
+	}
+	return fixed.CentsFromString(value)
 }
