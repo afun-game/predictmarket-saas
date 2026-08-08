@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,7 +26,7 @@ func TestListOrdersMergesBetsIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	merchantID := integrationUUID(t)
-	userID := "adminquery-user"
+	userID := "adminquery-user-" + integrationUUID(t)[:12]
 	marketID := integrationUUID(t)
 	eventID := integrationUUID(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
