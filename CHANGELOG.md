@@ -168,6 +168,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- 修复奖池/订单簿无缝(shadow)结算失败：结算时每个参与者（赢家与输家）
+  释放各自 stake 的 shadow 负债，赢家另经 credit 回调支付全池派彩；此前
+  只扣赢家且按全额 payout 扣款，多用户奖池中赢家 shadow 余额必然不足
+  （如 100 注额赢 150 池）导致"could not settle market"500，并引发周期
+  性 shadow wallet conservation failed；作废退款路径同步修正。
 - orders 列表（/api/user/orders、/api/v2/orders、/api/v1/orders）订单项新增
   `stake`（成本基数：订单簿=成交额×价，注单=下注额）、`odds`（订单簿
   =1/price；已结算注单=派彩/下注额实际赔率，未结算注单=当前池赔率）、

@@ -194,6 +194,15 @@ INSERT INTO settlement_payouts (
 			return fmt.Errorf("insert parimutuel settlement payout: %w", err)
 		}
 	}
+	// Every shadow participant releases exactly their own stake; winners are
+	// then paid their payout through a signed credit callback. Releasing the
+	// loser's stake too is what keeps the winners' shadow wallets funded for
+	// the pool-wide payout.
+	if bet.walletKind == "shadow" && walletID != "" && bet.stakeCents.Sign() > 0 {
+		if err := releaseShadowStake(ctx, databaseTx, walletID, bet.stakeCents, settledAt); err != nil {
+			return err
+		}
+	}
 	if payout.Sign() > 0 && bet.walletKind == "shadow" {
 		reason := "payout"
 		if settlementType == "refund" {
@@ -291,7 +300,10 @@ FOR UPDATE`
 				return fmt.Errorf("lock parimutuel void shadow wallet: %w", err)
 			}
 			// Seamless stakes are refunded to the merchant wallet through a
-			// signed credit callback (reason void).
+			// signed credit callback (reason void); release the mirror first.
+			if err := releaseShadowStake(ctx, databaseTx, walletID, bet.stakeCents, voidedAt); err != nil {
+				return err
+			}
 			if err := enqueueSettlementShadowCredit(
 				ctx, databaseTx, merchantID, bet.userID, currency, bet.id, walletID,
 				marketID, eventID, bet.stakeCents, "void", voidedAt,

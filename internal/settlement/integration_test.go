@@ -578,3 +578,121 @@ func TestSettlementPostgresSingleMarketSettle(t *testing.T) {
 		t.Errorf("unknown market error = %v, want ErrMarketNotFound", err)
 	}
 }
+
+// TestSettlementParimutuelShadowPoolPaysWinners pins the multi-user shadow
+// pool accounting: the winner's shadow balance (their own stake) is smaller
+// than the pool-wide payout, so settlement must release every participant's
+// stake and pay the winner through a credit callback.
+func TestSettlementParimutuelShadowPoolPaysWinners(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") != "1" {
+		t.Skip("set INTEGRATION_TEST=1 to run PostgreSQL integration tests")
+	}
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		databaseURL = defaultIntegrationDatabaseURL
+	}
+	database, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		t.Fatalf("open PostgreSQL: %v", err)
+	}
+	defer database.Close()
+	ctx := context.Background()
+
+	merchantID := integrationUUID(t)
+	eventID := integrationUUID(t)
+	marketID := integrationUUID(t)
+	winnerUser := "shadow-winner-" + fmt.Sprintf("%d", time.Now().UnixNano())
+	loserUser := "shadow-loser-" + fmt.Sprintf("%d", time.Now().UnixNano())
+	now := time.Now().UTC()
+
+	if _, err := database.ExecContext(ctx, `
+INSERT INTO merchants (id, name, email, api_key, api_key_prefix, api_secret, status, currency, timezone, wallet_mode, created_at, updated_at)
+VALUES ($1, 'shadow-test', 's@example.com', $2, $3, $4, 'active', 'MXN', 'UTC', 'seamless', $5, $5)`,
+		merchantID, "pk_shadow_"+merchantID[:12], "pk_"+merchantID[:12], "sk_"+merchantID[:12], now); err != nil {
+		t.Fatalf("insert merchant: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, `
+INSERT INTO events (id, source_type, source_id, title, description, category, end_time, resolution_time, status, created_at, updated_at)
+VALUES ($1, 'custom', $2, 'shadow event', '', 'other', $3, $3, 'active', $3, $3)`,
+		eventID, "ev-"+merchantID[:12], now); err != nil {
+		t.Fatalf("insert event: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, `
+INSERT INTO markets (id, merchant_id, event_id, type, question, options, status, total_volume, liquidity_pool, merchant_fee_rate, platform_fee_rate, created_at)
+VALUES ($1, $2, $3, 'parimutuel', 'shadow pool?', '["Yes","No"]', 'active', 150, 0, 0, 0, $4)`,
+		marketID, merchantID, eventID, now); err != nil {
+		t.Fatalf("insert market: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, `
+INSERT INTO parimutuel_pools (market_id, currency, total_stake, total_fees, updated_at)
+VALUES ($1, 'MXN', 150, 0, $2)`, marketID, now); err != nil {
+		t.Fatalf("insert pool: %v", err)
+	}
+	winnerWallet := integrationUUID(t)
+	loserWallet := integrationUUID(t)
+	for _, row := range []struct {
+		walletID string
+		userID   string
+		balance  string
+		option   string
+		stake    string
+	}{
+		{winnerWallet, winnerUser, "100", "Yes", "100"},
+		{loserWallet, loserUser, "50", "No", "50"},
+	} {
+		if _, err := database.ExecContext(ctx, `
+INSERT INTO wallets (id, merchant_id, user_id, currency, kind, balance, locked_balance, updated_at)
+VALUES ($1, $2, $3, 'MXN', 'shadow', $4::numeric, 0, $5)`,
+			row.walletID, merchantID, row.userID, row.balance, now); err != nil {
+			t.Fatalf("insert shadow wallet: %v", err)
+		}
+		if _, err := database.ExecContext(ctx, `
+INSERT INTO parimutuel_bets (id, market_id, merchant_id, user_id, option, stake, currency, status, wallet_kind, created_at)
+VALUES ($1, $2, $3, $4, $5, $6::numeric, 'MXN', 'active', 'shadow', $7)`,
+			integrationUUID(t), marketID, merchantID, row.userID, row.option, row.stake, now); err != nil {
+			t.Fatalf("insert shadow bet: %v", err)
+		}
+	}
+
+	service := NewServiceWithRepository(newPostgresRepository(database))
+	if err := service.SettleMarket(ctx, marketID, "Yes"); err != nil {
+		t.Fatalf("SettleMarket() error = %v", err)
+	}
+
+	// Both participants release exactly their own stake: the ledger is flat.
+	for _, row := range []struct {
+		walletID string
+		userID   string
+	}{
+		{winnerWallet, winnerUser},
+		{loserWallet, loserUser},
+	} {
+		var balance string
+		if err := database.QueryRowContext(ctx,
+			"SELECT balance::text FROM wallets WHERE id = $1", row.walletID).Scan(&balance); err != nil {
+			t.Fatalf("read shadow balance: %v", err)
+		}
+		if balance != "0.00" {
+			t.Errorf("user %s shadow balance = %s, want 0.00", row.userID, balance)
+		}
+	}
+
+	// The winner is paid the full pool through a credit callback.
+	var creditCount int
+	if err := database.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM callback_outbox
+WHERE market_id = $1 AND type = 'credit' AND amount::text = '150.00'`, marketID).Scan(&creditCount); err != nil {
+		t.Fatalf("count credit callbacks: %v", err)
+	}
+	if creditCount != 1 {
+		t.Errorf("credit callback count = %d, want 1", creditCount)
+	}
+	var payoutCount int
+	if err := database.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM settlement_payouts WHERE market_id = $1", marketID).Scan(&payoutCount); err != nil {
+		t.Fatalf("count payouts: %v", err)
+	}
+	if payoutCount != 2 {
+		t.Errorf("settlement_payouts rows = %d, want 2", payoutCount)
+	}
+}

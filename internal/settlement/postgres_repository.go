@@ -210,7 +210,10 @@ WHERE id = $1 AND locked_balance >= $2::numeric`
 		}
 	}
 	for _, order := range orders {
-		if order.walletKind == "shadow" {
+		if order.walletKind == "shadow" && order.refund.Sign() > 0 {
+			if err := releaseShadowStake(ctx, databaseTx, order.walletID, order.refund, voidedAt); err != nil {
+				return err
+			}
 			if err := enqueueSettlementShadowCredit(
 				ctx, databaseTx, order.merchantID, order.userID, order.currency, order.id, order.walletID,
 				marketID, eventID, order.refund, "void", voidedAt,
@@ -790,6 +793,15 @@ WHERE id = $1 AND locked_balance >= $4::numeric`
 		}
 	}
 	if order.walletKind == "shadow" {
+		releaseAmount := order.stake
+		if releaseAmount.Sign() == 0 {
+			releaseAmount = order.refund
+		}
+		if releaseAmount.Sign() > 0 {
+			if err := releaseShadowStake(ctx, databaseTx, order.walletID, releaseAmount, settledAt); err != nil {
+				return err
+			}
+		}
 		if order.refund.Sign() > 0 {
 			if err := enqueueSettlementShadowCredit(
 				ctx, databaseTx, order.merchantID, order.userID, order.currency, order.id, order.walletID,
@@ -852,22 +864,16 @@ INSERT INTO settlement_payouts (
 	return nil
 }
 
-// enqueueSettlementShadowCredit pays a seamless settlement out of the
-// merchant-mirrored shadow wallet: it debits the shadow wallet and enqueues a
-// signed credit callback for the merchant. orderID may be empty for
-// parimutuel bets, which have no order row (both columns are nullable).
-func enqueueSettlementShadowCredit(
+// releaseShadowStake clears a settled position's stake from the shadow
+// wallet. Every participant (winner and loser) releases exactly their own
+// stake: winners are paid in cash through credit callbacks, while losing
+// stakes stay with the merchant pool. Checking the balance here keeps the
+// shadow ledger from going negative.
+func releaseShadowStake(
 	ctx context.Context,
 	databaseTx *sql.Tx,
-	merchantID string,
-	userID string,
-	currency string,
-	orderID string,
 	walletID string,
-	marketID string,
-	eventID string,
 	amount *big.Int,
-	reason string,
 	settledAt time.Time,
 ) error {
 	const debitQuery = `
@@ -888,6 +894,27 @@ WHERE id = $1 AND balance >= $2::numeric`
 	if err != nil || rowsAffected != 1 {
 		return fmt.Errorf("settlement shadow credit exceeds available balance")
 	}
+	return nil
+}
+
+// enqueueSettlementShadowCredit queues a signed credit callback for the
+// merchant after the caller has released the shadow stake. orderID may be
+// empty for parimutuel bets, which have no order row (both columns are
+// nullable).
+func enqueueSettlementShadowCredit(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	merchantID string,
+	userID string,
+	currency string,
+	orderID string,
+	walletID string,
+	marketID string,
+	eventID string,
+	amount *big.Int,
+	reason string,
+	settledAt time.Time,
+) error {
 	const outboxQuery = `
 WITH transaction AS (
     INSERT INTO seamless_transactions (
