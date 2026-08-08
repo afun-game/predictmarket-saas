@@ -102,6 +102,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   open the hosted page comfortably; the token remains single-use, tenant-bound,
   and consumed on exchange.
 
+### Added (Fees + Risk controls)
+- 手续费正式启用（迁移 031）：移除 `merchants_fee_rate_disabled`、
+  `markets_merchant_fee_rate_disabled`、`markets_platform_fee_rate_disabled`
+  三个把费率钉死为 0 的 CHECK 约束。结算按 `markets.merchant_fee_rate` /
+  `platform_fee_rate` 从毛收益中分别计提商户费与平台费，全程 `big.Int`
+  定点运算（费率 6 位小数、金额 2 位小数），奖池与订单簿两条结算路径
+  一致；用户实收为净额，费用明细随结算流水落账。
+- 风控下注限额（迁移 032）：`merchants` 新增 `max_bet_amount`、
+  `max_user_exposure`、`max_market_exposure`，`markets` 新增
+  `max_bet_amount`、`max_total_exposure`，全部可空（NULL = 不限）。
+  市场级 `max_bet_amount` 覆盖商户级默认值。下注/下单事务内在锁定
+  market 行之后、动用钱包之前校验三类限额，超限即中止且不产生任何
+  钱包变更：单笔金额、用户跨市场敞口、单市场总敞口（按挂单剩余份数
+  × 该侧敞口价计算，不能用 `wallets.locked_balance`，后者非按市场维度）。
+  订单簿与奖池两条路径都接入；HTTP 层映射为 422 `bet_amount_too_large`、
+  409 `user_exposure_too_high`、409 `market_exposure_too_high`，
+  不再落到 500。商户级三个限额可通过商户更新接口读写；市场级两列本次
+  只做落库与校验，暂无写入接口与管理台表单（需直接改库），后续补齐。
+
+### Fixed (Fees)
+- 费用入账语句与 `fee_ledger` 表结构不符，费率一旦非 0 结算即失败：
+  INSERT 写的是不存在的 `order_id`、`fee_type`、`collected_at` 三列，
+  又漏掉 NOT NULL 且无默认值的 `recipient`、`rate`（表定义见迁移 005，
+  此后未再改动）。因迁移 031 之前费率被 CHECK 钉死为 0、集成测试也只
+  覆盖 0 费率，这条路径从未被执行到，问题被掩盖。现统一走
+  `recordFee`，按表上的 `UNIQUE (market_id, currency, recipient)`
+  以 `ON CONFLICT ... DO UPDATE` 累加到 merchant / platform 两行，
+  而非每单一行；`rate` 按 6 位小数定点渲染（新增 `formatRate`
+  及其单元测试）。订单簿与奖池两条结算路径同时修正。
+
+### Fixed (Market maker)
+- 做市注资缺少幂等键：`makeMarket` 补仓走
+  `CreditWithIdempotency`（键 `mm-inject-<market_id>-<liquidity_pool>`），
+  避免注资在重试或并发下重复入账。
+
 ### Added
 - Initial project setup with Twill framework
 - Core component interfaces:

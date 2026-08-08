@@ -39,8 +39,14 @@ type Merchant struct {
 	// CallbackVerifiedAt records when an administrator proved callback URL
 	// ownership by echoing a signed verification challenge.
 	CallbackVerifiedAt *time.Time `json:"-"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	// Risk limits are decimal strings in the merchant currency; an empty
+	// string means the column is NULL and no limit is enforced. They are
+	// read by order and parimutuel bet placement.
+	MaxBetAmount      string    `json:"max_bet_amount,omitempty"`
+	MaxUserExposure   string    `json:"max_user_exposure,omitempty"`
+	MaxMarketExposure string    `json:"max_market_exposure,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // Event represents a prediction event

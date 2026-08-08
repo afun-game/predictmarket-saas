@@ -347,3 +347,100 @@ func TestConfigureIntegrationInvalidatesCallbackVerificationOnURLChange(t *testi
 		t.Fatalf("stored callback URL = %q, want %q", stored.CallbackURL, changedURL)
 	}
 }
+
+func TestNormalizeLimit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		value   string
+		want    string
+		wantErr bool
+	}{
+		{name: "empty_clears_limit", value: "", want: ""},
+		{name: "blank_clears_limit", value: "   ", want: ""},
+		{name: "canonicalizes_scale", value: "500", want: "500.00"},
+		{name: "keeps_cents", value: "1234.56", want: "1234.56"},
+		{name: "rejects_zero", value: "0", wantErr: true},
+		{name: "rejects_negative", value: "-10.00", wantErr: true},
+		{name: "rejects_non_numeric", value: "abc", wantErr: true},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := normalizeLimit("max_bet_amount", testCase.value)
+			if testCase.wantErr {
+				if err == nil {
+					t.Fatalf("normalizeLimit(%q) error = nil, want a validation error", testCase.value)
+				}
+				var validation *ValidationError
+				if !errors.As(err, &validation) {
+					t.Fatalf("normalizeLimit(%q) error = %T, want *ValidationError", testCase.value, err)
+				}
+				if validation.Field != "max_bet_amount" {
+					t.Errorf("validation field = %q, want max_bet_amount", validation.Field)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("normalizeLimit(%q) error = %v", testCase.value, err)
+			}
+			if got != testCase.want {
+				t.Errorf("normalizeLimit(%q) = %q, want %q", testCase.value, got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestUpdateAppliesRiskLimits(t *testing.T) {
+	t.Parallel()
+
+	service := newService(newMemoryRepository())
+	created, err := service.Register(context.Background(), &RegisterRequest{
+		Name:  "Acme",
+		Email: "admin@example.com",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	maxBet := "500"
+	maxUser := "2500.5"
+	updated, err := service.Update(context.Background(), created.ID, &UpdateRequest{
+		MaxBetAmount:    &maxBet,
+		MaxUserExposure: &maxUser,
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if updated.MaxBetAmount != "500.00" || updated.MaxUserExposure != "2500.50" {
+		t.Errorf("limits = %q and %q, want 500.00 and 2500.50",
+			updated.MaxBetAmount, updated.MaxUserExposure)
+	}
+	if updated.MaxMarketExposure != "" {
+		t.Errorf("unset limit = %q, want empty", updated.MaxMarketExposure)
+	}
+
+	cleared := ""
+	updated, err = service.Update(context.Background(), created.ID, &UpdateRequest{
+		MaxBetAmount: &cleared,
+	})
+	if err != nil {
+		t.Fatalf("Update() clearing limit error = %v", err)
+	}
+	if updated.MaxBetAmount != "" {
+		t.Errorf("cleared limit = %q, want empty", updated.MaxBetAmount)
+	}
+	if updated.MaxUserExposure != "2500.50" {
+		t.Errorf("untouched limit = %q, want 2500.50", updated.MaxUserExposure)
+	}
+
+	invalid := "-1"
+	if _, err := service.Update(context.Background(), created.ID, &UpdateRequest{
+		MaxMarketExposure: &invalid,
+	}); err == nil {
+		t.Fatal("Update() accepted a negative limit")
+	}
+}

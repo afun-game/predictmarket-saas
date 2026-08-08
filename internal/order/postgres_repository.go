@@ -76,20 +76,46 @@ func (r *postgresRepository) place(
 		return 0, fmt.Errorf("lock order book: %w", err)
 	}
 	var marketActive bool
+	var marketMaxBet sql.NullString
+	var merchantMaxBet, merchantMaxUserExposure, merchantMaxMarketExposure sql.NullString
 	err = databaseTx.QueryRowContext(
 		ctx,
-		`SELECT status = 'active' AND merchant_id = $2
-FROM markets
-WHERE id = $1
-FOR UPDATE`,
+		`SELECT m.status = 'active' AND m.merchant_id = $2,
+		        m.max_bet_amount::text,
+		        me.max_bet_amount::text,
+		        me.max_user_exposure::text,
+		        me.max_market_exposure::text
+FROM markets AS m
+JOIN merchants AS me ON me.id = m.merchant_id
+WHERE m.id = $1
+FOR UPDATE OF m`,
 		incoming.MarketID,
 		incoming.MerchantID,
-	).Scan(&marketActive)
+	).Scan(&marketActive, &marketMaxBet, &merchantMaxBet, &merchantMaxUserExposure, &merchantMaxMarketExposure)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !marketActive) {
 		return 0, ErrInvalidMarket
 	}
 	if err != nil {
 		return 0, fmt.Errorf("lock order market: %w", err)
+	}
+
+	// Check bet amount limits
+	if err := checkBetAmountLimit(collateralCents, marketMaxBet, merchantMaxBet); err != nil {
+		return 0, err
+	}
+
+	// Check user exposure limit (across all markets for this merchant)
+	if merchantMaxUserExposure.Valid {
+		if err := checkUserExposureLimit(ctx, databaseTx, incoming, collateralCents, merchantMaxUserExposure.String); err != nil {
+			return 0, err
+		}
+	}
+
+	// Check market exposure limit (total locked collateral in this market)
+	if merchantMaxMarketExposure.Valid {
+		if err := checkMarketExposureLimit(ctx, databaseTx, incoming, collateralCents, merchantMaxMarketExposure.String); err != nil {
+			return 0, err
+		}
 	}
 	if fundCollateral {
 		if err := fundShadowWallet(ctx, databaseTx, incoming, collateralCents); err != nil {
@@ -906,4 +932,103 @@ func nullableIdempotencyKey(key string) any {
 		return nil
 	}
 	return key
+}
+
+var (
+	ErrBetAmountTooLarge     = errors.New("bet amount exceeds limit")
+	ErrUserExposureTooHigh   = errors.New("user exposure exceeds limit")
+	ErrMarketExposureTooHigh = errors.New("market exposure exceeds limit")
+)
+
+// checkBetAmountLimit validates the bet amount against market and merchant limits.
+func checkBetAmountLimit(collateralCents int64, marketMaxBet, merchantMaxBet sql.NullString) error {
+	effectiveLimit := merchantMaxBet
+	if marketMaxBet.Valid {
+		effectiveLimit = marketMaxBet
+	}
+	if !effectiveLimit.Valid {
+		return nil
+	}
+	limitCents, err := fixed.CentsFromString(effectiveLimit.String)
+	if err != nil {
+		return fmt.Errorf("parse bet limit: %w", err)
+	}
+	if collateralCents > limitCents {
+		return ErrBetAmountTooLarge
+	}
+	return nil
+}
+
+// checkUserExposureLimit validates total user exposure across all markets.
+func checkUserExposureLimit(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	incoming *types.Order,
+	collateralCents int64,
+	limitStr string,
+) error {
+	limitCents, err := fixed.CentsFromString(limitStr)
+	if err != nil {
+		return fmt.Errorf("parse user exposure limit: %w", err)
+	}
+	const query = `
+SELECT COALESCE(SUM(locked_balance), 0)::text
+FROM wallets
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = $4`
+	var lockedStr string
+	if err := databaseTx.QueryRowContext(
+		ctx, query,
+		incoming.MerchantID, incoming.UserID, incoming.Currency, incoming.WalletKind,
+	).Scan(&lockedStr); err != nil {
+		return fmt.Errorf("get user exposure: %w", err)
+	}
+	currentLocked, err := fixed.CentsFromString(lockedStr)
+	if err != nil {
+		return fmt.Errorf("parse user locked: %w", err)
+	}
+	if currentLocked+collateralCents > limitCents {
+		return ErrUserExposureTooHigh
+	}
+	return nil
+}
+
+// checkMarketExposureLimit validates total market exposure.
+func checkMarketExposureLimit(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	incoming *types.Order,
+	collateralCents int64,
+	limitStr string,
+) error {
+	limitCents, err := fixed.CentsFromString(limitStr)
+	if err != nil {
+		return fmt.Errorf("parse market exposure limit: %w", err)
+	}
+	// Exposure is the collateral still locked by resting orders on this
+	// market: remaining shares times the side's exposure price. Wallet
+	// locked_balance cannot be used here because it is not per-market.
+	const query = `
+SELECT COALESCE(SUM(
+    ROUND((amount - filled_amount) * CASE WHEN type = 'sell' THEN 1 - price ELSE price END, 2)
+), 0)::text
+FROM orders
+WHERE market_id = $1
+  AND merchant_id = $2
+  AND currency = $3
+  AND status IN ('pending', 'partial')`
+	var lockedStr string
+	if err := databaseTx.QueryRowContext(
+		ctx, query,
+		incoming.MarketID, incoming.MerchantID, incoming.Currency,
+	).Scan(&lockedStr); err != nil {
+		return fmt.Errorf("get market exposure: %w", err)
+	}
+	currentLocked, err := fixed.CentsFromString(lockedStr)
+	if err != nil {
+		return fmt.Errorf("parse market locked: %w", err)
+	}
+	if currentLocked+collateralCents > limitCents {
+		return ErrMarketExposureTooHigh
+	}
+	return nil
 }

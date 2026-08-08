@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+
+	"github.com/afun-game/predictmarket-saas/pkg/fixed"
 )
 
 // PostgresRepository stores parimutuel pools and bets in PostgreSQL.
@@ -85,14 +88,7 @@ func (r *PostgresRepository) PlaceBet(ctx context.Context, bet Bet) (*Bet, error
 		return nil, ErrEventSettled
 	}
 	option := strings.TrimSpace(bet.Option)
-	validOption := false
-	for _, candidate := range options {
-		if candidate == option {
-			validOption = true
-			break
-		}
-	}
-	if !validOption {
+	if !slices.Contains(options, option) {
 		return nil, ErrInvalidOption
 	}
 	bet.Option = option
@@ -109,6 +105,76 @@ func (r *PostgresRepository) PlaceBet(ctx context.Context, bet Bet) (*Bet, error
 		return nil, fmt.Errorf("begin parimutuel bet: %w", err)
 	}
 	defer func() { _ = databaseTx.Rollback() }()
+
+	// Re-lock the market inside the transaction. The pre-flight check above
+	// runs on its own connection, so its row lock is already gone; this lock
+	// is the one that serializes limit checks against concurrent bets.
+	var marketActive bool
+	var marketMaxBet sql.NullString
+	var merchantMaxBet, merchantMaxUserExposure sql.NullString
+	err = databaseTx.QueryRowContext(
+		ctx,
+		`SELECT m.status = 'active' AND m.merchant_id = $2,
+		        m.max_bet_amount::text,
+		        me.max_bet_amount::text,
+		        me.max_user_exposure::text
+FROM markets AS m
+JOIN merchants AS me ON me.id = m.merchant_id
+WHERE m.id = $1
+FOR UPDATE OF m`,
+		bet.MarketID,
+		bet.MerchantID,
+	).Scan(&marketActive, &marketMaxBet, &merchantMaxBet, &merchantMaxUserExposure)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !marketActive) {
+		return nil, ErrMarketInactive
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lock parimutuel market: %w", err)
+	}
+
+	// Convert stake to cents for limit checks
+	stakeCents, err := fixed.CentsFromFloat(bet.Stake)
+	if err != nil {
+		return nil, fmt.Errorf("convert parimutuel stake: %w", err)
+	}
+
+	// Check bet amount limit (parimutuel stake is the full bet amount)
+	effectiveLimit := merchantMaxBet
+	if marketMaxBet.Valid {
+		effectiveLimit = marketMaxBet
+	}
+	if effectiveLimit.Valid {
+		limitCents, err := fixed.CentsFromString(effectiveLimit.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse parimutuel bet limit: %w", err)
+		}
+		if stakeCents > limitCents {
+			return nil, ErrBetAmountTooLarge
+		}
+	}
+
+	// Check user exposure limit
+	if merchantMaxUserExposure.Valid {
+		limitCents, err := fixed.CentsFromString(merchantMaxUserExposure.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse parimutuel user exposure limit: %w", err)
+		}
+		const userExposureQuery = `
+SELECT COALESCE(SUM(stake), 0)::text
+FROM parimutuel_bets
+WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND status = 'active'`
+		var lockedStr string
+		if err := databaseTx.QueryRowContext(ctx, userExposureQuery, bet.MerchantID, bet.UserID, bet.Currency).Scan(&lockedStr); err != nil {
+			return nil, fmt.Errorf("get parimutuel user exposure: %w", err)
+		}
+		currentLocked, err := fixed.CentsFromString(lockedStr)
+		if err != nil {
+			return nil, fmt.Errorf("parse parimutuel user locked: %w", err)
+		}
+		if currentLocked+stakeCents > limitCents {
+			return nil, ErrUserExposureTooHigh
+		}
+	}
 
 	// The pool row must exist before the bet; the handler creates it at
 	// market creation. Lock it so concurrent bets serialize on the sum.
@@ -135,14 +201,14 @@ VALUES (COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $
 RETURNING id, created_at`
 	if err := databaseTx.QueryRowContext(
 		ctx, insertBet,
-		bet.ID, bet.MarketID, bet.MerchantID, bet.UserID, bet.Option, bet.Stake, bet.Currency, bet.WalletKind,
+		bet.ID, bet.MarketID, bet.MerchantID, bet.UserID, bet.Option, fixed.FormatCents(stakeCents), bet.Currency, bet.WalletKind,
 	).Scan(&bet.ID, &bet.CreatedAt); err != nil {
 		return nil, fmt.Errorf("insert parimutuel bet: %w", err)
 	}
 	const updatePool = `
-UPDATE parimutuel_pools SET total_stake = total_stake + $2, updated_at = NOW()
+UPDATE parimutuel_pools SET total_stake = total_stake + $2::numeric, updated_at = NOW()
 WHERE market_id = $1`
-	if _, err := databaseTx.ExecContext(ctx, updatePool, bet.MarketID, bet.Stake); err != nil {
+	if _, err := databaseTx.ExecContext(ctx, updatePool, bet.MarketID, fixed.FormatCents(stakeCents)); err != nil {
 		return nil, fmt.Errorf("update parimutuel pool: %w", err)
 	}
 	// Volume is cumulative staked amount, mirroring the order-book market
@@ -172,7 +238,7 @@ WHERE merchant_id::text = $1
   AND ($2 = '' OR market_id::text = $2)
   AND ($3 = '' OR user_id = $3)`
 	const selectQuery = `
-SELECT id, market_id, merchant_id, user_id, option, stake, currency, status, created_at, settled_at
+SELECT id, market_id, merchant_id, user_id, option, stake::text, currency, status, created_at, settled_at
 FROM parimutuel_bets` + where + `
 ORDER BY created_at DESC
 LIMIT $4 OFFSET $5`
@@ -188,12 +254,18 @@ LIMIT $4 OFFSET $5`
 	for rows.Next() {
 		bet := Bet{}
 		var settledAt sql.NullTime
+		var stakeText string
 		if err := rows.Scan(
 			&bet.ID, &bet.MarketID, &bet.MerchantID, &bet.UserID, &bet.Option,
-			&bet.Stake, &bet.Currency, &bet.Status, &bet.CreatedAt, &settledAt,
+			&stakeText, &bet.Currency, &bet.Status, &bet.CreatedAt, &settledAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan parimutuel bet: %w", err)
 		}
+		stakeCents, err := fixed.CentsFromString(stakeText)
+		if err != nil {
+			return nil, 0, fmt.Errorf("parse parimutuel bet stake: %w", err)
+		}
+		bet.Stake = fixed.CentsToFloat(stakeCents)
 		if settledAt.Valid {
 			bet.SettledAt = &settledAt.Time
 		}
@@ -217,7 +289,7 @@ func (r *PostgresRepository) GetPools(ctx context.Context, marketID string) ([]P
 		return nil, errors.New("parimutuel database is not configured")
 	}
 	const query = `
-SELECT market_id, currency, total_stake, total_fees
+SELECT market_id, currency, total_stake::text, total_fees::text
 FROM parimutuel_pools WHERE market_id = $1`
 	rows, err := r.database.QueryContext(ctx, query, marketID)
 	if err != nil {
@@ -227,9 +299,20 @@ FROM parimutuel_pools WHERE market_id = $1`
 	items := []Pool{}
 	for rows.Next() {
 		pool := Pool{}
-		if err := rows.Scan(&pool.MarketID, &pool.Currency, &pool.TotalStake, &pool.TotalFees); err != nil {
+		var totalStakeText, totalFeesText string
+		if err := rows.Scan(&pool.MarketID, &pool.Currency, &totalStakeText, &totalFeesText); err != nil {
 			return nil, fmt.Errorf("scan parimutuel pool: %w", err)
 		}
+		stakeCents, err := fixed.CentsFromString(totalStakeText)
+		if err != nil {
+			return nil, fmt.Errorf("parse pool total stake: %w", err)
+		}
+		pool.TotalStake = fixed.CentsToFloat(stakeCents)
+		feesCents, err := fixed.CentsFromString(totalFeesText)
+		if err != nil {
+			return nil, fmt.Errorf("parse pool total fees: %w", err)
+		}
+		pool.TotalFees = fixed.CentsToFloat(feesCents)
 		items = append(items, pool)
 	}
 	return items, rows.Err()
@@ -301,7 +384,7 @@ func (r *PostgresRepository) OptionStakes(ctx context.Context, marketID string) 
 		return nil, errors.New("parimutuel database is not configured")
 	}
 	const query = `
-SELECT option, SUM(stake)
+SELECT option, SUM(stake)::text
 FROM parimutuel_bets
 WHERE market_id = $1 AND status = 'active'
 GROUP BY option`
@@ -313,9 +396,15 @@ GROUP BY option`
 	items := []OptionStake{}
 	for rows.Next() {
 		item := OptionStake{}
-		if err := rows.Scan(&item.Option, &item.Stake); err != nil {
+		var stakeText string
+		if err := rows.Scan(&item.Option, &stakeText); err != nil {
 			return nil, fmt.Errorf("scan parimutuel option stake: %w", err)
 		}
+		stakeCents, err := fixed.CentsFromString(stakeText)
+		if err != nil {
+			return nil, fmt.Errorf("parse option stake: %w", err)
+		}
+		item.Stake = fixed.CentsToFloat(stakeCents)
 		items = append(items, item)
 	}
 	return items, rows.Err()

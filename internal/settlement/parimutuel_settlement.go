@@ -9,28 +9,41 @@ import (
 	"time"
 )
 
-// marketSettlementContext returns the market's type and owning merchant while
-// its row is already locked by the caller.
+// marketSettlementContext returns the market's type, owning merchant, and fee
+// rates while its row is already locked by the caller.
 func marketSettlementContext(
 	ctx context.Context,
 	databaseTx *sql.Tx,
 	marketID string,
-) (string, string, error) {
-	const query = `SELECT type, merchant_id FROM markets WHERE id = $1`
-	var marketType, merchantID string
-	err := databaseTx.QueryRowContext(ctx, query, marketID).Scan(&marketType, &merchantID)
+) (string, string, *big.Int, *big.Int, error) {
+	const query = `SELECT type, merchant_id, merchant_fee_rate::text, platform_fee_rate::text FROM markets WHERE id = $1`
+	var marketType, merchantID, merchantFeeRateStr, platformFeeRateStr string
+	err := databaseTx.QueryRowContext(ctx, query, marketID).Scan(&marketType, &merchantID, &merchantFeeRateStr, &platformFeeRateStr)
 	if err != nil {
-		return "", "", fmt.Errorf("get settlement market type: %w", err)
+		return "", "", nil, nil, fmt.Errorf("get settlement market type: %w", err)
 	}
-	return marketType, merchantID, nil
+	merchantFeeRate, err := parseFixed(merchantFeeRateStr, 6)
+	if err != nil {
+		return "", "", nil, nil, fmt.Errorf("parse merchant fee rate: %w", err)
+	}
+	platformFeeRate, err := parseFixed(platformFeeRateStr, 6)
+	if err != nil {
+		return "", "", nil, nil, fmt.Errorf("parse platform fee rate: %w", err)
+	}
+	return marketType, merchantID, merchantFeeRate, platformFeeRate, nil
 }
 
 type parimutuelBetRow struct {
-	id         string
-	userID     string
-	option     string
-	stakeCents *big.Int
-	walletKind string
+	id               string
+	userID           string
+	option           string
+	stakeCents       *big.Int
+	walletKind       string
+	merchantFeeRate  *big.Int
+	platformFeeRate  *big.Int
+	merchantFeeCents *big.Int
+	platformFeeCents *big.Int
+	netPayout        *big.Int
 }
 
 // settleParimutuelMarket splits the whole pool among winning bets in
@@ -43,6 +56,8 @@ func settleParimutuelMarket(
 	merchantID string,
 	eventID string,
 	winningOption string,
+	merchantFeeRate *big.Int,
+	platformFeeRate *big.Int,
 	settledAt time.Time,
 ) error {
 	bets, currency, totalCents, err := lockParimutuelBets(ctx, databaseTx, marketID)
@@ -65,16 +80,35 @@ func settleParimutuelMarket(
 	}
 
 	for _, bet := range bets {
-		payout := new(big.Int)
+		grossPayout := new(big.Int)
 		if bet.option == winningOption || settlementType == "refund" {
-			// payout = totalCents * stakeCents / winnerCents
-			payout = divideRounded(
+			// grossPayout = totalCents * stakeCents / winnerCents
+			grossPayout = divideRounded(
 				new(big.Int).Mul(totalCents, bet.stakeCents),
 				winnerCents,
 			)
 		}
+
+		// Calculate fees on gross payout (only when there's a payout)
+		bet.merchantFeeRate = merchantFeeRate
+		bet.platformFeeRate = platformFeeRate
+		bet.merchantFeeCents = new(big.Int)
+		bet.platformFeeCents = new(big.Int)
+		bet.netPayout = new(big.Int)
+
+		if grossPayout.Sign() > 0 && settlementType != "refund" {
+			bet.merchantFeeCents = calculateFee(grossPayout, merchantFeeRate)
+			bet.platformFeeCents = calculateFee(grossPayout, platformFeeRate)
+			bet.netPayout.Set(grossPayout)
+			bet.netPayout.Sub(bet.netPayout, bet.merchantFeeCents)
+			bet.netPayout.Sub(bet.netPayout, bet.platformFeeCents)
+		} else {
+			// Refunds have no fees
+			bet.netPayout.Set(grossPayout)
+		}
+
 		if err := applyParimutuelBetSettlement(
-			ctx, databaseTx, marketID, eventID, merchantID, bet, payout, currency, settlementType, settledAt,
+			ctx, databaseTx, marketID, eventID, merchantID, bet, currency, settlementType, settledAt,
 		); err != nil {
 			return err
 		}
@@ -156,7 +190,6 @@ func applyParimutuelBetSettlement(
 	eventID string,
 	merchantID string,
 	bet *parimutuelBetRow,
-	payout *big.Int,
 	currency string,
 	settlementType string,
 	settledAt time.Time,
@@ -172,7 +205,7 @@ WHERE merchant_id = $1 AND user_id = $2 AND currency = $3 AND kind = $4
 FOR UPDATE`
 	err := databaseTx.QueryRowContext(ctx, walletQuery, merchantID, bet.userID, currency, walletKind).Scan(&walletID)
 	if errors.Is(err, sql.ErrNoRows) {
-		if payout.Sign() > 0 {
+		if bet.netPayout.Sign() > 0 {
 			return fmt.Errorf("%w: parimutuel bet %s", ErrOrderWalletNotFound, bet.id)
 		}
 	} else if err != nil {
@@ -181,7 +214,8 @@ FOR UPDATE`
 	// One audit row per settled bet, mirroring order-book settlement_payouts:
 	// winning and losing bets both appear so GET /api/v2/settlements/{id}/payouts
 	// reflects the whole settlement. order_id carries the bet ID (migration 033
-	// removed the orders FK for this reference).
+	// removed the orders FK for this reference); the payout is the net amount
+	// the user actually receives after fees.
 	if walletID != "" {
 		const payoutQuery = `
 INSERT INTO settlement_payouts (
@@ -189,45 +223,63 @@ INSERT INTO settlement_payouts (
 ) VALUES ($1, $2, $3, $4, $5, $6, $7)`
 		if _, err := databaseTx.ExecContext(
 			ctx, payoutQuery, marketID, bet.id, walletID, currency,
-			formatCents(bet.stakeCents), formatCents(payout), settledAt,
+			formatCents(bet.stakeCents), formatCents(bet.netPayout), settledAt,
 		); err != nil {
 			return fmt.Errorf("insert parimutuel settlement payout: %w", err)
 		}
 	}
 	// Every shadow participant releases exactly their own stake; winners are
-	// then paid their payout through a signed credit callback. Releasing the
-	// loser's stake too is what keeps the winners' shadow wallets funded for
-	// the pool-wide payout.
+	// then paid their net payout through a signed credit callback. Releasing
+	// the loser's stake too is what keeps the winners' shadow wallets funded
+	// for the pool-wide payout.
 	if bet.walletKind == "shadow" && walletID != "" && bet.stakeCents.Sign() > 0 {
 		if err := releaseShadowStake(ctx, databaseTx, walletID, bet.stakeCents, settledAt); err != nil {
 			return err
 		}
 	}
-	if payout.Sign() > 0 && bet.walletKind == "shadow" {
+	if bet.netPayout.Sign() > 0 && bet.walletKind == "shadow" {
 		reason := "payout"
 		if settlementType == "refund" {
 			reason = "refund_cancel"
 		}
 		if err := enqueueSettlementShadowCredit(
 			ctx, databaseTx, merchantID, bet.userID, currency, bet.id, walletID,
-			marketID, eventID, payout, reason, settledAt,
+			marketID, eventID, bet.netPayout, reason, settledAt,
 		); err != nil {
 			return err
 		}
-	} else if payout.Sign() > 0 {
+	} else if bet.netPayout.Sign() > 0 {
 		if _, err := databaseTx.ExecContext(
 			ctx,
 			"UPDATE wallets SET balance = balance + $2::numeric, updated_at = $3 WHERE id = $1",
-			walletID, formatCents(payout), settledAt,
+			walletID, formatCents(bet.netPayout), settledAt,
 		); err != nil {
 			return fmt.Errorf("credit parimutuel payout wallet: %w", err)
 		}
 		if err := insertSettlementTransaction(
-			ctx, databaseTx, walletID, "win", payout, currency, "", settledAt,
+			ctx, databaseTx, walletID, "win", bet.netPayout, currency, "", settledAt,
 		); err != nil {
 			return err
 		}
 	}
+
+	if bet.merchantFeeCents.Sign() > 0 {
+		if err := recordFee(
+			ctx, databaseTx, merchantID, marketID,
+			"merchant", bet.merchantFeeRate, bet.merchantFeeCents, currency, settledAt,
+		); err != nil {
+			return err
+		}
+	}
+	if bet.platformFeeCents.Sign() > 0 {
+		if err := recordFee(
+			ctx, databaseTx, merchantID, marketID,
+			"platform", bet.platformFeeRate, bet.platformFeeCents, currency, settledAt,
+		); err != nil {
+			return err
+		}
+	}
+
 	const updateBet = `
 UPDATE parimutuel_bets SET status = 'settled', settled_at = $2 WHERE id = $1`
 	if _, err := databaseTx.ExecContext(ctx, updateBet, bet.id, settledAt); err != nil {

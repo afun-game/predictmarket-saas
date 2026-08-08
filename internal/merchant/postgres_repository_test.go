@@ -99,6 +99,9 @@ func TestPostgresRepositoryGetByID(t *testing.T) {
 		"allowed_ips",
 		"callback_verified_at",
 		"fee_rate",
+		"max_bet_amount",
+		"max_user_exposure",
+		"max_market_exposure",
 		"created_at",
 		"updated_at",
 	}
@@ -125,6 +128,9 @@ func TestPostgresRepositoryGetByID(t *testing.T) {
 			"",
 			nil,
 			0.02,
+			"500.00",
+			"",
+			"",
 			now,
 			now,
 		))
@@ -136,6 +142,13 @@ func TestPostgresRepositoryGetByID(t *testing.T) {
 	}
 	if merchant.ID != "merchant-1" || merchant.Email != "admin@example.com" {
 		t.Errorf("GetByID() = %#v", merchant)
+	}
+	if merchant.MaxBetAmount != "500.00" {
+		t.Errorf("MaxBetAmount = %q, want 500.00", merchant.MaxBetAmount)
+	}
+	if merchant.MaxUserExposure != "" || merchant.MaxMarketExposure != "" {
+		t.Errorf("NULL limits should scan empty, got %q and %q",
+			merchant.MaxUserExposure, merchant.MaxMarketExposure)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

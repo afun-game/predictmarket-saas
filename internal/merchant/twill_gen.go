@@ -1115,10 +1115,13 @@ var _ codegen.AutoMarshal = (*UpdateRequest)(nil)
 
 type __is_UpdateRequest[T ~struct {
 	twill.AutoMarshal
-	Name     *string  "json:\"name,omitempty\""
-	Currency *string  "json:\"currency,omitempty\""
-	Timezone *string  "json:\"timezone,omitempty\""
-	FeeRate  *float64 "json:\"fee_rate,omitempty\""
+	Name              *string  "json:\"name,omitempty\""
+	Currency          *string  "json:\"currency,omitempty\""
+	Timezone          *string  "json:\"timezone,omitempty\""
+	FeeRate           *float64 "json:\"fee_rate,omitempty\""
+	MaxBetAmount      *string  "json:\"max_bet_amount,omitempty\""
+	MaxUserExposure   *string  "json:\"max_user_exposure,omitempty\""
+	MaxMarketExposure *string  "json:\"max_market_exposure,omitempty\""
 }] struct{}
 
 var _ __is_UpdateRequest[UpdateRequest]
@@ -1131,6 +1134,9 @@ func (x *UpdateRequest) WeaverMarshal(enc *codegen.Encoder) {
 	servicetwill_enc_ptr_string_3e89801b(enc, x.Currency)
 	servicetwill_enc_ptr_string_3e89801b(enc, x.Timezone)
 	servicetwill_enc_ptr_float64_a272bb92(enc, x.FeeRate)
+	servicetwill_enc_ptr_string_3e89801b(enc, x.MaxBetAmount)
+	servicetwill_enc_ptr_string_3e89801b(enc, x.MaxUserExposure)
+	servicetwill_enc_ptr_string_3e89801b(enc, x.MaxMarketExposure)
 }
 
 func (x *UpdateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
@@ -1141,6 +1147,9 @@ func (x *UpdateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.Currency = servicetwill_dec_ptr_string_3e89801b(dec)
 	x.Timezone = servicetwill_dec_ptr_string_3e89801b(dec)
 	x.FeeRate = servicetwill_dec_ptr_float64_a272bb92(dec)
+	x.MaxBetAmount = servicetwill_dec_ptr_string_3e89801b(dec)
+	x.MaxUserExposure = servicetwill_dec_ptr_string_3e89801b(dec)
+	x.MaxMarketExposure = servicetwill_dec_ptr_string_3e89801b(dec)
 }
 
 func servicetwill_enc_ptr_float64_a272bb92(enc *codegen.Encoder, arg *float64) {
@@ -1321,5 +1330,8 @@ func servicetwill_size_UpdateRequest_c13a9b45(x *UpdateRequest) int {
 	size += servicetwill_size_ptr_string_3e89801b(x.Currency)
 	size += servicetwill_size_ptr_string_3e89801b(x.Timezone)
 	size += servicetwill_size_ptr_float64_a272bb92(x.FeeRate)
+	size += servicetwill_size_ptr_string_3e89801b(x.MaxBetAmount)
+	size += servicetwill_size_ptr_string_3e89801b(x.MaxUserExposure)
+	size += servicetwill_size_ptr_string_3e89801b(x.MaxMarketExposure)
 	return size
 }

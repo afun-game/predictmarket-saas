@@ -112,22 +112,26 @@ type Repository interface {
 }
 
 type settlementOrder struct {
-	id         string
-	walletID   string
-	merchantID string
-	userID     string
-	side       string
-	option     string
-	currency   string
-	status     string
-	walletKind string
-	amount     *big.Int
-	filled     *big.Int
-	price      *big.Int
-	stake      *big.Int
-	payout     *big.Int
-	refund     *big.Int
-	lockedUse  *big.Int
+	id               string
+	walletID         string
+	merchantID       string
+	userID           string
+	side             string
+	option           string
+	currency         string
+	status           string
+	walletKind       string
+	amount           *big.Int
+	filled           *big.Int
+	price            *big.Int
+	stake            *big.Int
+	payout           *big.Int
+	refund           *big.Int
+	lockedUse        *big.Int
+	merchantFeeRate  *big.Int // decimal(10,6) as fixed-point integer (6 decimals)
+	platformFeeRate  *big.Int // decimal(10,6) as fixed-point integer (6 decimals)
+	merchantFeeCents *big.Int
+	platformFeeCents *big.Int
 }
 
 func calculatePayouts(orders []*settlementOrder, winningOption string) {
@@ -135,6 +139,9 @@ func calculatePayouts(orders []*settlementOrder, winningOption string) {
 		order.payout = new(big.Int)
 		order.refund = new(big.Int)
 		order.lockedUse = new(big.Int)
+		order.merchantFeeCents = new(big.Int)
+		order.platformFeeCents = new(big.Int)
+
 		if order.stake != nil {
 			order.lockedUse.Set(order.stake)
 		}
@@ -144,9 +151,31 @@ func calculatePayouts(orders []*settlementOrder, winningOption string) {
 			order.lockedUse.Add(order.lockedUse, order.refund)
 		}
 		if orderWins(order, winningOption) {
-			order.payout.Set(payoutCents(order.filled))
+			grossPayout := payoutCents(order.filled)
+
+			// Calculate fees on gross payout
+			merchantFee := calculateFee(grossPayout, order.merchantFeeRate)
+			platformFee := calculateFee(grossPayout, order.platformFeeRate)
+
+			order.merchantFeeCents.Set(merchantFee)
+			order.platformFeeCents.Set(platformFee)
+
+			// Net payout = gross - merchant fee - platform fee
+			order.payout.Set(grossPayout)
+			order.payout.Sub(order.payout, merchantFee)
+			order.payout.Sub(order.payout, platformFee)
 		}
 	}
+}
+
+// calculateFee computes fee = amount * rate / 1_000_000 (rate is 6-decimal fixed-point)
+func calculateFee(amountCents *big.Int, feeRate *big.Int) *big.Int {
+	if feeRate.Sign() == 0 {
+		return new(big.Int)
+	}
+	fee := new(big.Int).Mul(amountCents, feeRate)
+	fee.Div(fee, big.NewInt(1_000_000))
+	return fee
 }
 
 func orderWins(order *settlementOrder, winningOption string) bool {
@@ -218,6 +247,44 @@ func formatCents(cents *big.Int) string {
 		value = strings.Repeat("0", 3-len(value)) + value
 	}
 	return value[:len(value)-2] + "." + value[len(value)-2:]
+}
+
+// formatRate renders a 6-decimal fixed-point rate for fee_ledger.rate.
+func formatRate(rate *big.Int) string {
+	value := rate.String()
+	if len(value) < 7 {
+		value = strings.Repeat("0", 7-len(value)) + value
+	}
+	return value[:len(value)-6] + "." + value[len(value)-6:]
+}
+
+// recordFee accumulates a settled fee into the ledger. fee_ledger holds one
+// row per (market, currency, recipient) — see its UNIQUE constraint — so
+// per-order fees are summed into that row rather than inserted separately.
+func recordFee(
+	ctx context.Context,
+	databaseTx *sql.Tx,
+	merchantID string,
+	marketID string,
+	recipient string,
+	rate *big.Int,
+	feeCents *big.Int,
+	currency string,
+	collectedAt time.Time,
+) error {
+	const query = `
+INSERT INTO fee_ledger (market_id, merchant_id, currency, recipient, rate, amount, created_at)
+VALUES ($1, $2, $3, $4, $5::numeric, $6::numeric, $7)
+ON CONFLICT (market_id, currency, recipient)
+DO UPDATE SET amount = fee_ledger.amount + EXCLUDED.amount`
+	if _, err := databaseTx.ExecContext(
+		ctx, query,
+		marketID, merchantID, currency, recipient,
+		formatRate(rate), formatCents(feeCents), collectedAt,
+	); err != nil {
+		return fmt.Errorf("record %s fee: %w", recipient, err)
+	}
+	return nil
 }
 
 func isUUID(value string) bool {

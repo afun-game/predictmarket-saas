@@ -348,6 +348,9 @@ type __is_Merchant[T ~struct {
 	FeeRate                     float64    "json:\"-\""
 	SeamlessDegraded            bool       "json:\"-\""
 	CallbackVerifiedAt          *time.Time "json:\"-\""
+	MaxBetAmount                string     "json:\"max_bet_amount,omitempty\""
+	MaxUserExposure             string     "json:\"max_user_exposure,omitempty\""
+	MaxMarketExposure           string     "json:\"max_market_exposure,omitempty\""
 	CreatedAt                   time.Time  "json:\"created_at\""
 	UpdatedAt                   time.Time  "json:\"updated_at\""
 }] struct{}
@@ -380,6 +383,9 @@ func (x *Merchant) WeaverMarshal(enc *codegen.Encoder) {
 	enc.Float64(x.FeeRate)
 	enc.Bool(x.SeamlessDegraded)
 	servicetwill_enc_ptr_Time_7d81a94d(enc, x.CallbackVerifiedAt)
+	enc.String(x.MaxBetAmount)
+	enc.String(x.MaxUserExposure)
+	enc.String(x.MaxMarketExposure)
 	enc.EncodeBinaryMarshaler(&x.CreatedAt)
 	enc.EncodeBinaryMarshaler(&x.UpdatedAt)
 }
@@ -410,6 +416,9 @@ func (x *Merchant) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.FeeRate = dec.Float64()
 	x.SeamlessDegraded = dec.Bool()
 	x.CallbackVerifiedAt = servicetwill_dec_ptr_Time_7d81a94d(dec)
+	x.MaxBetAmount = dec.String()
+	x.MaxUserExposure = dec.String()
+	x.MaxMarketExposure = dec.String()
 	dec.DecodeBinaryUnmarshaler(&x.CreatedAt)
 	dec.DecodeBinaryUnmarshaler(&x.UpdatedAt)
 }

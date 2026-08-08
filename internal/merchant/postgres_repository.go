@@ -31,6 +31,9 @@ const merchantColumns = `
 	COALESCE(array_to_string(allowed_ips, ','), ''),
 	callback_verified_at,
     fee_rate,
+    COALESCE(max_bet_amount::text, ''),
+    COALESCE(max_user_exposure::text, ''),
+    COALESCE(max_market_exposure::text, ''),
     created_at,
     updated_at`
 
@@ -151,7 +154,10 @@ SET name = $2,
     allowed_ips = COALESCE(string_to_array(NULLIF($18, ''), ','), '{}'),
     callback_verified_at = $19,
     fee_rate = $20,
-    updated_at = $21
+    max_bet_amount = NULLIF($21, '')::numeric,
+    max_user_exposure = NULLIF($22, '')::numeric,
+    max_market_exposure = NULLIF($23, '')::numeric,
+    updated_at = $24
 WHERE id = $1`
 
 	result, err := r.database.ExecContext(
@@ -177,6 +183,9 @@ WHERE id = $1`
 		strings.Join(merchant.AllowedIPs, ","),
 		merchant.CallbackVerifiedAt,
 		merchant.FeeRate,
+		merchant.MaxBetAmount,
+		merchant.MaxUserExposure,
+		merchant.MaxMarketExposure,
 		merchant.UpdatedAt,
 	)
 	if err != nil {
@@ -260,6 +269,9 @@ func scanMerchant(row rowScanner) (*types.Merchant, error) {
 		&allowedIPsCSV,
 		&callbackVerifiedAt,
 		&merchant.FeeRate,
+		&merchant.MaxBetAmount,
+		&merchant.MaxUserExposure,
+		&merchant.MaxMarketExposure,
 		&merchant.CreatedAt,
 		&merchant.UpdatedAt,
 	)

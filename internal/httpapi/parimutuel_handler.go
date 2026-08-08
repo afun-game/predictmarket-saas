@@ -162,6 +162,10 @@ func writeParimutuelServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "validation_error", "invalid bet")
 	case errors.Is(err, parimutuel.ErrPoolNotInitialized):
 		writeError(w, http.StatusConflict, "pool_not_initialized", "the parimutuel pool is not initialized")
+	case errors.Is(err, parimutuel.ErrBetAmountTooLarge):
+		writeError(w, http.StatusUnprocessableEntity, "bet_amount_too_large", "stake exceeds the configured bet limit")
+	case errors.Is(err, parimutuel.ErrUserExposureTooHigh):
+		writeError(w, http.StatusConflict, "user_exposure_too_high", "bet would exceed the configured user exposure limit")
 	default:
 		var validationErr *parimutuel.ValidationError
 		if errors.As(err, &validationErr) {

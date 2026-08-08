@@ -136,6 +136,7 @@ func newTestOrder(
 		id: id, side: side, option: option, status: status, currency: currency,
 		amount: big.NewInt(amount * 10_000), filled: big.NewInt(filled * 10_000),
 		price: big.NewInt(500_000), stake: new(big.Int),
+		merchantFeeRate: big.NewInt(0), platformFeeRate: big.NewInt(0),
 	}
 }
 

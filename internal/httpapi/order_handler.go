@@ -222,6 +222,12 @@ func writeOrderServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "wallet_not_funded", "wallet must be funded before placing an order")
 	case errors.Is(err, wallet.ErrInsufficientBalance):
 		writeError(w, http.StatusConflict, "insufficient_balance", "available balance is insufficient")
+	case errors.Is(err, order.ErrBetAmountTooLarge):
+		writeError(w, http.StatusUnprocessableEntity, "bet_amount_too_large", "order amount exceeds the configured bet limit")
+	case errors.Is(err, order.ErrUserExposureTooHigh):
+		writeError(w, http.StatusConflict, "user_exposure_too_high", "order would exceed the configured user exposure limit")
+	case errors.Is(err, order.ErrMarketExposureTooHigh):
+		writeError(w, http.StatusConflict, "market_exposure_too_high", "order would exceed the configured market exposure limit")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 	}

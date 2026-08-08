@@ -265,7 +265,8 @@ func (s *implementation) makeMarket(ctx context.Context, marketValue *types.Mark
 			// second market, not a failure.
 			return 0, fmt.Errorf("create market maker wallet: %w", err)
 		}
-		if err := s.wallets.Credit(ctx, marketValue.MerchantID, MakerUserID, currency, topUp, defaultFundingTxType); err != nil {
+		idempotencyKey := fmt.Sprintf("mm-inject-%s-%.2f", marketValue.ID, marketValue.LiquidityPool)
+		if err := s.wallets.CreditWithIdempotency(ctx, marketValue.MerchantID, MakerUserID, currency, topUp, defaultFundingTxType, idempotencyKey); err != nil {
 			return 0, fmt.Errorf("fund market maker wallet: %w", err)
 		}
 		if err := s.repository.SetCommitted(ctx, marketValue.ID, marketValue.LiquidityPool); err != nil {

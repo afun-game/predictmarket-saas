@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/afun-game/predictmarket-saas/internal/credentials"
+	"github.com/afun-game/predictmarket-saas/pkg/fixed"
 	"github.com/afun-game/predictmarket-saas/pkg/types"
 	"github.com/nxsky/twill"
 	"golang.org/x/crypto/bcrypt"
@@ -65,6 +66,11 @@ type UpdateRequest struct {
 	Currency *string  `json:"currency,omitempty"`
 	Timezone *string  `json:"timezone,omitempty"`
 	FeeRate  *float64 `json:"fee_rate,omitempty"`
+	// Risk limits are decimal amounts in the merchant currency. An empty
+	// string clears the limit (no cap); a nil pointer leaves it unchanged.
+	MaxBetAmount      *string `json:"max_bet_amount,omitempty"`
+	MaxUserExposure   *string `json:"max_user_exposure,omitempty"`
+	MaxMarketExposure *string `json:"max_market_exposure,omitempty"`
 }
 
 // IntegrationRequest configures V3 wallet mode and merchant callback endpoints.
@@ -478,7 +484,43 @@ func applyUpdate(merchant *types.Merchant, req *UpdateRequest) error {
 		}
 		merchant.FeeRate = rate
 	}
+	limits := []struct {
+		field  string
+		source *string
+		target *string
+	}{
+		{"max_bet_amount", req.MaxBetAmount, &merchant.MaxBetAmount},
+		{"max_user_exposure", req.MaxUserExposure, &merchant.MaxUserExposure},
+		{"max_market_exposure", req.MaxMarketExposure, &merchant.MaxMarketExposure},
+	}
+	for _, limit := range limits {
+		if limit.source == nil {
+			continue
+		}
+		normalized, err := normalizeLimit(limit.field, *limit.source)
+		if err != nil {
+			return err
+		}
+		*limit.target = normalized
+	}
 	return nil
+}
+
+// normalizeLimit validates a risk-limit amount and returns it canonicalized to
+// two decimal places. An empty value clears the limit.
+func normalizeLimit(field, value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", nil
+	}
+	cents, err := fixed.CentsFromString(trimmed)
+	if err != nil {
+		return "", &ValidationError{Field: field, Message: "must be a decimal amount"}
+	}
+	if cents <= 0 {
+		return "", &ValidationError{Field: field, Message: "must be greater than zero"}
+	}
+	return fixed.FormatCents(cents), nil
 }
 
 func applyIntegration(merchant *types.Merchant, req *IntegrationRequest) error {

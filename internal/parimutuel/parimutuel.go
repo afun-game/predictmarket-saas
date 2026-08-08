@@ -26,13 +26,15 @@ const (
 )
 
 var (
-	ErrNotFound           = errors.New("parimutuel market was not found")
-	ErrNotParimutuel      = errors.New("market is not a parimutuel market")
-	ErrMarketInactive     = errors.New("market is not active")
-	ErrEventSettled       = errors.New("event is no longer active")
-	ErrInvalidOption      = errors.New("option is not offered by the market")
-	ErrInvalidBet         = errors.New("invalid bet")
-	ErrPoolNotInitialized = errors.New("parimutuel pool is not initialized")
+	ErrNotFound            = errors.New("parimutuel market was not found")
+	ErrNotParimutuel       = errors.New("market is not a parimutuel market")
+	ErrMarketInactive      = errors.New("market is not active")
+	ErrEventSettled        = errors.New("event is no longer active")
+	ErrInvalidOption       = errors.New("option is not offered by the market")
+	ErrInvalidBet          = errors.New("invalid bet")
+	ErrPoolNotInitialized  = errors.New("parimutuel pool is not initialized")
+	ErrBetAmountTooLarge   = errors.New("bet amount exceeds limit")
+	ErrUserExposureTooHigh = errors.New("user exposure exceeds limit")
 )
 
 // Bet is one stake in a parimutuel pool.

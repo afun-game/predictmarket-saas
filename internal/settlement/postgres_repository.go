@@ -34,7 +34,7 @@ func (r *postgresRepository) VoidMarket(
 	if err != nil {
 		return err
 	}
-	marketType, merchantID, err := marketSettlementContext(ctx, databaseTx, marketID)
+	marketType, merchantID, _, _, err := marketSettlementContext(ctx, databaseTx, marketID)
 	if err != nil {
 		return err
 	}
@@ -488,12 +488,12 @@ func settleMarket(
 	winningOption string,
 	settledAt time.Time,
 ) error {
-	marketType, merchantID, err := marketSettlementContext(ctx, databaseTx, marketID)
+	marketType, merchantID, merchantFeeRate, platformFeeRate, err := marketSettlementContext(ctx, databaseTx, marketID)
 	if err != nil {
 		return err
 	}
 	if marketType == "parimutuel" {
-		return settleParimutuelMarket(ctx, databaseTx, marketID, merchantID, eventID, winningOption, settledAt)
+		return settleParimutuelMarket(ctx, databaseTx, marketID, merchantID, eventID, winningOption, merchantFeeRate, platformFeeRate, settledAt)
 	}
 	orders, err := lockSettlementOrders(ctx, databaseTx, marketID)
 	if err != nil {
@@ -537,13 +537,15 @@ func lockSettlementOrders(
 ) ([]*settlementOrder, error) {
 	const query = `
 SELECT o.id, w.id, o.merchant_id, o.user_id, o.type, o.option, o.currency, o.status,
-       COALESCE(o.wallet_kind, 'user'), o.amount::text, o.filled_amount::text, o.price::text
+       COALESCE(o.wallet_kind, 'user'), o.amount::text, o.filled_amount::text, o.price::text,
+       m.merchant_fee_rate::text, m.platform_fee_rate::text
 FROM orders AS o
 LEFT JOIN wallets AS w
   ON w.merchant_id = o.merchant_id
  AND w.user_id = o.user_id
  AND w.currency = o.currency
  AND w.kind = COALESCE(o.wallet_kind, 'user')
+JOIN markets AS m ON m.id = o.market_id
 WHERE o.market_id = $1
 ORDER BY o.id
 FOR UPDATE OF o`
@@ -560,9 +562,11 @@ FOR UPDATE OF o`
 		var amount string
 		var filled string
 		var price string
+		var merchantFeeRateStr string
+		var platformFeeRateStr string
 		if err := rows.Scan(
 			&order.id, &walletID, &order.merchantID, &order.userID, &order.side, &order.option, &order.currency,
-			&order.status, &order.walletKind, &amount, &filled, &price,
+			&order.status, &order.walletKind, &amount, &filled, &price, &merchantFeeRateStr, &platformFeeRateStr,
 		); err != nil {
 			return nil, fmt.Errorf("scan settlement order: %w", err)
 		}
@@ -581,6 +585,14 @@ FOR UPDATE OF o`
 		order.price, err = parseFixed(price, 6)
 		if err != nil {
 			return nil, err
+		}
+		order.merchantFeeRate, err = parseFixed(merchantFeeRateStr, 6)
+		if err != nil {
+			return nil, fmt.Errorf("parse merchant fee rate: %w", err)
+		}
+		order.platformFeeRate, err = parseFixed(platformFeeRateStr, 6)
+		if err != nil {
+			return nil, fmt.Errorf("parse platform fee rate: %w", err)
 		}
 		order.stake = new(big.Int)
 		orders = append(orders, order)
@@ -738,21 +750,33 @@ func addMatchedShares(values map[string]*big.Int, orderID string, shares *big.In
 func assertPayoutConservation(orders []*settlementOrder) error {
 	totalStake := make(map[string]*big.Int)
 	totalPayout := make(map[string]*big.Int)
+	totalMerchantFee := make(map[string]*big.Int)
+	totalPlatformFee := make(map[string]*big.Int)
 	for _, order := range orders {
 		if totalStake[order.currency] == nil {
 			totalStake[order.currency] = new(big.Int)
 			totalPayout[order.currency] = new(big.Int)
+			totalMerchantFee[order.currency] = new(big.Int)
+			totalPlatformFee[order.currency] = new(big.Int)
 		}
 		totalStake[order.currency].Add(totalStake[order.currency], order.stake)
 		totalPayout[order.currency].Add(totalPayout[order.currency], order.payout)
+		totalMerchantFee[order.currency].Add(totalMerchantFee[order.currency], order.merchantFeeCents)
+		totalPlatformFee[order.currency].Add(totalPlatformFee[order.currency], order.platformFeeCents)
 	}
 	for currency, stake := range totalStake {
-		if stake.Cmp(totalPayout[currency]) != 0 {
+		expected := new(big.Int).Set(totalPayout[currency])
+		expected.Add(expected, totalMerchantFee[currency])
+		expected.Add(expected, totalPlatformFee[currency])
+		if stake.Cmp(expected) != 0 {
 			return fmt.Errorf(
-				"settlement payout does not conserve the %s pool: stake %s, payout %s",
+				"settlement payout does not conserve the %s pool: stake %s, payout+fees %s (payout %s, merchant_fee %s, platform_fee %s)",
 				currency,
 				stake,
+				expected,
 				totalPayout[currency],
+				totalMerchantFee[currency],
+				totalPlatformFee[currency],
 			)
 		}
 	}
@@ -856,6 +880,23 @@ INSERT INTO settlement_payouts (
 			return err
 		}
 	}
+	if order.merchantFeeCents.Sign() > 0 {
+		if err := recordFee(
+			ctx, databaseTx, order.merchantID, marketID,
+			"merchant", order.merchantFeeRate, order.merchantFeeCents, order.currency, settledAt,
+		); err != nil {
+			return err
+		}
+	}
+	if order.platformFeeCents.Sign() > 0 {
+		if err := recordFee(
+			ctx, databaseTx, order.merchantID, marketID,
+			"platform", order.platformFeeRate, order.platformFeeCents, order.currency, settledAt,
+		); err != nil {
+			return err
+		}
+	}
+
 	if err := enqueueOrderSettledWebhook(
 		ctx, databaseTx, marketID, eventID, winningOption, order, settledAt,
 	); err != nil {
