@@ -165,8 +165,10 @@ func (h *marketHandler) list(w http.ResponseWriter, r *http.Request) {
 	result := make([]v1MarketView, 0, len(values))
 	if len(values) > 0 {
 		pools, book, events, history := marketSummaries(r.Context(), h.parimutuelService, h.queries, values)
+		acceptLanguage := r.Header.Get("Accept-Language")
 		for _, value := range values {
-			result = append(result, v1MarketViewFrom(value, pools[value.ID], book[value.ID], events[value.ID], history[value.ID]))
+			event := localizedEventInfo(events[value.ID], acceptLanguage)
+			result = append(result, v1MarketViewFrom(value, pools[value.ID], book[value.ID], event, history[value.ID]))
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -183,7 +185,8 @@ func (h *marketHandler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pools, book, events, history := marketSummaries(r.Context(), h.parimutuelService, h.queries, []*types.Market{value})
-	writeJSON(w, http.StatusOK, map[string]any{"data": v1MarketViewFrom(value, pools[value.ID], book[value.ID], events[value.ID], history[value.ID])})
+	event := localizedEventInfo(events[value.ID], r.Header.Get("Accept-Language"))
+	writeJSON(w, http.StatusOK, map[string]any{"data": v1MarketViewFrom(value, pools[value.ID], book[value.ID], event, history[value.ID])})
 }
 
 func (h *marketHandler) getOrderBook(w http.ResponseWriter, r *http.Request) {

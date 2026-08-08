@@ -1826,7 +1826,8 @@ func (h *v3Handler) getMarket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pools, book, events, history := h.marketSummaries(r.Context(), []*types.Market{value})
-	writeJSON(w, http.StatusOK, map[string]any{"data": userMarketFrom(value, pools[value.ID], book[value.ID], events[value.ID], history[value.ID])})
+	event := localizedEventInfo(events[value.ID], r.Header.Get("Accept-Language"))
+	writeJSON(w, http.StatusOK, map[string]any{"data": userMarketFrom(value, pools[value.ID], book[value.ID], event, history[value.ID])})
 }
 
 func (h *v3Handler) getOrderBook(w http.ResponseWriter, r *http.Request) {

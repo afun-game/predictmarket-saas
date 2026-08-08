@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/afun-game/predictmarket-saas/pkg/types"
 )
 
 const defaultLimit = 100
@@ -77,6 +79,9 @@ type MarketEventInfo struct {
 	League         string     `json:"league,omitempty"`
 	GameID         string     `json:"game_id,omitempty"`
 	StartTime      *time.Time `json:"start_time,omitempty"`
+	// Translations carries the owning event's localized title/description
+	// so handlers can honor Accept-Language; not part of the wire payload.
+	Translations map[string]types.EventTranslation `json:"-"`
 }
 
 // MarketHistory is a compact price series for a binary market: the leading

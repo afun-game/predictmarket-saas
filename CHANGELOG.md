@@ -203,6 +203,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- 市场接口（/api/user/markets、/api/v1/markets 等列表与详情）按请求头
+  `Accept-Language` 返回事件的本地化标题/描述：精确或前缀匹配
+  events.translations（zh 匹配 zh-CN 等），翻译缺失或为空时回退默认
+  语言；无翻译的事件不受影响。
 - 修复空池市场 `GET /api/user/markets/{id}/pools` 500：parimutuel
   GetPools 用 fixed.CentsFromString 解析 total_stake/total_fees,该函数
   拒绝 0 值,空池("0.00")必炸;新增 parsePoolAmount 允许零金额。

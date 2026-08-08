@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/afun-game/predictmarket-saas/pkg/types"
 )
 
 func (s *implementation) ListTransactions(
@@ -265,7 +267,8 @@ func (s *implementation) MarketEventDetails(ctx context.Context, marketIDs []str
 	}
 	const query = `
 SELECT m.id, e.title, COALESCE(e.description, ''), e.resolution_time,
-       COALESCE(se.league, ''), COALESCE(se.game_id, ''), se.start_time
+       COALESCE(se.league, ''), COALESCE(se.game_id, ''), se.start_time,
+       COALESCE(e.translations::text, '{}')
 FROM markets m
 JOIN events e ON e.id = m.event_id
 LEFT JOIN sports_events se ON se.event_id = e.id
@@ -276,17 +279,21 @@ WHERE m.id::text = ANY($1)`
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
-		var marketID string
+		var marketID, translationsText string
 		info := MarketEventInfo{}
 		var startTime sql.NullTime
 		if err := rows.Scan(
 			&marketID, &info.Title, &info.Description, &info.ResolutionTime,
-			&info.League, &info.GameID, &startTime,
+			&info.League, &info.GameID, &startTime, &translationsText,
 		); err != nil {
 			return nil, fmt.Errorf("scan market event details: %w", err)
 		}
 		if startTime.Valid {
 			info.StartTime = &startTime.Time
+		}
+		info.Translations = map[string]types.EventTranslation{}
+		if err := json.Unmarshal([]byte(translationsText), &info.Translations); err != nil {
+			return nil, fmt.Errorf("decode market event translations: %w", err)
 		}
 		result[marketID] = info
 	}
