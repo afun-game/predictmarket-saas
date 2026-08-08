@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
@@ -450,30 +451,95 @@ WHERE m.id::text = ANY($1)`
 	return result, rows.Err()
 }
 
-// OrderPayouts returns each order/bet's settled payout, keyed by the order
-// (or parimutuel bet) ID.
-func (s *implementation) OrderPayouts(ctx context.Context, orderIDs []string) (map[string]string, error) {
-	result := make(map[string]string, len(orderIDs))
+// OrderSettlements returns each order/bet's settled stake and payout,
+// keyed by the order (or parimutuel bet) ID.
+func (s *implementation) OrderSettlements(ctx context.Context, orderIDs []string) (map[string]SettlementInfo, error) {
+	result := make(map[string]SettlementInfo, len(orderIDs))
 	if len(orderIDs) == 0 {
 		return result, nil
 	}
 	const query = `
-SELECT order_id, payout::text
+SELECT order_id, stake::text, payout::text
 FROM settlement_payouts
 WHERE order_id::text = ANY($1)`
 	rows, err := s.database.QueryContext(ctx, query, orderIDs)
 	if err != nil {
-		return nil, fmt.Errorf("query order payouts: %w", err)
+		return nil, fmt.Errorf("query order settlements: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
-		var orderID, payout string
-		if err := rows.Scan(&orderID, &payout); err != nil {
-			return nil, fmt.Errorf("scan order payout: %w", err)
+		var orderID, stake, payout string
+		if err := rows.Scan(&orderID, &stake, &payout); err != nil {
+			return nil, fmt.Errorf("scan order settlement: %w", err)
 		}
-		result[orderID] = payout
+		result[orderID] = SettlementInfo{Stake: stake, Payout: payout}
 	}
 	return result, rows.Err()
+}
+
+// PoolOdds returns each market's current parimutuel gross-return odds per
+// option: (total_stake - total_fees) / option_stake, mirroring the pool
+// snapshot payload. Options without active stake are omitted.
+func (s *implementation) PoolOdds(ctx context.Context, marketIDs []string) (map[string]map[string]string, error) {
+	result := make(map[string]map[string]string, len(marketIDs))
+	if len(marketIDs) == 0 {
+		return result, nil
+	}
+	const query = `
+SELECT p.market_id, p.total_stake::text, p.total_fees::text,
+       b.option, SUM(b.stake)::text
+FROM parimutuel_pools p
+LEFT JOIN parimutuel_bets b ON b.market_id = p.market_id AND b.status = 'active'
+WHERE p.market_id::text = ANY($1)
+GROUP BY p.market_id, p.total_stake, p.total_fees, b.option`
+	rows, err := s.database.QueryContext(ctx, query, marketIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query pool odds: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var marketID, totalStakeStr, totalFeesStr, option string
+		var optionStakeStr *string
+		if err := rows.Scan(&marketID, &totalStakeStr, &totalFeesStr, &option, &optionStakeStr); err != nil {
+			return nil, fmt.Errorf("scan pool odds: %w", err)
+		}
+		options := result[marketID]
+		if options == nil {
+			options = make(map[string]string)
+			result[marketID] = options
+		}
+		if optionStakeStr == nil || *optionStakeStr == "0" || *optionStakeStr == "0.00" {
+			continue
+		}
+		totalStake, ok := new(big.Float).SetString(totalStakeStr)
+		if !ok {
+			continue
+		}
+		totalFees, ok := new(big.Float).SetString(totalFeesStr)
+		if !ok {
+			continue
+		}
+		optionStake, ok := new(big.Float).SetString(*optionStakeStr)
+		if !ok || optionStake.Sign() <= 0 {
+			continue
+		}
+		available := new(big.Float).Sub(totalStake, totalFees)
+		if available.Sign() <= 0 {
+			continue
+		}
+		odds := new(big.Float).Quo(available, optionStake)
+		oddsValue, _ := odds.Float64()
+		options[option] = formatOdds(oddsValue)
+	}
+	return result, rows.Err()
+}
+
+// formatOdds renders an odds multiplier with two decimal places.
+func formatOdds(value float64) string {
+	if value < 0 {
+		return "0.00"
+	}
+	return strconv.FormatFloat(math.Round(value*100)/100, 'f', 2, 64)
 }
 
 // OrderLastFill returns each order's latest matched price (binary markets).

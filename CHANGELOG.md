@@ -168,6 +168,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- orders 列表（/api/user/orders、/api/v2/orders、/api/v1/orders）订单项新增
+  `stake`（成本基数：订单簿=成交额×价，注单=下注额）、`odds`（订单簿
+  =1/price；已结算注单=派彩/下注额实际赔率，未结算注单=当前池赔率）、
+  `net_pnl`（已结算盈亏 = 派彩-下注额，带符号）；托管页订单历史直接
+  展示下注额/赔率/盈亏（赢绿输红）。
 - admin 订单列表（/api/v1/admin/orders）并入奖池注单：注单以 `type:"bet"`
   混排展示（金额=下注额），商户/用户/市场/状态过滤与排序统一生效；集成
   测试覆盖混排与商户隔离。

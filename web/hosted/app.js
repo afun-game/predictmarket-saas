@@ -79,6 +79,9 @@ const translations = {
     "market.continue": "继续",
     "market.submitting": "提交中…",
     "orders.title": "我的订单",
+    "orders.stake": "下注额",
+    "orders.odds": "赔率",
+    "orders.payout": "派彩",
     "orders.account": "账户",
     "orders.empty": "还没有订单。",
     "notFound.title": "这个页面不存在或已下线。",
@@ -579,6 +582,12 @@ function ordersPage() {
           <div class="order-list">${state.orders.map((order) => `
             <article class="info-card"><div class="section-heading"><strong>${escapeHTML(order.market_title || order.market_id || t("common.market"))}</strong><span class="status">${escapeHTML(order.status ?? "")}</span></div>
               <p>${escapeHTML(order.type ?? "")} · ${escapeHTML(order.option ?? "")} · ${escapeHTML(String(order.amount ?? ""))}</p>
+              <p class="order-meta">
+                ${order.stake != null ? `<span>${t("orders.stake")} ${escapeHTML(order.stake)}</span>` : ""}
+                ${order.odds != null ? `<span>${t("orders.odds")} ${escapeHTML(order.odds)}</span>` : ""}
+                ${order.net_pnl != null ? `<span class="${order.net_pnl.startsWith("-") ? "order-pnl--loss" : "order-pnl--win"}">${escapeHTML(order.net_pnl)}</span>` : ""}
+                ${order.payout != null && order.net_pnl == null ? `<span>${t("orders.payout")} ${escapeHTML(order.payout)}</span>` : ""}
+              </p>
             </article>`).join("")}</div>
         </section>
       </section>

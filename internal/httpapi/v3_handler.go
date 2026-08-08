@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -823,15 +825,7 @@ func (h *v3Handler) listUserOrders(w http.ResponseWriter, r *http.Request) {
 		if title := ctxData.titles[bet.MarketID]; title != "" {
 			view["market_title"] = title
 		}
-		if info, ok := ctxData.options[bet.MarketID]; ok {
-			view["options"] = info.Options
-			if info.WinningOption != "" {
-				view["winning_option"] = info.WinningOption
-			}
-		}
-		if payout, ok := ctxData.payouts[bet.ID]; ok {
-			view["payout"] = payout
-		}
+		userBetViewContext(view, bet, ctxData)
 		items = append(items, view)
 	}
 	sort.SliceStable(items, func(i, j int) bool {
@@ -857,14 +851,25 @@ type orderWithMarketTitle struct {
 	WinningOption string   `json:"winning_option,omitempty"`
 	Payout        string   `json:"payout,omitempty"`
 	MatchedPrice  *float64 `json:"matched_price,omitempty"`
+	// Stake is the user's cost basis: filled amount x price for book orders,
+	// the bet amount for parimutuel bets (decimal string).
+	Stake string `json:"stake,omitempty"`
+	// Odds is the decimal odds multiplier: 1/price for book orders, the
+	// settled gross return for settled bets, or the current pool odds for
+	// open bets (decimal string).
+	Odds string `json:"odds,omitempty"`
+	// NetPnL is payout minus stake for settled positions; absent otherwise
+	// (signed decimal string).
+	NetPnL string `json:"net_pnl,omitempty"`
 }
 
 // orderListContext holds the batched market context for one order list.
 type orderListContext struct {
-	titles  map[string]string
-	options map[string]v2query.MarketOptionsInfo
-	payouts map[string]string
-	fills   map[string]float64
+	titles      map[string]string
+	options     map[string]v2query.MarketOptionsInfo
+	settlements map[string]v2query.SettlementInfo
+	fills       map[string]float64
+	poolOdds    map[string]map[string]string
 }
 
 // enrichOrders batches market titles/options, settlement payouts, and last
@@ -872,10 +877,11 @@ type orderListContext struct {
 // missing fields.
 func enrichOrders(ctx context.Context, queries v2query.Service, orders []*types.Order, bets []parimutuel.Bet) orderListContext {
 	ctxData := orderListContext{
-		titles:  map[string]string{},
-		options: map[string]v2query.MarketOptionsInfo{},
-		payouts: map[string]string{},
-		fills:   map[string]float64{},
+		titles:      map[string]string{},
+		options:     map[string]v2query.MarketOptionsInfo{},
+		settlements: map[string]v2query.SettlementInfo{},
+		fills:       map[string]float64{},
+		poolOdds:    map[string]map[string]string{},
 	}
 	if queries == nil || (len(orders) == 0 && len(bets) == 0) {
 		return ctxData
@@ -909,15 +915,20 @@ func enrichOrders(ctx context.Context, queries v2query.Service, orders []*types.
 	} else {
 		slog.WarnContext(ctx, "order market options unavailable", "error", err)
 	}
-	if values, err := queries.OrderPayouts(ctx, orderIDs); err == nil {
-		ctxData.payouts = values
+	if values, err := queries.OrderSettlements(ctx, orderIDs); err == nil {
+		ctxData.settlements = values
 	} else {
-		slog.WarnContext(ctx, "order payouts unavailable", "error", err)
+		slog.WarnContext(ctx, "order settlements unavailable", "error", err)
 	}
 	if values, err := queries.OrderLastFill(ctx, orderIDs); err == nil {
 		ctxData.fills = values
 	} else {
 		slog.WarnContext(ctx, "order last fills unavailable", "error", err)
+	}
+	if values, err := queries.PoolOdds(ctx, marketIDs); err == nil {
+		ctxData.poolOdds = values
+	} else {
+		slog.WarnContext(ctx, "pool odds unavailable", "error", err)
 	}
 	return ctxData
 }
@@ -928,11 +939,99 @@ func orderViewWithContext(order *types.Order, ctxData orderListContext) orderWit
 		view.Options = info.Options
 		view.WinningOption = info.WinningOption
 	}
-	view.Payout = ctxData.payouts[order.ID]
+	settlement, settled := ctxData.settlements[order.ID]
+	if settled {
+		view.Payout = settlement.Payout
+	}
 	if price, ok := ctxData.fills[order.ID]; ok {
 		view.MatchedPrice = &price
 	}
+	// Stake: settled cost basis when available, else filled amount x price.
+	switch {
+	case settled:
+		view.Stake = settlement.Stake
+	case order.FilledAmount > 0 && order.Price > 0:
+		view.Stake = formatOrderMoney(order.FilledAmount * order.Price)
+	}
+	if order.Price > 0 {
+		view.Odds = formatOrderOdds(1 / order.Price)
+	}
+	if settled {
+		view.NetPnL = formatOrderPnL(settlement.Payout, settlement.Stake)
+	}
 	return view
+}
+
+// userBetViewContext attaches the shared market context to one bet row.
+func userBetViewContext(view map[string]any, bet parimutuel.Bet, ctxData orderListContext) {
+	view["stake"] = formatOrderMoney(bet.Stake)
+	if info, ok := ctxData.options[bet.MarketID]; ok {
+		view["options"] = info.Options
+		if info.WinningOption != "" {
+			view["winning_option"] = info.WinningOption
+		}
+	}
+	if settlement, ok := ctxData.settlements[bet.ID]; ok {
+		view["payout"] = settlement.Payout
+		view["net_pnl"] = formatOrderPnL(settlement.Payout, settlement.Stake)
+		if settlement.Payout != "0.00" && settlement.Payout != "0" {
+			if odds, oddsErr := oddsFromPayout(settlement.Payout, settlement.Stake); oddsErr == nil {
+				view["odds"] = odds
+			}
+		}
+	} else if optionOdds, ok := ctxData.poolOdds[bet.MarketID]; ok {
+		if odds, exists := optionOdds[bet.Option]; exists {
+			view["odds"] = odds
+		}
+	}
+}
+
+// oddsFromPayout computes the settled gross-return odds payout / stake.
+func oddsFromPayout(payout, stake string) (string, error) {
+	payoutValue, err := strconv.ParseFloat(payout, 64)
+	if err != nil || payoutValue <= 0 {
+		return "", errors.New("non-positive payout")
+	}
+	stakeValue, err := strconv.ParseFloat(stake, 64)
+	if err != nil || stakeValue <= 0 {
+		return "", errors.New("non-positive stake")
+	}
+	return formatOrderOdds(payoutValue / stakeValue), nil
+}
+
+// formatOrderOdds renders an odds multiplier with two decimals.
+func formatOrderOdds(value float64) string {
+	if value <= 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+		return ""
+	}
+	return strconv.FormatFloat(math.Round(value*100)/100, 'f', 2, 64)
+}
+
+// formatOrderMoney renders a decimal amount with two decimals.
+func formatOrderMoney(value float64) string {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return "0.00"
+	}
+	return strconv.FormatFloat(math.Round(value*100)/100, 'f', 2, 64)
+}
+
+// formatOrderPnL renders the signed net profit payout - stake.
+func formatOrderPnL(payout, stake string) string {
+	payoutValue, err := strconv.ParseFloat(payout, 64)
+	if err != nil {
+		return ""
+	}
+	stakeValue, err := strconv.ParseFloat(stake, 64)
+	if err != nil {
+		return ""
+	}
+	net := payoutValue - stakeValue
+	sign := "+"
+	if net < 0 {
+		sign = "-"
+		net = -net
+	}
+	return sign + formatOrderMoney(net)
 }
 
 // orderListWithTitles attaches each order's market title when the

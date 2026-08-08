@@ -393,3 +393,7 @@ a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+.order-meta { display: flex; flex-wrap: wrap; gap: 0.75rem; color: var(--text-muted, #64748b); font-size: 0.85rem; }
+.order-pnl--win { color: #16a34a; font-weight: 600; }
+.order-pnl--loss { color: #dc2626; font-weight: 600; }

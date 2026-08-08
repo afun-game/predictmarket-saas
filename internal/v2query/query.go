@@ -38,11 +38,20 @@ type Service interface {
 	MarketTitles(ctx context.Context, marketIDs []string) (map[string]string, error)
 	// MarketOptions returns each market's option set and settlement winner.
 	MarketOptions(ctx context.Context, marketIDs []string) (map[string]MarketOptionsInfo, error)
-	// OrderPayouts returns each order/bet's settled payout amount keyed by
-	// the order (or bet) ID.
-	OrderPayouts(ctx context.Context, orderIDs []string) (map[string]string, error)
+	// OrderSettlements returns each order/bet's settled stake and payout,
+	// keyed by the order (or bet) ID.
+	OrderSettlements(ctx context.Context, orderIDs []string) (map[string]SettlementInfo, error)
+	// PoolOdds returns each market's current parimutuel odds per option,
+	// keyed by market ID then option label.
+	PoolOdds(ctx context.Context, marketIDs []string) (map[string]map[string]string, error)
 	// OrderLastFill returns the latest matched price for each order.
 	OrderLastFill(ctx context.Context, orderIDs []string) (map[string]float64, error)
+}
+
+// SettlementInfo is one order/bet's settled cost basis and payout.
+type SettlementInfo struct {
+	Stake  string `json:"stake"`
+	Payout string `json:"payout"`
 }
 
 // MarketOptionsInfo is a market's option set plus its settlement winner.

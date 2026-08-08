@@ -482,12 +482,13 @@ func TestOrderListEnrichmentIntegration(t *testing.T) {
 	}
 
 	orderID := fixture.orderID
-	payouts, err := service.OrderPayouts(ctx, []string{orderID})
+	settlements, err := service.OrderSettlements(ctx, []string{orderID})
 	if err != nil {
-		t.Fatalf("OrderPayouts() error = %v", err)
+		t.Fatalf("OrderSettlements() error = %v", err)
 	}
-	if payouts[orderID] == "" {
-		t.Errorf("payout missing for %s", orderID)
+	settlementInfo, settled := settlements[orderID]
+	if !settled || settlementInfo.Payout == "" || settlementInfo.Stake == "" {
+		t.Errorf("settlement missing for %s: %#v", orderID, settlementInfo)
 	}
 	// The fixture has no trades; seed one so the last-fill lookup has data.
 	makerID := integrationUUID(t)
