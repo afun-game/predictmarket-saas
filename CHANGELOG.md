@@ -203,6 +203,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- 奖池赔率展示规则调整：空池或单侧下注时统一显示默认 2.00x（是/否
+  各 50%），全部选项都有注额后才切换为实时赔率（(池-费用)/该选项注额）；
+  市场列表/详情/池快照与订单注单赔率四端同步。
 - 市场接口（/api/user/markets、/api/v1/markets 等列表与详情）按请求头
   `Accept-Language` 返回事件的本地化标题/描述：精确或前缀匹配
   events.translations（zh 匹配 zh-CN 等），翻译缺失或为空时回退默认

@@ -541,14 +541,33 @@ VALUES ($1, $2, $3, $4, 'Yes', 40, 'USD', 'active', $5)`,
 		integrationUUID(t), poolMarket, fixture.merchantID, fixture.userID, fixture.now); err != nil {
 		t.Fatalf("insert active bet: %v", err)
 	}
+	// One-sided pool: the neutral 2.00 default applies, not live odds.
 	poolOdds, err := service.PoolOdds(ctx, []string{poolMarket, fixture.marketID})
 	if err != nil {
 		t.Fatalf("PoolOdds() error = %v", err)
 	}
-	if odds := poolOdds[poolMarket]["Yes"]; odds != "2.50" {
-		t.Errorf("pool odds = %q, want 2.50", odds)
+	if odds := poolOdds[poolMarket]["Yes"]; odds != "2.00" {
+		t.Errorf("one-sided pool odds = %q, want 2.00", odds)
 	}
 	if _, exists := poolOdds[fixture.marketID]; exists {
 		t.Errorf("PoolOdds() returned a market without pool rows")
+	}
+
+	// Funding the other side switches to live odds: 100/(40|60).
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO parimutuel_bets (id, market_id, merchant_id, user_id, option, stake, currency, status, created_at)
+VALUES ($1, $2, $3, $4, 'No', 60, 'USD', 'active', $5)`,
+		integrationUUID(t), poolMarket, fixture.merchantID, fixture.userID, fixture.now.Add(time.Minute)); err != nil {
+		t.Fatalf("insert second active bet: %v", err)
+	}
+	fundedOdds, err := service.PoolOdds(ctx, []string{poolMarket})
+	if err != nil {
+		t.Fatalf("PoolOdds(funded) error = %v", err)
+	}
+	if odds := fundedOdds[poolMarket]["Yes"]; odds != "2.50" {
+		t.Errorf("funded pool Yes odds = %q, want 2.50", odds)
+	}
+	if odds := fundedOdds[poolMarket]["No"]; odds != "1.67" {
+		t.Errorf("funded pool No odds = %q, want 1.67", odds)
 	}
 }

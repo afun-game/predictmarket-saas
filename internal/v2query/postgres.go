@@ -494,52 +494,81 @@ func (s *implementation) PoolOdds(ctx context.Context, marketIDs []string) (map[
 	}
 	const query = `
 SELECT p.market_id, p.total_stake::text, p.total_fees::text,
-       b.option, SUM(b.stake)::text
+       COALESCE(m.options::text, '[]'), b.option, SUM(b.stake)::text
 FROM parimutuel_pools p
+JOIN markets m ON m.id = p.market_id
 LEFT JOIN parimutuel_bets b ON b.market_id = p.market_id AND b.status = 'active'
 WHERE p.market_id::text = ANY($1)
-GROUP BY p.market_id, p.total_stake, p.total_fees, b.option`
+GROUP BY p.market_id, p.total_stake, p.total_fees, m.options, b.option`
 	rows, err := s.database.QueryContext(ctx, query, marketIDs)
 	if err != nil {
 		return nil, fmt.Errorf("query pool odds: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	// Row-level state: a market appears once per funded option plus once
+	// with NULL option when it has no active bets; aggregate per market so
+	// the "every option funded" rule can be evaluated.
+	type poolOddsRow struct {
+		totalStake *big.Float
+		totalFees  *big.Float
+		options    []string
+		stakes     map[string]*big.Float
+	}
+	rowsByMarket := map[string]*poolOddsRow{}
 	for rows.Next() {
-		var marketID, totalStakeStr, totalFeesStr string
+		var marketID, totalStakeStr, totalFeesStr, optionsText string
 		var option, optionStakeStr *string
-		if err := rows.Scan(&marketID, &totalStakeStr, &totalFeesStr, &option, &optionStakeStr); err != nil {
+		if err := rows.Scan(&marketID, &totalStakeStr, &totalFeesStr, &optionsText, &option, &optionStakeStr); err != nil {
 			return nil, fmt.Errorf("scan pool odds: %w", err)
 		}
-		// A pool row with no active bets has NULL option and stake.
+		entry := rowsByMarket[marketID]
+		if entry == nil {
+			totalStake, ok := new(big.Float).SetString(totalStakeStr)
+			if !ok {
+				continue
+			}
+			totalFees, ok := new(big.Float).SetString(totalFeesStr)
+			if !ok {
+				continue
+			}
+			var options []string
+			if err := json.Unmarshal([]byte(optionsText), &options); err != nil {
+				return nil, fmt.Errorf("decode pool odds market options: %w", err)
+			}
+			entry = &poolOddsRow{totalStake: totalStake, totalFees: totalFees, options: options, stakes: map[string]*big.Float{}}
+			rowsByMarket[marketID] = entry
+		}
 		if option == nil || optionStakeStr == nil || *optionStakeStr == "0" || *optionStakeStr == "0.00" {
 			continue
 		}
-		options := result[marketID]
-		if options == nil {
-			options = make(map[string]string)
-			result[marketID] = options
+		if optionStake, ok := new(big.Float).SetString(*optionStakeStr); ok && optionStake.Sign() > 0 {
+			entry.stakes[*option] = optionStake
 		}
-		totalStake, ok := new(big.Float).SetString(totalStakeStr)
-		if !ok {
-			continue
-		}
-		totalFees, ok := new(big.Float).SetString(totalFeesStr)
-		if !ok {
-			continue
-		}
-		optionStake, ok := new(big.Float).SetString(*optionStakeStr)
-		if !ok || optionStake.Sign() <= 0 {
-			continue
-		}
-		available := new(big.Float).Sub(totalStake, totalFees)
-		if available.Sign() <= 0 {
-			continue
-		}
-		odds := new(big.Float).Quo(available, optionStake)
-		oddsValue, _ := odds.Float64()
-		options[*option] = formatOdds(oddsValue)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for marketID, entry := range rowsByMarket {
+		allFunded := len(entry.options) > 0
+		for _, option := range entry.options {
+			if entry.stakes[option] == nil || entry.stakes[option].Sign() <= 0 {
+				allFunded = false
+				break
+			}
+		}
+		available := new(big.Float).Sub(entry.totalStake, entry.totalFees)
+		oddsByOption := make(map[string]string, len(entry.stakes))
+		for option, stake := range entry.stakes {
+			odds := "2.00"
+			if allFunded && available.Sign() > 0 {
+				oddsValue, _ := new(big.Float).Quo(available, stake).Float64()
+				odds = formatOdds(oddsValue)
+			}
+			oddsByOption[option] = odds
+		}
+		result[marketID] = oddsByOption
+	}
+	return result, nil
 }
 
 // formatOdds renders an odds multiplier with two decimal places.

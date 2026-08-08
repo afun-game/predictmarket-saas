@@ -655,11 +655,21 @@ func formatMarketPool(marketID string, pool parimutuel.MarketPool, allOptions []
 	for _, stake := range pool.Options {
 		stakeByOption[stake.Option] = stake.Stake
 	}
+	// Every option must carry a stake before live odds apply; an empty or
+	// one-sided pool shows the neutral 2.00 (50%/50%) default instead of a
+	// misleading 1.00.
+	allFunded := len(allOptions) > 0
+	for _, option := range allOptions {
+		if stakeByOption[option] <= 0 {
+			allFunded = false
+			break
+		}
+	}
 	options := make([]map[string]any, 0, len(allOptions))
 	for _, option := range allOptions {
 		stake := stakeByOption[option]
-		odds := "1.00"
-		if stake > 0 && available > 0 {
+		odds := "2.00"
+		if allFunded && available > 0 && stake > 0 {
 			odds = formatMoney(available / stake)
 		}
 		options = append(options, map[string]any{
