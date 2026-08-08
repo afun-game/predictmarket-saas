@@ -1606,7 +1606,7 @@ async function merchantTestToken(target) {
 function collectEventTranslations(form) {
   const translations = {};
   for (const row of form.querySelectorAll("[data-event-translation-row]")) {
-    const locale = String(row.querySelector('input[name="event_translation_locale"]')?.value ?? "").trim();
+    const locale = String(row.querySelector('[name="event_translation_locale"]')?.value ?? "").trim();
     const title = String(row.querySelector('input[name="event_translation_title"]')?.value ?? "").trim();
     const description = String(row.querySelector('input[name="event_translation_description"]')?.value ?? "").trim();
     if (!locale) {
