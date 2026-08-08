@@ -513,4 +513,42 @@ VALUES ($1, $2, $3, 1, 0.6, $4)`,
 	if fills[orderID] == 0 {
 		t.Errorf("last fill missing for %s", orderID)
 	}
+
+	// PoolOdds: seed a pool with one active bet; a market without a pool row
+	// must not fail the batch.
+	poolMarket := integrationUUID(t)
+	poolEvent := integrationUUID(t)
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO events (id, source_type, source_id, title, description, category, end_time, resolution_time, status, created_at, updated_at)
+VALUES ($1, 'custom', $2, 'pool event', '', 'other', $3, $3, 'active', $3, $3)`,
+		poolEvent, "pool-"+poolMarket, fixture.now); err != nil {
+		t.Fatalf("insert pool event: %v", err)
+	}
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO markets (id, merchant_id, event_id, type, question, options, status, total_volume, liquidity_pool, merchant_fee_rate, platform_fee_rate, created_at)
+VALUES ($1, $2, $3, 'parimutuel', 'pool market', '["Yes","No"]', 'active', 0, 0, 0, 0, $4)`,
+		poolMarket, fixture.merchantID, poolEvent, fixture.now); err != nil {
+		t.Fatalf("insert pool market: %v", err)
+	}
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO parimutuel_pools (market_id, currency, total_stake, total_fees, updated_at)
+VALUES ($1, 'USD', 100, 0, $2)`, poolMarket, fixture.now); err != nil {
+		t.Fatalf("insert pool: %v", err)
+	}
+	if _, err := fixture.database.ExecContext(ctx, `
+INSERT INTO parimutuel_bets (id, market_id, merchant_id, user_id, option, stake, currency, status, created_at)
+VALUES ($1, $2, $3, $4, 'Yes', 40, 'USD', 'active', $5)`,
+		integrationUUID(t), poolMarket, fixture.merchantID, fixture.userID, fixture.now); err != nil {
+		t.Fatalf("insert active bet: %v", err)
+	}
+	poolOdds, err := service.PoolOdds(ctx, []string{poolMarket, fixture.marketID})
+	if err != nil {
+		t.Fatalf("PoolOdds() error = %v", err)
+	}
+	if odds := poolOdds[poolMarket]["Yes"]; odds != "2.50" {
+		t.Errorf("pool odds = %q, want 2.50", odds)
+	}
+	if _, exists := poolOdds[fixture.marketID]; exists {
+		t.Errorf("PoolOdds() returned a market without pool rows")
+	}
 }

@@ -498,18 +498,19 @@ GROUP BY p.market_id, p.total_stake, p.total_fees, b.option`
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
-		var marketID, totalStakeStr, totalFeesStr, option string
-		var optionStakeStr *string
+		var marketID, totalStakeStr, totalFeesStr string
+		var option, optionStakeStr *string
 		if err := rows.Scan(&marketID, &totalStakeStr, &totalFeesStr, &option, &optionStakeStr); err != nil {
 			return nil, fmt.Errorf("scan pool odds: %w", err)
+		}
+		// A pool row with no active bets has NULL option and stake.
+		if option == nil || optionStakeStr == nil || *optionStakeStr == "0" || *optionStakeStr == "0.00" {
+			continue
 		}
 		options := result[marketID]
 		if options == nil {
 			options = make(map[string]string)
 			result[marketID] = options
-		}
-		if optionStakeStr == nil || *optionStakeStr == "0" || *optionStakeStr == "0.00" {
-			continue
 		}
 		totalStake, ok := new(big.Float).SetString(totalStakeStr)
 		if !ok {
@@ -529,7 +530,7 @@ GROUP BY p.market_id, p.total_stake, p.total_fees, b.option`
 		}
 		odds := new(big.Float).Quo(available, optionStake)
 		oddsValue, _ := odds.Float64()
-		options[option] = formatOdds(oddsValue)
+		options[*option] = formatOdds(oddsValue)
 	}
 	return result, rows.Err()
 }
