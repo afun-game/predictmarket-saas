@@ -484,11 +484,11 @@ func TestV1MarketListEmbedsPoolSummary(t *testing.T) {
 			entry := raw.(map[string]any)
 			byOption[entry["option"].(string)] = entry
 		}
-		if byOption["Yes"]["stake"] != 20.0 || byOption["Yes"]["odds"] != "1.00" {
-			t.Errorf("v1 pool Yes = %#v", byOption["Yes"])
+		if byOption["Yes"]["stake"] != 20.0 || byOption["Yes"]["odds"] != "2.00" {
+			t.Errorf("v1 pool Yes = %#v, want stake 20 odds 2.00 (one-sided)", byOption["Yes"])
 		}
-		if byOption["No"]["stake"] != 0.0 || byOption["No"]["odds"] != "1.00" {
-			t.Errorf("v1 pool No = %#v", byOption["No"])
+		if byOption["No"]["stake"] != 0.0 || byOption["No"]["odds"] != "2.00" {
+			t.Errorf("v1 pool No = %#v, want stake 0 odds 2.00 (one-sided)", byOption["No"])
 		}
 	}
 	if !found {

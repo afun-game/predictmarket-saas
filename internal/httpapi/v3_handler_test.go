@@ -760,10 +760,10 @@ func TestV3UserParimutuelBetFlow(t *testing.T) {
 	if initial.TotalStake != "0.00" || len(initial.Options) != 2 || initial.Currency != "USD" {
 		t.Errorf("initial pools = %#v", initial)
 	}
-	// Empty sides render at breakeven odds (1.00) instead of being omitted.
+	// Empty sides render at the neutral 2.00 default instead of live odds.
 	for _, option := range initial.Options {
-		if option.Stake != 0 || option.Odds != "1.00" {
-			t.Errorf("initial option = %#v, want stake 0 odds 1.00", option)
+		if option.Stake != 0 || option.Odds != "2.00" {
+			t.Errorf("initial option = %#v, want stake 0 odds 2.00", option)
 		}
 	}
 
@@ -793,11 +793,11 @@ func TestV3UserParimutuelBetFlow(t *testing.T) {
 			odds  string
 		}{stake: option.Stake, odds: option.Odds}
 	}
-	if updatedByOption["Yes"].stake != 5 || updatedByOption["Yes"].odds != "1.00" {
-		t.Errorf("Yes after first bet = %#v, want stake 5 odds 1.00", updatedByOption["Yes"])
+	if updatedByOption["Yes"].stake != 5 || updatedByOption["Yes"].odds != "2.00" {
+		t.Errorf("Yes after first bet = %#v, want stake 5 odds 2.00 (one-sided pool)", updatedByOption["Yes"])
 	}
-	if updatedByOption["No"].stake != 0 || updatedByOption["No"].odds != "1.00" {
-		t.Errorf("No after first bet = %#v, want stake 0 odds 1.00", updatedByOption["No"])
+	if updatedByOption["No"].stake != 0 || updatedByOption["No"].odds != "2.00" {
+		t.Errorf("No after first bet = %#v, want stake 0 odds 2.00 (one-sided pool)", updatedByOption["No"])
 	}
 	// The bet response carries the post-bet pool snapshot so the UI can show
 	// the updated return rate without a second request.
