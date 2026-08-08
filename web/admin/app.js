@@ -30,7 +30,7 @@ const view = {
   reissuedSecret: null, // 重发后的 { id, secret }
   testToken: null, // 商户详情生成的测试链接 { launch_url, token, ... }
   translations: [], // 市场创建表单的其他语言行 { locale, question, options }
-  eventTranslations: [], // 事件创建/编辑表单的其他语言行 { locale, title, description }
+
 };
 
 let renderSeq = 0;
@@ -87,6 +87,26 @@ const CATEGORY_LABELS = {
   bitcoin: "比特币",
   other: "其它",
 };
+
+const EVENT_TRANSLATION_LOCALES = [
+  { value: "zh-CN", label: "中文" },
+  { value: "en", label: "英语" },
+  { value: "pt", label: "葡萄牙语" },
+  { value: "es", label: "西班牙语" },
+];
+
+// localeSelect renders the language picker; a saved locale outside the
+// catalog (legacy data) is kept as an extra option so it is never lost.
+function localeSelect(value = "") {
+  const options = [...EVENT_TRANSLATION_LOCALES];
+  if (value && !options.some((entry) => entry.value === value)) {
+    options.unshift({ value, label: value });
+  }
+  return `<select class="input" name="event_translation_locale">
+    <option value="">请选择语言</option>
+    ${options.map((entry) => `<option value="${escapeHTML(entry.value)}" ${entry.value === value ? "selected" : ""}>${escapeHTML(entry.label)}</option>`).join("")}
+  </select>`;
+}
 
 const MARKET_TYPE_LABELS = {
   binary: "订单簿",
@@ -739,15 +759,7 @@ async function eventsPage() {
         <div class="field field--span2"><label>结算时间 *</label><input class="input" type="datetime-local" name="resolution_time" required></div>
         <div class="field field--span2">
           <label>多语言配置（可选）</label>
-          <div data-event-translation-rows>
-            ${view.eventTranslations.map((entry, index) => `
-            <div class="translation-row" data-event-translation-row="${index}">
-              <input class="input" name="event_translation_locale" placeholder="语言代码（如 en、zh-CN）">
-              <input class="input" name="event_translation_title" placeholder="该语言的标题">
-              <input class="input" name="event_translation_description" placeholder="该语言的描述（可选）">
-              <button class="btn btn--ghost" type="button" data-action="remove-event-translation" data-index="${index}">删除</button>
-            </div>`).join("")}
-          </div>
+          <div data-event-translation-rows></div>
           <button class="btn btn--ghost" type="button" data-action="add-event-translation">+ 添加语言</button>
         </div>
         <div class="field form-field--actions"><button class="btn btn--primary" type="submit">创建事件</button><button class="btn btn--ghost" type="button" data-action="toggle-create-event">取消</button></div>
@@ -818,9 +830,10 @@ async function eventDetailPage(id) {
           <div data-event-translation-rows>
             ${Object.entries(event.translations ?? {}).map(([locale, translation]) => `
             <div class="translation-row" data-event-translation-row="">
-              <input class="input" name="event_translation_locale" value="${escapeHTML(locale)}" placeholder="语言代码">
+              ${localeSelect(locale)}
               <input class="input" name="event_translation_title" value="${escapeHTML(translation.title ?? "")}" placeholder="该语言的标题">
               <input class="input" name="event_translation_description" value="${escapeHTML(translation.description ?? "")}" placeholder="该语言的描述（可选）">
+              <button class="btn btn--ghost" type="button" data-action="remove-event-translation-edit">删除</button>
             </div>`).join("")}
           </div>
           <button class="btn btn--ghost" type="button" data-action="add-event-translation-edit">+ 添加语言</button>
@@ -1188,17 +1201,28 @@ async function handleAction(action, target) {
         return render();
       case "toggle-create-event":
         view.showCreateEvent = !view.showCreateEvent;
-        if (!view.showCreateEvent) view.eventTranslations = [];
         return render();
-      case "add-event-translation":
-        view.eventTranslations.push({ locale: "", title: "", description: "" });
-        return render();
-      case "remove-event-translation": {
-        const index = Number(target.dataset.index);
-        if (Number.isInteger(index) && index >= 0 && index < view.eventTranslations.length) {
-          view.eventTranslations.splice(index, 1);
-        }
-        return render();
+      case "add-event-translation": {
+        const form = target.closest('form[data-action="create-event"]');
+        if (!form) return;
+        const rows = form.querySelector("[data-event-translation-rows]");
+        if (!rows) return;
+        const row = document.createElement("div");
+        row.className = "translation-row";
+        row.dataset.eventTranslationRow = "";
+        row.innerHTML = `
+          ${localeSelect()}
+          <input class="input" name="event_translation_title" placeholder="该语言的标题">
+          <input class="input" name="event_translation_description" placeholder="该语言的描述（可选）">
+          <button class="btn btn--ghost" type="button" data-action="remove-event-translation">删除</button>`;
+        rows.appendChild(row);
+        return;
+      }
+      case "remove-event-translation":
+      case "remove-event-translation-edit": {
+        const row = target.closest("[data-event-translation-row]");
+        if (row) row.remove();
+        return;
       }
       case "add-event-translation-edit": {
         const form = target.closest('form[data-action="edit-event"]');
@@ -1209,16 +1233,11 @@ async function handleAction(action, target) {
         row.className = "translation-row";
         row.dataset.eventTranslationRow = "";
         row.innerHTML = `
-          <input class="input" name="event_translation_locale" placeholder="语言代码">
+          ${localeSelect()}
           <input class="input" name="event_translation_title" placeholder="该语言的标题">
           <input class="input" name="event_translation_description" placeholder="该语言的描述（可选）">
           <button class="btn btn--ghost" type="button" data-action="remove-event-translation-edit">删除</button>`;
         rows.appendChild(row);
-        return;
-      }
-      case "remove-event-translation-edit": {
-        const row = target.closest("[data-event-translation-row]");
-        if (row) row.remove();
         return;
       }
       case "toggle-create-market":

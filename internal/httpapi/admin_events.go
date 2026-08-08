@@ -82,6 +82,7 @@ func (h *adminHandler) getEvent(w http.ResponseWriter, r *http.Request) {
 		"resolution_time": value.ResolutionTime,
 		"status":          value.Status,
 		"outcome":         value.Outcome,
+		"translations":    value.Translations,
 		"created_at":      value.CreatedAt,
 		"updated_at":      value.UpdatedAt,
 		"markets":         related,

@@ -213,6 +213,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 修复空池市场 `GET /api/user/markets/{id}/pools` 500：parimutuel
   GetPools 用 fixed.CentsFromString 解析 total_stake/total_fees,该函数
   拒绝 0 值,空池("0.00")必炸;新增 parsePoolAmount 允许零金额。
+- admin 事件多语言交互改进：语言选择改为下拉（中文/英语/葡萄牙语/西班牙
+  语），不再手填代码；修复保存后编辑表单不回显已存翻译的缺陷（事件详情
+  接口漏返回 translations 字段）；创建/编辑表单的多语言行改为 DOM 动态
+  追加，添加语言不再清空已输入内容，回显行可删除。
 - 事件支持多语言：`events.translations`（BCP-47 语言代码 → 标题/描述，
   migration 041）；事件创建与后台编辑接口接受 `translations`（每语言标题
   必填，空对象清空），admin 事件创建/编辑表单提供多语言配置区块，事件
