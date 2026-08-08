@@ -92,7 +92,7 @@ const MARKET_TYPE_LABELS = {
   parimutuel: "奖池",
 };
 
-const ORDER_TYPE_LABELS = { buy: "买入", sell: "卖出" };
+const ORDER_TYPE_LABELS = { buy: "买入", sell: "卖出", bet: "注单" };
 
 const ACTION_LABELS = {
   "create.event": "创建事件",

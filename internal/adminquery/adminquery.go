@@ -327,10 +327,29 @@ WHERE ($1 = '' OR merchant_id::text = $1)
   AND ($2 = '' OR user_id = $2)
   AND ($3 = '' OR market_id::text = $3)
   AND ($4 = '' OR status = $4)`
+	// The console order list merges book orders and parimutuel bets so the
+	// admin can see every user position; bets carry type "bet" and their
+	// stake as amount/filled_amount.
 	const selectQuery = `
 SELECT id, merchant_id, user_id, market_id, type, option, amount, filled_amount,
        currency, price, status, created_at, filled_at
-FROM orders` + where + `
+FROM (
+    SELECT o.id, o.merchant_id::text, o.user_id, o.market_id::text, o.type, o.option,
+           o.amount, o.filled_amount, o.currency, o.price, o.status, o.created_at, o.filled_at
+    FROM orders o
+    WHERE ($1 = '' OR o.merchant_id::text = $1)
+      AND ($2 = '' OR o.user_id = $2)
+      AND ($3 = '' OR o.market_id::text = $3)
+      AND ($4 = '' OR o.status = $4)
+    UNION ALL
+    SELECT b.id, b.merchant_id::text, b.user_id, b.market_id::text, 'bet' AS type, b.option,
+           b.stake, b.stake, b.currency, 0, b.status, b.created_at, b.settled_at
+    FROM parimutuel_bets b
+    WHERE ($1 = '' OR b.merchant_id::text = $1)
+      AND ($2 = '' OR b.user_id = $2)
+      AND ($3 = '' OR b.market_id::text = $3)
+      AND ($4 = '' OR b.status = $4)
+) AS merged
 ORDER BY created_at DESC
 LIMIT $5 OFFSET $6`
 	rows, err := s.database.QueryContext(ctx, selectQuery, merchantID, userID, marketID, status, limit, (page-1)*limit)
@@ -358,8 +377,20 @@ LIMIT $5 OFFSET $6`
 		return nil, 0, err
 	}
 	var total int
-	if err := s.database.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM orders "+where,
+	if err := s.database.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM (
+    SELECT o.id FROM orders o
+    WHERE ($1 = '' OR o.merchant_id::text = $1)
+      AND ($2 = '' OR o.user_id = $2)
+      AND ($3 = '' OR o.market_id::text = $3)
+      AND ($4 = '' OR o.status = $4)
+    UNION ALL
+    SELECT b.id FROM parimutuel_bets b
+    WHERE ($1 = '' OR b.merchant_id::text = $1)
+      AND ($2 = '' OR b.user_id = $2)
+      AND ($3 = '' OR b.market_id::text = $3)
+      AND ($4 = '' OR b.status = $4)
+) AS merged`,
 		merchantID, userID, marketID, status).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count orders: %w", err)
 	}

@@ -168,6 +168,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- admin 订单列表（/api/v1/admin/orders）并入奖池注单：注单以 `type:"bet"`
+  混排展示（金额=下注额），商户/用户/市场/状态过滤与排序统一生效；集成
+  测试覆盖混排与商户隔离。
 - 市场分类目录改为：热门 / 足球 / 篮球 / 棒球 / 拳击 / 天气 / 比特币 / 其它。
   体育事件按联赛自动归类（NBA/WNBA→篮球、MLB/LMB→棒球、EPL→足球、
   boxing→拳击），Polymarket 与自定义事件经规范化映射（crypto/ethereum→
