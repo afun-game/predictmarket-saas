@@ -266,13 +266,8 @@ func (s service_client_stub) Create(ctx context.Context, a0 *CreateRequest) (r0 
 
 	}()
 
-	// Preallocate a buffer of the right size.
-	size := 0
-	size += servicetwill_size_ptr_CreateRequest_05de99cc(a0)
-	enc := codegen.NewEncoder()
-	enc.Reset(size)
-
 	// Encode arguments.
+	enc := codegen.NewEncoder()
 	servicetwill_enc_ptr_CreateRequest_05de99cc(enc, a0)
 	var shardKey uint64
 
@@ -604,14 +599,8 @@ func (s service_client_stub) Update(ctx context.Context, a0 string, a1 *UpdateRe
 
 	}()
 
-	// Preallocate a buffer of the right size.
-	size := 0
-	size += (4 + len(a0))
-	size += servicetwill_size_ptr_UpdateRequest_70ee0773(a1)
-	enc := codegen.NewEncoder()
-	enc.Reset(size)
-
 	// Encode arguments.
+	enc := codegen.NewEncoder()
 	enc.String(a0)
 	servicetwill_enc_ptr_UpdateRequest_70ee0773(enc, a1)
 	var shardKey uint64
@@ -1007,13 +996,14 @@ var _ codegen.AutoMarshal = (*CreateRequest)(nil)
 
 type __is_CreateRequest[T ~struct {
 	twill.AutoMarshal
-	SourceType     string "json:\"source_type\""
-	SourceID       string "json:\"source_id\""
-	Title          string "json:\"title\""
-	Description    string "json:\"description\""
-	Category       string "json:\"category\""
-	EndTime        string "json:\"end_time\""
-	ResolutionTime string "json:\"resolution_time\""
+	SourceType     string                            "json:\"source_type\""
+	SourceID       string                            "json:\"source_id\""
+	Title          string                            "json:\"title\""
+	Description    string                            "json:\"description\""
+	Category       string                            "json:\"category\""
+	EndTime        string                            "json:\"end_time\""
+	ResolutionTime string                            "json:\"resolution_time\""
+	Translations   map[string]types.EventTranslation "json:\"translations,omitempty\""
 }] struct{}
 
 var _ __is_CreateRequest[CreateRequest]
@@ -1029,6 +1019,7 @@ func (x *CreateRequest) WeaverMarshal(enc *codegen.Encoder) {
 	enc.String(x.Category)
 	enc.String(x.EndTime)
 	enc.String(x.ResolutionTime)
+	servicetwill_enc_map_string_EventTranslation_dcaeba5a(enc, x.Translations)
 }
 
 func (x *CreateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
@@ -1042,6 +1033,35 @@ func (x *CreateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.Category = dec.String()
 	x.EndTime = dec.String()
 	x.ResolutionTime = dec.String()
+	x.Translations = servicetwill_dec_map_string_EventTranslation_dcaeba5a(dec)
+}
+
+func servicetwill_enc_map_string_EventTranslation_dcaeba5a(enc *codegen.Encoder, arg map[string]types.EventTranslation) {
+	if arg == nil {
+		enc.Len(-1)
+		return
+	}
+	enc.Len(len(arg))
+	for k, v := range arg {
+		enc.String(k)
+		(v).WeaverMarshal(enc)
+	}
+}
+
+func servicetwill_dec_map_string_EventTranslation_dcaeba5a(dec *codegen.Decoder) map[string]types.EventTranslation {
+	n := dec.Len()
+	if n == -1 {
+		return nil
+	}
+	res := make(map[string]types.EventTranslation, n)
+	var k string
+	var v types.EventTranslation
+	for i := 0; i < n; i++ {
+		k = dec.String()
+		(&v).WeaverUnmarshal(dec)
+		res[k] = v
+	}
+	return res
 }
 
 var _ codegen.AutoMarshal = (*ListFilters)(nil)
@@ -1121,9 +1141,10 @@ var _ codegen.AutoMarshal = (*UpdateRequest)(nil)
 
 type __is_UpdateRequest[T ~struct {
 	twill.AutoMarshal
-	Title          *string "json:\"title,omitempty\""
-	Description    *string "json:\"description,omitempty\""
-	ResolutionTime *string "json:\"resolution_time,omitempty\""
+	Title          *string                           "json:\"title,omitempty\""
+	Description    *string                           "json:\"description,omitempty\""
+	ResolutionTime *string                           "json:\"resolution_time,omitempty\""
+	Translations   map[string]types.EventTranslation "json:\"translations,omitempty\""
 }] struct{}
 
 var _ __is_UpdateRequest[UpdateRequest]
@@ -1135,6 +1156,7 @@ func (x *UpdateRequest) WeaverMarshal(enc *codegen.Encoder) {
 	servicetwill_enc_ptr_string_3e89801b(enc, x.Title)
 	servicetwill_enc_ptr_string_3e89801b(enc, x.Description)
 	servicetwill_enc_ptr_string_3e89801b(enc, x.ResolutionTime)
+	servicetwill_enc_map_string_EventTranslation_dcaeba5a(enc, x.Translations)
 }
 
 func (x *UpdateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
@@ -1144,6 +1166,7 @@ func (x *UpdateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.Title = servicetwill_dec_ptr_string_3e89801b(dec)
 	x.Description = servicetwill_dec_ptr_string_3e89801b(dec)
 	x.ResolutionTime = servicetwill_dec_ptr_string_3e89801b(dec)
+	x.Translations = servicetwill_dec_map_string_EventTranslation_dcaeba5a(dec)
 }
 
 func servicetwill_enc_ptr_string_3e89801b(enc *codegen.Encoder, arg *string) {
@@ -1281,16 +1304,6 @@ func servicetwill_dec_ptr_UpdateRequest_70ee0773(dec *codegen.Decoder) *UpdateRe
 
 // Size implementations.
 
-// servicetwill_size_ptr_CreateRequest_05de99cc returns the size (in bytes) of the serialization
-// of the provided type.
-func servicetwill_size_ptr_CreateRequest_05de99cc(x *CreateRequest) int {
-	if x == nil {
-		return 1
-	} else {
-		return 1 + servicetwill_size_CreateRequest_23f6efda(&*x)
-	}
-}
-
 // servicetwill_size_ptr_ListFilters_937825f4 returns the size (in bytes) of the serialization
 // of the provided type.
 func servicetwill_size_ptr_ListFilters_937825f4(x *ListFilters) int {
@@ -1309,41 +1322,6 @@ func servicetwill_size_ptr_SyncRequest_d6a6bd1d(x *SyncRequest) int {
 	} else {
 		return 1 + servicetwill_size_SyncRequest_61147890(&*x)
 	}
-}
-
-// servicetwill_size_ptr_UpdateRequest_70ee0773 returns the size (in bytes) of the serialization
-// of the provided type.
-func servicetwill_size_ptr_UpdateRequest_70ee0773(x *UpdateRequest) int {
-	if x == nil {
-		return 1
-	} else {
-		return 1 + servicetwill_size_UpdateRequest_d38b9db0(&*x)
-	}
-}
-
-// servicetwill_size_ptr_string_3e89801b returns the size (in bytes) of the serialization
-// of the provided type.
-func servicetwill_size_ptr_string_3e89801b(x *string) int {
-	if x == nil {
-		return 1
-	} else {
-		return 1 + (4 + len(*x))
-	}
-}
-
-// servicetwill_size_CreateRequest_23f6efda returns the size (in bytes) of the serialization
-// of the provided type.
-func servicetwill_size_CreateRequest_23f6efda(x *CreateRequest) int {
-	size := 0
-	size += 0
-	size += (4 + len(x.SourceType))
-	size += (4 + len(x.SourceID))
-	size += (4 + len(x.Title))
-	size += (4 + len(x.Description))
-	size += (4 + len(x.Category))
-	size += (4 + len(x.EndTime))
-	size += (4 + len(x.ResolutionTime))
-	return size
 }
 
 // servicetwill_size_ListFilters_89f1ae8b returns the size (in bytes) of the serialization
@@ -1370,16 +1348,5 @@ func servicetwill_size_SyncRequest_61147890(x *SyncRequest) int {
 	size += (4 + len(x.EndTime))
 	size += (4 + len(x.ResolutionTime))
 	size += (4 + len(x.Status))
-	return size
-}
-
-// servicetwill_size_UpdateRequest_d38b9db0 returns the size (in bytes) of the serialization
-// of the provided type.
-func servicetwill_size_UpdateRequest_d38b9db0(x *UpdateRequest) int {
-	size := 0
-	size += 0
-	size += servicetwill_size_ptr_string_3e89801b(x.Title)
-	size += servicetwill_size_ptr_string_3e89801b(x.Description)
-	size += servicetwill_size_ptr_string_3e89801b(x.ResolutionTime)
 	return size
 }

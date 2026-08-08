@@ -63,8 +63,20 @@ type Event struct {
 	ResolutionTime time.Time `json:"resolution_time"`
 	Status         string    `json:"status"` // pending, active, closed, resolved
 	Outcome        *string   `json:"outcome,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	// Translations holds the event title/description in additional locales,
+	// keyed by BCP-47 language tag (e.g. "en", "zh-CN"). The default-locale
+	// title/description live in Title/Description.
+	Translations map[string]EventTranslation `json:"translations,omitempty"`
+	CreatedAt    time.Time                   `json:"created_at"`
+	UpdatedAt    time.Time                   `json:"updated_at"`
+}
+
+// EventTranslation is an event's title and description in one locale.
+type EventTranslation struct {
+	twill.AutoMarshal
+
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
 }
 
 // Market represents a prediction market

@@ -50,6 +50,23 @@ type CreateRequest struct {
 	Category       string `json:"category"`
 	EndTime        string `json:"end_time"`
 	ResolutionTime string `json:"resolution_time"`
+	// Translations carries the event title/description in additional
+	// locales; the default locale is Title/Description.
+	Translations map[string]types.EventTranslation `json:"translations,omitempty"`
+}
+
+// validateEventTranslations checks that every locale carries a title; the
+// description is optional. The default locale lives in Title/Description.
+func validateEventTranslations(translations map[string]types.EventTranslation) error {
+	for locale, translation := range translations {
+		if locale == "" {
+			return &ValidationError{Field: "translations", Message: "locale must not be empty"}
+		}
+		if strings.TrimSpace(translation.Title) == "" {
+			return &ValidationError{Field: "translations", Message: "title is required for locale " + locale}
+		}
+	}
+	return nil
 }
 
 // SyncRequest contains normalized event data from an authoritative external source.
@@ -82,6 +99,9 @@ type UpdateRequest struct {
 	Title          *string `json:"title,omitempty"`
 	Description    *string `json:"description,omitempty"`
 	ResolutionTime *string `json:"resolution_time,omitempty"` // RFC3339
+	// Translations replaces the whole translation set when present (an
+	// empty object clears it); nil leaves it unchanged.
+	Translations map[string]types.EventTranslation `json:"translations,omitempty"`
 }
 
 // ValidationError identifies an invalid event request field.
@@ -157,6 +177,13 @@ func (s *implementation) Create(ctx context.Context, req *CreateRequest) (*types
 	if resolutionTime.Before(now) {
 		return nil, &ValidationError{Field: "resolution_time", Message: "must not be in the past"}
 	}
+	translations := make(map[string]types.EventTranslation, len(input.Translations))
+	for locale, translation := range input.Translations {
+		translations[locale] = types.EventTranslation{
+			Title:       strings.TrimSpace(translation.Title),
+			Description: strings.TrimSpace(translation.Description),
+		}
+	}
 	value := &types.Event{
 		ID:             eventID,
 		SourceType:     input.SourceType,
@@ -167,6 +194,7 @@ func (s *implementation) Create(ctx context.Context, req *CreateRequest) (*types
 		EndTime:        endTime,
 		ResolutionTime: resolutionTime,
 		Status:         "pending",
+		Translations:   translations,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
@@ -287,6 +315,18 @@ func (s *implementation) Update(
 			return nil, &ValidationError{Field: "resolution_time", Message: "must not be in the past"}
 		}
 		value.ResolutionTime = resolutionTime
+	}
+	if req.Translations != nil {
+		if err := validateEventTranslations(req.Translations); err != nil {
+			return nil, err
+		}
+		value.Translations = make(map[string]types.EventTranslation, len(req.Translations))
+		for locale, translation := range req.Translations {
+			value.Translations[locale] = types.EventTranslation{
+				Title:       strings.TrimSpace(translation.Title),
+				Description: strings.TrimSpace(translation.Description),
+			}
+		}
 	}
 	value.UpdatedAt = s.now().UTC()
 	if err := s.repository.Update(ctx, value); err != nil {
@@ -416,6 +456,9 @@ func validateCreateRequest(
 	}
 	if input.Category == "" {
 		return nil, time.Time{}, time.Time{}, &ValidationError{Field: "category", Message: "is required"}
+	}
+	if err := validateEventTranslations(input.Translations); err != nil {
+		return nil, time.Time{}, time.Time{}, err
 	}
 
 	endTime, err := time.Parse(time.RFC3339, strings.TrimSpace(input.EndTime))

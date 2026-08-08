@@ -203,6 +203,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- 事件支持多语言：`events.translations`（BCP-47 语言代码 → 标题/描述，
+  migration 041）；事件创建与后台编辑接口接受 `translations`（每语言标题
+  必填，空对象清空），admin 事件创建/编辑表单提供多语言配置区块，事件
+  详情展示各语言内容；事件列表/详情接口返回 `translations`。
 - 修复奖池/订单簿无缝(shadow)结算失败：结算时每个参与者（赢家与输家）
   释放各自 stake 的 shadow 负债，赢家另经 credit 回调支付全池派彩；此前
   只扣赢家且按全额 payout 扣款，多用户奖池中赢家 shadow 余额必然不足

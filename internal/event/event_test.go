@@ -2,6 +2,7 @@ package event
 
 import (
 	"context"
+	"github.com/afun-game/predictmarket-saas/pkg/types"
 	"errors"
 	"fmt"
 	"testing"
@@ -302,3 +303,87 @@ func validSyncRequest(sourceID string) *SyncRequest {
 		Status:         "active",
 	}
 }
+
+func TestCreateAndUpdateEventTranslations(t *testing.T) {
+	t.Parallel()
+
+	service := newService(newMemoryRepository())
+	req := validCreateRequest("update-translations", "sports")
+	req.Translations = map[string]types.EventTranslation{
+		"en":    {Title: "Will the event happen?", Description: "English description"},
+		"zh-CN": {Title: "活动会发生吗？", Description: "中文描述"},
+	}
+	created, err := service.Create(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if len(created.Translations) != 2 {
+		t.Fatalf("Create() translations = %#v", created.Translations)
+	}
+	if zh, ok := created.Translations["zh-CN"]; !ok || zh.Title != "活动会发生吗？" || zh.Description != "中文描述" {
+		t.Errorf("zh-CN translation = %#v", zh)
+	}
+
+	// Update replaces the whole set; empty map clears it.
+	updated, err := service.Update(context.Background(), created.ID, &UpdateRequest{
+		Title:        stringPtr("新标题"),
+		Translations: map[string]types.EventTranslation{"en": {Title: "New title"}},
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if updated.Title != "新标题" {
+		t.Errorf("Update() title = %q", updated.Title)
+	}
+	if len(updated.Translations) != 1 || updated.Translations["en"].Title != "New title" {
+		t.Errorf("Update() translations = %#v", updated.Translations)
+	}
+	cleared, err := service.Update(context.Background(), created.ID, &UpdateRequest{
+		Translations: map[string]types.EventTranslation{},
+	})
+	if err != nil {
+		t.Fatalf("Update(clear) error = %v", err)
+	}
+	if len(cleared.Translations) != 0 {
+		t.Errorf("Update(clear) translations = %#v", cleared.Translations)
+	}
+}
+
+func TestCreateRejectsInvalidEventTranslations(t *testing.T) {
+	t.Parallel()
+
+	service := newService(newMemoryRepository())
+	tests := []struct {
+		name   string
+		locale string
+	}{
+		{name: "empty locale", locale: ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := validCreateRequest("bad-translation-"+test.name, "sports")
+			req.Translations = map[string]types.EventTranslation{test.locale: {Title: "x"}}
+			if _, err := service.Create(context.Background(), req); err == nil {
+				t.Fatal("Create() accepted an invalid translation locale")
+			}
+		})
+	}
+	// Blank translated title is rejected.
+	req := validCreateRequest("blank-title", "sports")
+	req.Translations = map[string]types.EventTranslation{"en": {Title: "  "}}
+	if _, err := service.Create(context.Background(), req); err == nil {
+		t.Fatal("Create() accepted a blank translated title")
+	}
+	// Blank translated title on update is rejected too.
+	created, err := service.Create(context.Background(), validCreateRequest("upd-blank", "sports"))
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := service.Update(context.Background(), created.ID, &UpdateRequest{
+		Translations: map[string]types.EventTranslation{"en": {Title: " "}},
+	}); err == nil {
+		t.Fatal("Update() accepted a blank translated title")
+	}
+}
+
+func stringPtr(value string) *string { return &value }

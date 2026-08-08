@@ -19,6 +19,7 @@ const eventColumns = `
     source_id,
     title,
     description,
+    translations,
     category,
     end_time,
     resolution_time,
@@ -41,6 +42,10 @@ func NewPostgresRepository(database *sql.DB) Repository {
 }
 
 func (r *postgresRepository) Create(ctx context.Context, value *types.Event) error {
+	translations, err := json.Marshal(value.Translations)
+	if err != nil {
+		return fmt.Errorf("marshal event translations: %w", err)
+	}
 	const query = `
 INSERT INTO events (
     id,
@@ -48,6 +53,7 @@ INSERT INTO events (
     source_id,
     title,
     description,
+    translations,
     category,
     end_time,
     resolution_time,
@@ -55,9 +61,9 @@ INSERT INTO events (
     outcome,
     created_at,
     updated_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 
-	_, err := r.database.ExecContext(
+	_, err = r.database.ExecContext(
 		ctx,
 		query,
 		value.ID,
@@ -65,6 +71,7 @@ INSERT INTO events (
 		value.SourceID,
 		value.Title,
 		value.Description,
+		translations,
 		value.Category,
 		value.EndTime,
 		value.ResolutionTime,
@@ -239,9 +246,13 @@ WHERE id = $1 AND status = $2`
 
 // Update persists editable event fields.
 func (r *postgresRepository) Update(ctx context.Context, value *types.Event) error {
+	translations, err := json.Marshal(value.Translations)
+	if err != nil {
+		return fmt.Errorf("marshal event translations: %w", err)
+	}
 	const query = `
 UPDATE events
-SET title = $2, description = $3, resolution_time = $4, updated_at = NOW()
+SET title = $2, description = $3, translations = $4, resolution_time = $5, updated_at = NOW()
 WHERE id = $1`
 	result, err := r.database.ExecContext(
 		ctx,
@@ -249,6 +260,7 @@ WHERE id = $1`
 		value.ID,
 		value.Title,
 		value.Description,
+		translations,
 		value.ResolutionTime,
 	)
 	if err != nil {
@@ -334,12 +346,14 @@ type rowScanner interface {
 
 func scanEvent(row rowScanner) (*types.Event, error) {
 	value := &types.Event{}
+	var translations []byte
 	err := row.Scan(
 		&value.ID,
 		&value.SourceType,
 		&value.SourceID,
 		&value.Title,
 		&value.Description,
+		&translations,
 		&value.Category,
 		&value.EndTime,
 		&value.ResolutionTime,
@@ -353,6 +367,10 @@ func scanEvent(row rowScanner) (*types.Event, error) {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("scan event: %w", err)
+	}
+	value.Translations = map[string]types.EventTranslation{}
+	if err := json.Unmarshal(translations, &value.Translations); err != nil {
+		return nil, fmt.Errorf("unmarshal event translations: %w", err)
 	}
 	return value, nil
 }

@@ -30,6 +30,7 @@ const view = {
   reissuedSecret: null, // 重发后的 { id, secret }
   testToken: null, // 商户详情生成的测试链接 { launch_url, token, ... }
   translations: [], // 市场创建表单的其他语言行 { locale, question, options }
+  eventTranslations: [], // 事件创建/编辑表单的其他语言行 { locale, title, description }
 };
 
 let renderSeq = 0;
@@ -736,6 +737,19 @@ async function eventsPage() {
         <div class="field"><label>分类 *</label><select class="input" name="category" required>${categoryOptions("")}</select></div>
         <div class="field"><label>结束时间 *</label><input class="input" type="datetime-local" name="end_time" required></div>
         <div class="field field--span2"><label>结算时间 *</label><input class="input" type="datetime-local" name="resolution_time" required></div>
+        <div class="field field--span2">
+          <label>多语言配置（可选）</label>
+          <div data-event-translation-rows>
+            ${view.eventTranslations.map((entry, index) => `
+            <div class="translation-row" data-event-translation-row="${index}">
+              <input class="input" name="event_translation_locale" placeholder="语言代码（如 en、zh-CN）">
+              <input class="input" name="event_translation_title" placeholder="该语言的标题">
+              <input class="input" name="event_translation_description" placeholder="该语言的描述（可选）">
+              <button class="btn btn--ghost" type="button" data-action="remove-event-translation" data-index="${index}">删除</button>
+            </div>`).join("")}
+          </div>
+          <button class="btn btn--ghost" type="button" data-action="add-event-translation">+ 添加语言</button>
+        </div>
         <div class="field form-field--actions"><button class="btn btn--primary" type="submit">创建事件</button><button class="btn btn--ghost" type="button" data-action="toggle-create-event">取消</button></div>
       </div>
     </form>`
@@ -780,6 +794,11 @@ async function eventDetailPage(id) {
   const kv = kvList([
     ["标题", escapeHTML(event.title ?? "—")],
     ["描述", escapeHTML(event.description ?? "—")],
+    ...(event.translations && Object.keys(event.translations).length > 0
+      ? [["多语言", Object.entries(event.translations)
+          .map(([locale, translation]) => `${escapeHTML(locale)}: ${escapeHTML(translation.title)}${translation.description ? ` — ${escapeHTML(translation.description)}` : ""}`)
+          .join("<br>")]]
+      : []),
     ["分类", escapeHTML(categoryLabel(event.category))],
     ["状态", statusBadge(event.status)],
     ["结果", escapeHTML(event.outcome ?? "—")],
@@ -794,6 +813,18 @@ async function eventDetailPage(id) {
         <div class="field field--span2"><label>标题</label><input class="input" name="title" value="${escapeHTML(event.title ?? "")}"></div>
         <div class="field field--span2"><label>描述</label><textarea class="input" name="description" rows="3">${escapeHTML(event.description ?? "")}</textarea></div>
         <div class="field"><label>结算时间</label><input class="input" type="datetime-local" name="resolution_time" value="${escapeHTML(toDateTimeLocal(event.resolution_time))}"></div>
+        <div class="field field--span2">
+          <label>多语言配置</label>
+          <div data-event-translation-rows>
+            ${Object.entries(event.translations ?? {}).map(([locale, translation]) => `
+            <div class="translation-row" data-event-translation-row="">
+              <input class="input" name="event_translation_locale" value="${escapeHTML(locale)}" placeholder="语言代码">
+              <input class="input" name="event_translation_title" value="${escapeHTML(translation.title ?? "")}" placeholder="该语言的标题">
+              <input class="input" name="event_translation_description" value="${escapeHTML(translation.description ?? "")}" placeholder="该语言的描述（可选）">
+            </div>`).join("")}
+          </div>
+          <button class="btn btn--ghost" type="button" data-action="add-event-translation-edit">+ 添加语言</button>
+        </div>
         <div class="field form-grid__actions"><button class="btn btn--primary" type="submit">保存</button></div>
       </form>
     </div>`;
@@ -1157,7 +1188,39 @@ async function handleAction(action, target) {
         return render();
       case "toggle-create-event":
         view.showCreateEvent = !view.showCreateEvent;
+        if (!view.showCreateEvent) view.eventTranslations = [];
         return render();
+      case "add-event-translation":
+        view.eventTranslations.push({ locale: "", title: "", description: "" });
+        return render();
+      case "remove-event-translation": {
+        const index = Number(target.dataset.index);
+        if (Number.isInteger(index) && index >= 0 && index < view.eventTranslations.length) {
+          view.eventTranslations.splice(index, 1);
+        }
+        return render();
+      }
+      case "add-event-translation-edit": {
+        const form = target.closest('form[data-action="edit-event"]');
+        if (!form) return;
+        const rows = form.querySelector("[data-event-translation-rows]");
+        if (!rows) return;
+        const row = document.createElement("div");
+        row.className = "translation-row";
+        row.dataset.eventTranslationRow = "";
+        row.innerHTML = `
+          <input class="input" name="event_translation_locale" placeholder="语言代码">
+          <input class="input" name="event_translation_title" placeholder="该语言的标题">
+          <input class="input" name="event_translation_description" placeholder="该语言的描述（可选）">
+          <button class="btn btn--ghost" type="button" data-action="remove-event-translation-edit">删除</button>`;
+        rows.appendChild(row);
+        return;
+      }
+      case "remove-event-translation-edit": {
+        const row = target.closest("[data-event-translation-row]");
+        if (row) row.remove();
+        return;
+      }
       case "toggle-create-market":
         view.showCreateMarket = !view.showCreateMarket;
         if (!view.showCreateMarket) view.translations = [];
@@ -1521,6 +1584,25 @@ async function merchantTestToken(target) {
   toast("测试链接已生成（15 分钟有效）");
 }
 
+function collectEventTranslations(form) {
+  const translations = {};
+  for (const row of form.querySelectorAll("[data-event-translation-row]")) {
+    const locale = String(row.querySelector('input[name="event_translation_locale"]')?.value ?? "").trim();
+    const title = String(row.querySelector('input[name="event_translation_title"]')?.value ?? "").trim();
+    const description = String(row.querySelector('input[name="event_translation_description"]')?.value ?? "").trim();
+    if (!locale) {
+      toast("多语言行缺少语言代码", "error");
+      throw new Error("missing locale");
+    }
+    if (!title) {
+      toast(`语言 ${locale} 缺少标题`, "error");
+      throw new Error("missing title");
+    }
+    translations[locale] = { title, description };
+  }
+  return translations;
+}
+
 async function createEvent(form) {
   const data = new FormData(form);
   const title = String(data.get("title") ?? "").trim();
@@ -1532,9 +1614,12 @@ async function createEvent(form) {
     toast("请填写完整的必填信息", "error");
     return;
   }
+  const translations = collectEventTranslations(form);
+  const body = { title, description, category, source_type: "custom", end_time: endTime, resolution_time: resolutionTime };
+  if (Object.keys(translations).length > 0) body.translations = translations;
   await apiFetch("/api/v1/admin/events", {
     method: "POST",
-    body: JSON.stringify({ title, description, category, source_type: "custom", end_time: endTime, resolution_time: resolutionTime }),
+    body: JSON.stringify(body),
   });
   toast("事件创建成功");
   view.showCreateEvent = false;
@@ -1676,6 +1761,8 @@ async function editEvent(form) {
   };
   const resolutionTime = toRFC3339(String(data.get("resolution_time") ?? ""));
   if (resolutionTime) body.resolution_time = resolutionTime;
+  const translations = collectEventTranslations(form);
+  body.translations = translations;
   await apiFetch(`/api/v1/admin/events/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   toast("事件已更新");
   render();

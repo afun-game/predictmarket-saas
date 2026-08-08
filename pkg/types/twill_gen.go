@@ -51,18 +51,19 @@ var _ codegen.AutoMarshal = (*Event)(nil)
 
 type __is_Event[T ~struct {
 	twill.AutoMarshal
-	ID             string    "json:\"id\""
-	SourceType     string    "json:\"source_type\""
-	SourceID       string    "json:\"source_id\""
-	Title          string    "json:\"title\""
-	Description    string    "json:\"description\""
-	Category       string    "json:\"category\""
-	EndTime        time.Time "json:\"end_time\""
-	ResolutionTime time.Time "json:\"resolution_time\""
-	Status         string    "json:\"status\""
-	Outcome        *string   "json:\"outcome,omitempty\""
-	CreatedAt      time.Time "json:\"created_at\""
-	UpdatedAt      time.Time "json:\"updated_at\""
+	ID             string                      "json:\"id\""
+	SourceType     string                      "json:\"source_type\""
+	SourceID       string                      "json:\"source_id\""
+	Title          string                      "json:\"title\""
+	Description    string                      "json:\"description\""
+	Category       string                      "json:\"category\""
+	EndTime        time.Time                   "json:\"end_time\""
+	ResolutionTime time.Time                   "json:\"resolution_time\""
+	Status         string                      "json:\"status\""
+	Outcome        *string                     "json:\"outcome,omitempty\""
+	Translations   map[string]EventTranslation "json:\"translations,omitempty\""
+	CreatedAt      time.Time                   "json:\"created_at\""
+	UpdatedAt      time.Time                   "json:\"updated_at\""
 }] struct{}
 
 var _ __is_Event[Event]
@@ -81,6 +82,7 @@ func (x *Event) WeaverMarshal(enc *codegen.Encoder) {
 	enc.EncodeBinaryMarshaler(&x.ResolutionTime)
 	enc.String(x.Status)
 	servicetwill_enc_ptr_string_3e89801b(enc, x.Outcome)
+	servicetwill_enc_map_string_EventTranslation_dcaeba5a(enc, x.Translations)
 	enc.EncodeBinaryMarshaler(&x.CreatedAt)
 	enc.EncodeBinaryMarshaler(&x.UpdatedAt)
 }
@@ -99,6 +101,7 @@ func (x *Event) WeaverUnmarshal(dec *codegen.Decoder) {
 	dec.DecodeBinaryUnmarshaler(&x.ResolutionTime)
 	x.Status = dec.String()
 	x.Outcome = servicetwill_dec_ptr_string_3e89801b(dec)
+	x.Translations = servicetwill_dec_map_string_EventTranslation_dcaeba5a(dec)
 	dec.DecodeBinaryUnmarshaler(&x.CreatedAt)
 	dec.DecodeBinaryUnmarshaler(&x.UpdatedAt)
 }
@@ -119,6 +122,60 @@ func servicetwill_dec_ptr_string_3e89801b(dec *codegen.Decoder) *string {
 	var res string
 	res = dec.String()
 	return &res
+}
+
+func servicetwill_enc_map_string_EventTranslation_dcaeba5a(enc *codegen.Encoder, arg map[string]EventTranslation) {
+	if arg == nil {
+		enc.Len(-1)
+		return
+	}
+	enc.Len(len(arg))
+	for k, v := range arg {
+		enc.String(k)
+		(v).WeaverMarshal(enc)
+	}
+}
+
+func servicetwill_dec_map_string_EventTranslation_dcaeba5a(dec *codegen.Decoder) map[string]EventTranslation {
+	n := dec.Len()
+	if n == -1 {
+		return nil
+	}
+	res := make(map[string]EventTranslation, n)
+	var k string
+	var v EventTranslation
+	for i := 0; i < n; i++ {
+		k = dec.String()
+		(&v).WeaverUnmarshal(dec)
+		res[k] = v
+	}
+	return res
+}
+
+var _ codegen.AutoMarshal = (*EventTranslation)(nil)
+
+type __is_EventTranslation[T ~struct {
+	twill.AutoMarshal
+	Title       string "json:\"title\""
+	Description string "json:\"description,omitempty\""
+}] struct{}
+
+var _ __is_EventTranslation[EventTranslation]
+
+func (x *EventTranslation) WeaverMarshal(enc *codegen.Encoder) {
+	if x == nil {
+		panic(fmt.Errorf("EventTranslation.WeaverMarshal: nil receiver"))
+	}
+	enc.String(x.Title)
+	enc.String(x.Description)
+}
+
+func (x *EventTranslation) WeaverUnmarshal(dec *codegen.Decoder) {
+	if x == nil {
+		panic(fmt.Errorf("EventTranslation.WeaverUnmarshal: nil receiver"))
+	}
+	x.Title = dec.String()
+	x.Description = dec.String()
 }
 
 var _ codegen.AutoMarshal = (*ExchangeRate)(nil)
