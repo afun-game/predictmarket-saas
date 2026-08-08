@@ -78,12 +78,25 @@ type Market struct {
 	// ResolutionTime is the market's settlement time; creation defaults it
 	// to the owning event's resolution time.
 	ResolutionTime *time.Time `json:"resolution_time,omitempty"`
-	// Fee rates are immutable market terms. They are kept internal until the
-	// administrator fee-configuration API is available.
-	MerchantFeeRate float64    `json:"-"`
-	PlatformFeeRate float64    `json:"-"`
-	CreatedAt       time.Time  `json:"created_at"`
-	SettledAt       *time.Time `json:"settled_at,omitempty"`
+	// Fee rates are immutable market terms configured at creation time.
+	// They are fractions of gross payout withheld at settlement (e.g.
+	// 0.005 means 0.5%).
+	MerchantFeeRate float64 `json:"merchant_fee_rate,omitempty"`
+	PlatformFeeRate float64 `json:"platform_fee_rate,omitempty"`
+	// Translations holds the market question and options in additional
+	// locales, keyed by BCP-47 language tag (e.g. "en", "zh-CN"). The
+	// default-locale question/options live in Question/Options.
+	Translations map[string]MarketTranslation `json:"translations,omitempty"`
+	CreatedAt    time.Time                    `json:"created_at"`
+	SettledAt    *time.Time                   `json:"settled_at,omitempty"`
+}
+
+// MarketTranslation is a market's question and options in one locale.
+type MarketTranslation struct {
+	twill.AutoMarshal
+
+	Question string   `json:"question"`
+	Options  []string `json:"options"`
 }
 
 // Order represents a prediction order

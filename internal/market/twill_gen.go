@@ -779,14 +779,17 @@ var _ codegen.AutoMarshal = (*CreateRequest)(nil)
 
 type __is_CreateRequest[T ~struct {
 	twill.AutoMarshal
-	MerchantID     string    "json:\"merchant_id\""
-	EventID        string    "json:\"event_id\""
-	Type           string    "json:\"type\""
-	Category       string    "json:\"category,omitempty\""
-	ResolutionTime time.Time "json:\"resolution_time,omitempty\""
-	Question       string    "json:\"question\""
-	Options        []string  "json:\"options\""
-	LiquidityPool  float64   "json:\"liquidity_pool\""
+	MerchantID      string                             "json:\"merchant_id\""
+	EventID         string                             "json:\"event_id\""
+	Type            string                             "json:\"type\""
+	Category        string                             "json:\"category,omitempty\""
+	ResolutionTime  time.Time                          "json:\"resolution_time,omitempty\""
+	Question        string                             "json:\"question\""
+	Options         []string                           "json:\"options\""
+	LiquidityPool   float64                            "json:\"liquidity_pool\""
+	MerchantFeeRate *float64                           "json:\"merchant_fee_rate,omitempty\""
+	PlatformFeeRate *float64                           "json:\"platform_fee_rate,omitempty\""
+	Translations    map[string]types.MarketTranslation "json:\"translations,omitempty\""
 }] struct{}
 
 var _ __is_CreateRequest[CreateRequest]
@@ -803,6 +806,9 @@ func (x *CreateRequest) WeaverMarshal(enc *codegen.Encoder) {
 	enc.String(x.Question)
 	servicetwill_enc_slice_string_4af10117(enc, x.Options)
 	enc.Float64(x.LiquidityPool)
+	servicetwill_enc_ptr_float64_a272bb92(enc, x.MerchantFeeRate)
+	servicetwill_enc_ptr_float64_a272bb92(enc, x.PlatformFeeRate)
+	servicetwill_enc_map_string_MarketTranslation_869202b7(enc, x.Translations)
 }
 
 func (x *CreateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
@@ -817,6 +823,9 @@ func (x *CreateRequest) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.Question = dec.String()
 	x.Options = servicetwill_dec_slice_string_4af10117(dec)
 	x.LiquidityPool = dec.Float64()
+	x.MerchantFeeRate = servicetwill_dec_ptr_float64_a272bb92(dec)
+	x.PlatformFeeRate = servicetwill_dec_ptr_float64_a272bb92(dec)
+	x.Translations = servicetwill_dec_map_string_MarketTranslation_869202b7(dec)
 }
 
 func servicetwill_enc_slice_string_4af10117(enc *codegen.Encoder, arg []string) {
@@ -838,6 +847,52 @@ func servicetwill_dec_slice_string_4af10117(dec *codegen.Decoder) []string {
 	res := make([]string, n)
 	for i := 0; i < n; i++ {
 		res[i] = dec.String()
+	}
+	return res
+}
+
+func servicetwill_enc_ptr_float64_a272bb92(enc *codegen.Encoder, arg *float64) {
+	if arg == nil {
+		enc.Bool(false)
+	} else {
+		enc.Bool(true)
+		enc.Float64(*arg)
+	}
+}
+
+func servicetwill_dec_ptr_float64_a272bb92(dec *codegen.Decoder) *float64 {
+	if !dec.Bool() {
+		return nil
+	}
+	var res float64
+	res = dec.Float64()
+	return &res
+}
+
+func servicetwill_enc_map_string_MarketTranslation_869202b7(enc *codegen.Encoder, arg map[string]types.MarketTranslation) {
+	if arg == nil {
+		enc.Len(-1)
+		return
+	}
+	enc.Len(len(arg))
+	for k, v := range arg {
+		enc.String(k)
+		(v).WeaverMarshal(enc)
+	}
+}
+
+func servicetwill_dec_map_string_MarketTranslation_869202b7(dec *codegen.Decoder) map[string]types.MarketTranslation {
+	n := dec.Len()
+	if n == -1 {
+		return nil
+	}
+	res := make(map[string]types.MarketTranslation, n)
+	var k string
+	var v types.MarketTranslation
+	for i := 0; i < n; i++ {
+		k = dec.String()
+		(&v).WeaverUnmarshal(dec)
+		res[k] = v
 	}
 	return res
 }

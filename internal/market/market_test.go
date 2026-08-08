@@ -42,6 +42,106 @@ func TestCreateAndGet(t *testing.T) {
 	}
 }
 
+func TestCreateValidatesFeeRates(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*CreateRequest)
+	}{
+		{name: "negative merchant fee", mutate: func(req *CreateRequest) {
+			rate := -0.01
+			req.MerchantFeeRate = &rate
+		}},
+		{name: "merchant fee above 1", mutate: func(req *CreateRequest) {
+			rate := 1.5
+			req.MerchantFeeRate = &rate
+		}},
+		{name: "platform fee NaN", mutate: func(req *CreateRequest) {
+			rate := math.NaN()
+			req.PlatformFeeRate = &rate
+		}},
+		{name: "platform fee infinity", mutate: func(req *CreateRequest) {
+			rate := math.Inf(1)
+			req.PlatformFeeRate = &rate
+		}},
+	}
+	service := newService(newMemoryRepository())
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := validCreateRequest()
+			test.mutate(req)
+			if _, err := service.Create(context.Background(), req); err == nil {
+				t.Fatal("Create() accepted an invalid fee rate")
+			}
+		})
+	}
+}
+
+func TestCreateStoresFeeRatesAndTranslations(t *testing.T) {
+	service := newService(newMemoryRepository())
+	merchantRate, platformRate := 0.005, 0.01
+	req := validCreateRequest()
+	req.MerchantFeeRate = &merchantRate
+	req.PlatformFeeRate = &platformRate
+	req.Translations = map[string]types.MarketTranslation{
+		"en":    {Question: "Will the MVP launch?", Options: []string{"Yes", "No"}},
+		"zh-CN": {Question: "MVP 会发布吗？", Options: []string{"是", "否"}},
+	}
+	created, err := service.Create(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if created.MerchantFeeRate != merchantRate || created.PlatformFeeRate != platformRate {
+		t.Errorf("Create() fee rates = (%v, %v), want (%v, %v)",
+			created.MerchantFeeRate, created.PlatformFeeRate, merchantRate, platformRate)
+	}
+	stored, err := service.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if len(stored.Translations) != 2 {
+		t.Fatalf("stored translations = %#v", stored.Translations)
+	}
+	zh, ok := stored.Translations["zh-CN"]
+	if !ok || zh.Question != "MVP 会发布吗？" || len(zh.Options) != 2 || zh.Options[0] != "是" {
+		t.Errorf("zh-CN translation = %#v", zh)
+	}
+	// The returned market must not alias the request's option slices.
+	stored.Translations["en"].Options[0] = "mutated"
+	if created.Translations["en"].Options[0] == "mutated" {
+		t.Error("translations option slice is shared between request and market")
+	}
+}
+
+func TestCreateValidatesTranslations(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*CreateRequest)
+	}{
+		{name: "empty locale key", mutate: func(req *CreateRequest) {
+			req.Translations = map[string]types.MarketTranslation{"": {Question: "x", Options: []string{"a", "b"}}}
+		}},
+		{name: "blank translated question", mutate: func(req *CreateRequest) {
+			req.Translations = map[string]types.MarketTranslation{"en": {Question: "  ", Options: []string{"a", "b"}}}
+		}},
+		{name: "option count mismatch", mutate: func(req *CreateRequest) {
+			req.Translations = map[string]types.MarketTranslation{"en": {Question: "q", Options: []string{"a"}}}
+		}},
+		{name: "empty translated option", mutate: func(req *CreateRequest) {
+			req.Translations = map[string]types.MarketTranslation{"en": {Question: "q", Options: []string{"a", " "}}}
+		}},
+	}
+	service := newService(newMemoryRepository())
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := validCreateRequest()
+			test.mutate(req)
+			if _, err := service.Create(context.Background(), req); err == nil {
+				t.Fatal("Create() accepted invalid translations")
+			}
+		})
+	}
+}
+
 func TestCreateValidation(t *testing.T) {
 	tests := []struct {
 		name   string

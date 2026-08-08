@@ -163,21 +163,22 @@ var _ codegen.AutoMarshal = (*Market)(nil)
 
 type __is_Market[T ~struct {
 	twill.AutoMarshal
-	ID              string     "json:\"id\""
-	MerchantID      string     "json:\"merchant_id\""
-	EventID         string     "json:\"event_id\""
-	Type            string     "json:\"type\""
-	Category        string     "json:\"category\""
-	Question        string     "json:\"question\""
-	Options         []string   "json:\"options\""
-	Status          string     "json:\"status\""
-	TotalVolume     float64    "json:\"total_volume\""
-	LiquidityPool   float64    "json:\"liquidity_pool\""
-	ResolutionTime  *time.Time "json:\"resolution_time,omitempty\""
-	MerchantFeeRate float64    "json:\"-\""
-	PlatformFeeRate float64    "json:\"-\""
-	CreatedAt       time.Time  "json:\"created_at\""
-	SettledAt       *time.Time "json:\"settled_at,omitempty\""
+	ID              string                       "json:\"id\""
+	MerchantID      string                       "json:\"merchant_id\""
+	EventID         string                       "json:\"event_id\""
+	Type            string                       "json:\"type\""
+	Category        string                       "json:\"category\""
+	Question        string                       "json:\"question\""
+	Options         []string                     "json:\"options\""
+	Status          string                       "json:\"status\""
+	TotalVolume     float64                      "json:\"total_volume\""
+	LiquidityPool   float64                      "json:\"liquidity_pool\""
+	ResolutionTime  *time.Time                   "json:\"resolution_time,omitempty\""
+	MerchantFeeRate float64                      "json:\"merchant_fee_rate,omitempty\""
+	PlatformFeeRate float64                      "json:\"platform_fee_rate,omitempty\""
+	Translations    map[string]MarketTranslation "json:\"translations,omitempty\""
+	CreatedAt       time.Time                    "json:\"created_at\""
+	SettledAt       *time.Time                   "json:\"settled_at,omitempty\""
 }] struct{}
 
 var _ __is_Market[Market]
@@ -199,6 +200,7 @@ func (x *Market) WeaverMarshal(enc *codegen.Encoder) {
 	servicetwill_enc_ptr_Time_7d81a94d(enc, x.ResolutionTime)
 	enc.Float64(x.MerchantFeeRate)
 	enc.Float64(x.PlatformFeeRate)
+	servicetwill_enc_map_string_MarketTranslation_869202b7(enc, x.Translations)
 	enc.EncodeBinaryMarshaler(&x.CreatedAt)
 	servicetwill_enc_ptr_Time_7d81a94d(enc, x.SettledAt)
 }
@@ -220,6 +222,7 @@ func (x *Market) WeaverUnmarshal(dec *codegen.Decoder) {
 	x.ResolutionTime = servicetwill_dec_ptr_Time_7d81a94d(dec)
 	x.MerchantFeeRate = dec.Float64()
 	x.PlatformFeeRate = dec.Float64()
+	x.Translations = servicetwill_dec_map_string_MarketTranslation_869202b7(dec)
 	dec.DecodeBinaryUnmarshaler(&x.CreatedAt)
 	x.SettledAt = servicetwill_dec_ptr_Time_7d81a94d(dec)
 }
@@ -263,6 +266,60 @@ func servicetwill_dec_ptr_Time_7d81a94d(dec *codegen.Decoder) *time.Time {
 	var res time.Time
 	dec.DecodeBinaryUnmarshaler(&res)
 	return &res
+}
+
+func servicetwill_enc_map_string_MarketTranslation_869202b7(enc *codegen.Encoder, arg map[string]MarketTranslation) {
+	if arg == nil {
+		enc.Len(-1)
+		return
+	}
+	enc.Len(len(arg))
+	for k, v := range arg {
+		enc.String(k)
+		(v).WeaverMarshal(enc)
+	}
+}
+
+func servicetwill_dec_map_string_MarketTranslation_869202b7(dec *codegen.Decoder) map[string]MarketTranslation {
+	n := dec.Len()
+	if n == -1 {
+		return nil
+	}
+	res := make(map[string]MarketTranslation, n)
+	var k string
+	var v MarketTranslation
+	for i := 0; i < n; i++ {
+		k = dec.String()
+		(&v).WeaverUnmarshal(dec)
+		res[k] = v
+	}
+	return res
+}
+
+var _ codegen.AutoMarshal = (*MarketTranslation)(nil)
+
+type __is_MarketTranslation[T ~struct {
+	twill.AutoMarshal
+	Question string   "json:\"question\""
+	Options  []string "json:\"options\""
+}] struct{}
+
+var _ __is_MarketTranslation[MarketTranslation]
+
+func (x *MarketTranslation) WeaverMarshal(enc *codegen.Encoder) {
+	if x == nil {
+		panic(fmt.Errorf("MarketTranslation.WeaverMarshal: nil receiver"))
+	}
+	enc.String(x.Question)
+	servicetwill_enc_slice_string_4af10117(enc, x.Options)
+}
+
+func (x *MarketTranslation) WeaverUnmarshal(dec *codegen.Decoder) {
+	if x == nil {
+		panic(fmt.Errorf("MarketTranslation.WeaverUnmarshal: nil receiver"))
+	}
+	x.Question = dec.String()
+	x.Options = servicetwill_dec_slice_string_4af10117(dec)
 }
 
 var _ codegen.AutoMarshal = (*Merchant)(nil)

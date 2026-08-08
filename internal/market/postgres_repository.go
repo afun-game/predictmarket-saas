@@ -21,6 +21,7 @@ const marketColumns = `
     resolution_time,
     question,
     options,
+    translations,
     status,
     total_volume,
     liquidity_pool,
@@ -83,6 +84,10 @@ func (r *postgresRepository) Create(ctx context.Context, value *types.Market) er
 	if err != nil {
 		return fmt.Errorf("marshal market options: %w", err)
 	}
+	translations, err := json.Marshal(value.Translations)
+	if err != nil {
+		return fmt.Errorf("marshal market translations: %w", err)
+	}
 	const query = `
 INSERT INTO markets (
     id,
@@ -93,6 +98,7 @@ INSERT INTO markets (
     resolution_time,
     question,
     options,
+    translations,
     status,
     total_volume,
     liquidity_pool,
@@ -100,7 +106,7 @@ INSERT INTO markets (
     platform_fee_rate,
     created_at,
     settled_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`
 
 	_, err = r.database.ExecContext(
 		ctx,
@@ -113,6 +119,7 @@ INSERT INTO markets (
 		value.ResolutionTime,
 		value.Question,
 		options,
+		translations,
 		value.Status,
 		value.TotalVolume,
 		value.LiquidityPool,
@@ -250,7 +257,7 @@ type rowScanner interface {
 
 func scanMarket(row rowScanner) (*types.Market, error) {
 	value := &types.Market{}
-	var options []byte
+	var options, translations []byte
 	err := row.Scan(
 		&value.ID,
 		&value.MerchantID,
@@ -260,6 +267,7 @@ func scanMarket(row rowScanner) (*types.Market, error) {
 		&value.ResolutionTime,
 		&value.Question,
 		&options,
+		&translations,
 		&value.Status,
 		&value.TotalVolume,
 		&value.LiquidityPool,
@@ -280,6 +288,10 @@ func scanMarket(row rowScanner) (*types.Market, error) {
 	}
 	if value.Options == nil {
 		value.Options = []string{}
+	}
+	value.Translations = map[string]types.MarketTranslation{}
+	if err := json.Unmarshal(translations, &value.Translations); err != nil {
+		return nil, fmt.Errorf("unmarshal market translations: %w", err)
 	}
 	return value, nil
 }

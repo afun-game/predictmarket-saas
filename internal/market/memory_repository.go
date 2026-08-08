@@ -144,6 +144,15 @@ func cloneMarket(value *types.Market) *types.Market {
 	}
 	clone := *value
 	clone.Options = append([]string{}, value.Options...)
+	if len(value.Translations) > 0 {
+		clone.Translations = make(map[string]types.MarketTranslation, len(value.Translations))
+		for locale, translation := range value.Translations {
+			clone.Translations[locale] = types.MarketTranslation{
+				Question: translation.Question,
+				Options:  append([]string{}, translation.Options...),
+			}
+		}
+	}
 	if value.SettledAt != nil {
 		settledAt := *value.SettledAt
 		clone.SettledAt = &settledAt

@@ -168,6 +168,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 奖池下注未累计 `markets.total_volume`：下注事务内按注单金额累加（累计
   不回退，与订单簿成交额语义一致），存量奖池市场已回填；托管页与商户
   接口的 `total_volume` 恢复真实投注量。
+- 市场创建支持费率与多语言：`POST /api/v1/admin/markets` 与创建接口新增
+  `merchant_fee_rate` / `platform_fee_rate`（结算时按比例拆账，0–1 校验）与
+  `translations`（BCP-47 语言代码 → 问题/选项，选项数量须与默认语言一致）；
+  admin 管理台市场创建表单提供费率输入与多语言配置区块，市场详情展示费率
+  与各语言内容。
 - GET orders 接口订单项新增 `options`（市场选项）、`winning_option`（结算
   胜出方）、`payout`（该单派彩，输家为 0.00）、`matched_price`（最新成交
   价，订单簿市场）；注单同样携带，前端历史页可展示胜出与盈亏。

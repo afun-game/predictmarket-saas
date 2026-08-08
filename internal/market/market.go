@@ -56,6 +56,13 @@ type CreateRequest struct {
 	Question       string    `json:"question"`
 	Options        []string  `json:"options"`
 	LiquidityPool  float64   `json:"liquidity_pool"`
+	// Fee rates are immutable market terms (fractions of gross payout
+	// withheld at settlement). Zero when omitted.
+	MerchantFeeRate *float64 `json:"merchant_fee_rate,omitempty"`
+	PlatformFeeRate *float64 `json:"platform_fee_rate,omitempty"`
+	// Translations carries the market question/options in additional
+	// locales; the default locale is Question/Options.
+	Translations map[string]types.MarketTranslation `json:"translations,omitempty"`
 }
 
 type ListFilters struct {
@@ -161,6 +168,20 @@ func (s *implementation) Create(
 	if err != nil {
 		return nil, fmt.Errorf("generate market ID: %w", err)
 	}
+	merchantFeeRate, platformFeeRate := defaultMerchantFeeRate, defaultPlatformFeeRate
+	if input.MerchantFeeRate != nil {
+		merchantFeeRate = *input.MerchantFeeRate
+	}
+	if input.PlatformFeeRate != nil {
+		platformFeeRate = *input.PlatformFeeRate
+	}
+	translations := make(map[string]types.MarketTranslation, len(input.Translations))
+	for locale, translation := range input.Translations {
+		translations[locale] = types.MarketTranslation{
+			Question: strings.TrimSpace(translation.Question),
+			Options:  append([]string{}, translation.Options...),
+		}
+	}
 	value := &types.Market{
 		ID:              marketID,
 		MerchantID:      input.MerchantID,
@@ -173,8 +194,9 @@ func (s *implementation) Create(
 		Status:          "active",
 		TotalVolume:     0,
 		LiquidityPool:   input.LiquidityPool,
-		MerchantFeeRate: defaultMerchantFeeRate,
-		PlatformFeeRate: defaultPlatformFeeRate,
+		MerchantFeeRate: merchantFeeRate,
+		PlatformFeeRate: platformFeeRate,
+		Translations:    translations,
 		CreatedAt:       s.now().UTC(),
 	}
 	if err := s.repository.Create(ctx, value); err != nil {
@@ -300,7 +322,50 @@ func validateCreateRequest(req *CreateRequest) (*CreateRequest, error) {
 	if err := validateMoney("liquidity_pool", input.LiquidityPool, true); err != nil {
 		return nil, err
 	}
+	if err := validateFeeRate("merchant_fee_rate", input.MerchantFeeRate); err != nil {
+		return nil, err
+	}
+	if err := validateFeeRate("platform_fee_rate", input.PlatformFeeRate); err != nil {
+		return nil, err
+	}
+	if err := validateTranslations(input.Options, input.Translations); err != nil {
+		return nil, err
+	}
 	return &input, nil
+}
+
+// validateFeeRate checks that an optional fee rate is a finite fraction in
+// [0, 1] (e.g. 0.005 means 0.5% of gross payout).
+func validateFeeRate(field string, rate *float64) error {
+	if rate == nil {
+		return nil
+	}
+	if math.IsNaN(*rate) || math.IsInf(*rate, 0) || *rate < 0 || *rate > 1 {
+		return &ValidationError{Field: field, Message: "must be a fraction between 0 and 1"}
+	}
+	return nil
+}
+
+// validateTranslations checks that every locale carries a question and the
+// same number of options as the default locale.
+func validateTranslations(options []string, translations map[string]types.MarketTranslation) error {
+	for locale, translation := range translations {
+		if locale == "" {
+			return &ValidationError{Field: "translations", Message: "locale must not be empty"}
+		}
+		if strings.TrimSpace(translation.Question) == "" {
+			return &ValidationError{Field: "translations", Message: "question is required for locale " + locale}
+		}
+		if len(translation.Options) != len(options) {
+			return &ValidationError{Field: "translations", Message: "options count must match the default locale for " + locale}
+		}
+		for _, option := range translation.Options {
+			if strings.TrimSpace(option) == "" {
+				return &ValidationError{Field: "translations", Message: "options must not be empty for locale " + locale}
+			}
+		}
+	}
+	return nil
 }
 
 func normalizeFilters(filters *ListFilters) (ListFilters, error) {

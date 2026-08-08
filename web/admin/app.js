@@ -29,6 +29,7 @@ const view = {
   merchantCredentials: null, // 开户成功的一次性凭据 { id, api_key, api_secret, ... }
   reissuedSecret: null, // 重发后的 { id, secret }
   testToken: null, // 商户详情生成的测试链接 { launch_url, token, ... }
+  translations: [], // 市场创建表单的其他语言行 { locale, question, options }
 };
 
 let renderSeq = 0;
@@ -853,6 +854,21 @@ async function marketsPage() {
         <div class="field" data-liquidity-hint hidden><label>初始流动性</label><p class="field-hint">奖池市场无需初始流动性</p></div>
         <div class="field field--span2"><label>问题 *</label><input class="input" name="question" placeholder="例如：BTC 将在 7 月收于 6 万美元以上吗？" required></div>
         <div class="field field--span2"><label>选项 *（逗号分隔）</label><input class="input" name="options" placeholder="是, 否" required></div>
+        <div class="field"><label>商户手续费率</label><input class="input" name="merchant_fee_rate" type="number" min="0" max="1" step="0.001" placeholder="0.005（0.5%）"></div>
+        <div class="field"><label>平台手续费率</label><input class="input" name="platform_fee_rate" type="number" min="0" max="1" step="0.001" placeholder="0.01（1%）"></div>
+        <div class="field field--span2">
+          <label>多语言配置（可选）</label>
+          <div data-translation-rows>
+            ${view.translations.map((entry, index) => `
+            <div class="translation-row" data-translation-row="${index}">
+              <input class="input" name="translation_locale" placeholder="语言代码（如 en、zh-CN）">
+              <input class="input" name="translation_question" placeholder="该语言的问题">
+              <input class="input" name="translation_options" placeholder="该语言的选项（逗号分隔，数量与默认一致）">
+              <button class="btn btn--ghost" type="button" data-action="remove-translation" data-index="${index}">删除</button>
+            </div>`).join("")}
+          </div>
+          <button class="btn btn--ghost" type="button" data-action="add-translation">+ 添加语言</button>
+        </div>
         <div class="field form-field--actions"><button class="btn btn--primary" type="submit">创建市场</button><button class="btn btn--ghost" type="button" data-action="toggle-create-market">取消</button></div>
       </div>
     </form>`
@@ -903,6 +919,13 @@ async function marketDetailPage(id) {
     ["状态", statusBadge(market.status)],
     ["交易量", formatMoney(market.total_volume)],
     ...(market.type !== "parimutuel" ? [["流动性", formatMoney(market.liquidity_pool)]] : []),
+    ["商户手续费率", market.merchant_fee_rate != null ? `${market.merchant_fee_rate * 100}%` : "0%"],
+    ["平台手续费率", market.platform_fee_rate != null ? `${market.platform_fee_rate * 100}%` : "0%"],
+    ...(market.translations && Object.keys(market.translations).length > 0
+      ? [["多语言", Object.entries(market.translations)
+          .map(([locale, translation]) => `${escapeHTML(locale)}: ${escapeHTML(translation.question)}（${escapeHTML((translation.options ?? []).join(" / "))}）`)
+          .join("<br>")]]
+      : []),
     ["创建时间", formatTime(market.created_at)],
     ["结算时间", formatTime(market.settled_at)],
   ]);
@@ -1134,7 +1157,18 @@ async function handleAction(action, target) {
         return render();
       case "toggle-create-market":
         view.showCreateMarket = !view.showCreateMarket;
+        if (!view.showCreateMarket) view.translations = [];
         return render();
+      case "add-translation":
+        view.translations.push({ locale: "", question: "", options: "" });
+        return render();
+      case "remove-translation": {
+        const index = Number(target.dataset.index);
+        if (Number.isInteger(index) && index >= 0 && index < view.translations.length) {
+          view.translations.splice(index, 1);
+        }
+        return render();
+      }
       case "toggle-create-merchant":
         view.showCreateMerchant = !view.showCreateMerchant;
         return render();
@@ -1539,6 +1573,47 @@ async function createMarket(form) {
     const resolution = new Date(resolutionRaw);
     if (Number.isFinite(resolution.getTime())) body.resolution_time = resolution.toISOString();
   }
+  const merchantFee = String(data.get("merchant_fee_rate") ?? "").trim();
+  if (merchantFee !== "") {
+    const number = Number(merchantFee);
+    if (!Number.isFinite(number) || number < 0 || number > 1) {
+      toast("商户手续费率需为 0 到 1 之间的小数", "error");
+      return;
+    }
+    body.merchant_fee_rate = number;
+  }
+  const platformFee = String(data.get("platform_fee_rate") ?? "").trim();
+  if (platformFee !== "") {
+    const number = Number(platformFee);
+    if (!Number.isFinite(number) || number < 0 || number > 1) {
+      toast("平台手续费率需为 0 到 1 之间的小数", "error");
+      return;
+    }
+    body.platform_fee_rate = number;
+  }
+  const translations = {};
+  for (const row of form.querySelectorAll("[data-translation-row]")) {
+    const locale = String(row.querySelector('input[name="translation_locale"]')?.value ?? "").trim();
+    const translatedQuestion = String(row.querySelector('input[name="translation_question"]')?.value ?? "").trim();
+    const translatedOptions = String(row.querySelector('input[name="translation_options"]')?.value ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!locale) {
+      toast("多语言行缺少语言代码", "error");
+      return;
+    }
+    if (!translatedQuestion) {
+      toast(`语言 ${locale} 缺少问题`, "error");
+      return;
+    }
+    if (translatedOptions.length !== options.length) {
+      toast(`语言 ${locale} 的选项数量必须与默认一致`, "error");
+      return;
+    }
+    translations[locale] = { question: translatedQuestion, options: translatedOptions };
+  }
+  if (Object.keys(translations).length > 0) body.translations = translations;
   if (type === "parimutuel") {
     body.liquidity_pool = 0;
   } else if (pool) {
